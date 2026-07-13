@@ -1,0 +1,511 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Ozy Desktop - Code Chat</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Literata:opsz,wght@7..72,400;7..72,500;7..72,700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "surface-dim": "#131313",
+                "outline": "#909379",
+                "secondary-container": "#474746",
+                "inverse-primary": "#566500",
+                "on-secondary-fixed-variant": "#474746",
+                "on-primary-fixed": "#181e00",
+                "surface-container": "#201f1f",
+                "secondary": "#c8c6c5",
+                "background": "#131313",
+                "inverse-surface": "#e5e2e1",
+                "error-container": "#93000a",
+                "on-error": "#690005",
+                "primary-container": "#d1f107",
+                "on-error-container": "#ffdad6",
+                "on-tertiary-container": "#636565",
+                "tertiary-container": "#e2e2e2",
+                "on-tertiary": "#2f3131",
+                "on-tertiary-fixed-variant": "#454747",
+                "on-primary-fixed-variant": "#404c00",
+                "on-tertiary-fixed": "#1a1c1c",
+                "surface-container-low": "#1c1b1b",
+                "surface-container-high": "#2a2a2a",
+                "secondary-fixed": "#e5e2e1",
+                "surface-tint": "#b7d300",
+                "outline-variant": "#454933",
+                "secondary-fixed-dim": "#c8c6c5",
+                "error": "#ffb4ab",
+                "on-primary": "#2c3400",
+                "inverse-on-surface": "#313030",
+                "primary-fixed": "#d1f107",
+                "surface-container-highest": "#353534",
+                "on-secondary-fixed": "#1c1b1b",
+                "on-surface-variant": "#c6c9ac",
+                "surface-bright": "#3a3939",
+                "surface-variant": "#353534",
+                "surface": "#131313",
+                "on-primary-container": "#5c6b00",
+                "tertiary": "#ffffff",
+                "on-background": "#e5e2e1",
+                "on-secondary": "#313030",
+                "on-secondary-container": "#b7b5b4",
+                "primary-fixed-dim": "#b7d300",
+                "primary": "#ffffff",
+                "on-surface": "#e5e2e1",
+                "tertiary-fixed": "#e2e2e2",
+                "surface-container-lowest": "#0e0e0e",
+                "tertiary-fixed-dim": "#c6c6c7",
+                "chat-bubble-user": "#2F2F2F",
+                "surface-elevated": "#222222",
+                "surface-deep": "#141414",
+                "border-subtle": "rgba(255, 255, 255, 0.08)",
+                "text-muted": "#919191"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "margin-desktop": "64px",
+                "margin-mobile": "20px",
+                "base": "8px",
+                "container-max": "1280px",
+                "gutter": "24px",
+                "stack-gap": "0.75rem",
+                "margin-page": "2rem",
+                "sidebar-width": "260px",
+                "content-max-width": "800px"
+        },
+        "fontFamily": {
+                "display-hero": [
+                        "Literata"
+                ],
+                "body-md": [
+                        "Inter"
+                ],
+                "label-caps": [
+                        "Inter"
+                ],
+                "headline-md": [
+                        "Literata"
+                ],
+                "code-sm": [
+                        "JetBrains Mono"
+                ],
+                "display-hero-mobile": [
+                        "Literata"
+                ],
+                "body-lg": [
+                        "Inter"
+                ]
+        },
+        "fontSize": {
+                "display-hero": [
+                        "48px",
+                        {
+                                "lineHeight": "1.2",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-md": [
+                        "14px",
+                        {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                        }
+                ],
+                "label-caps": [
+                        "11px",
+                        {
+                                "lineHeight": "1",
+                                "letterSpacing": "0.05em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "1.4",
+                                "fontWeight": "500"
+                        }
+                ],
+                "code-sm": [
+                        "13px",
+                        {
+                                "lineHeight": "1.6",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-hero-mobile": [
+                        "32px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "500"
+                        }
+                ],
+                "body-lg": [
+                        "16px",
+                        {
+                                "lineHeight": "1.6",
+                                "fontWeight": "400"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Syntax Highlighting Base */
+        .token.keyword { color: #d2f20b; }
+        .token.function { color: #b1c5ff; }
+        .token.string { color: #dbc1b9; }
+        .token.comment { color: #919191; font-style: italic; }
+        .token.operator { color: #e5e2e1; }
+        .token.punctuation { color: #919191; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.2);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen w-screen overflow-hidden flex flex-col font-body-md text-body-md selection:bg-primary-container selection:text-on-primary-container">
+<!-- Top App Bar -->
+<header class="bg-background flex justify-between items-center w-full px-4 h-12 flex-shrink-0 z-50">
+<div class="flex items-center gap-2 text-text-muted">
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">menu</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">view_sidebar</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">search</span>
+</button>
+<div class="flex items-center gap-1 ml-2">
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center text-on-surface/30">
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</div>
+<div class="hidden text-headline-md font-headline-md text-on-surface absolute left-1/2 -translate-x-1/2">
+            Ozy
+        </div>
+<div class="flex items-center gap-2 text-text-muted">
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">face</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">minimize</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">fullscreen</span>
+</button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded opacity-80 scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden relative">
+<!-- Side Navigation Bar -->
+<nav class="bg-surface-container-low border-r border-border-subtle docked left-0 h-full w-[260px] flex flex-col flex-shrink-0 z-40 relative">
+<div class="flex flex-col p-4 gap-stack-gap h-full">
+<!-- Main Nav Tabs -->
+<div class="flex bg-surface-container-highest p-1 rounded-lg mb-2">
+<button class="flex-1 flex items-center justify-center gap-2 py-1.5 px-3 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-md transition-all text-body-md font-body-md">
+<span class="material-symbols-outlined text-[18px]">home</span>
+<span>Home</span>
+</button>
+<button class="flex-1 flex items-center justify-center gap-2 py-1.5 px-3 bg-surface-container-high text-on-surface rounded-md shadow-sm transition-all text-body-md font-body-md">
+<span class="material-symbols-outlined text-[18px]">code</span>
+<span>Code</span>
+</button>
+</div>
+<!-- CTA -->
+<button class="w-full flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 mb-4">
+<span class="material-symbols-outlined">add</span>
+<span class="font-body-md text-body-md">Nuevo</span>
+</button>
+<!-- Sub Nav -->
+<div class="flex flex-col gap-1 mb-6">
+<button class="w-full flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left">
+<span class="material-symbols-outlined text-[18px]">inventory_2</span>
+<span class="font-body-md text-body-md">Proyectos</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left">
+<span class="material-symbols-outlined text-[18px]">widgets</span>
+<span class="font-body-md text-body-md">Artefactos</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left">
+<span class="material-symbols-outlined text-[18px]">settings_suggest</span>
+<span class="font-body-md text-body-md">Personalizar</span>
+</button>
+</div>
+<!-- Recents List -->
+<div class="flex-1 overflow-y-auto pr-2 -mr-2">
+<div class="flex items-center justify-between px-3 mb-2 text-text-muted text-label-caps font-label-caps">
+<span>Recientes</span>
+<button class="hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[14px]">tune</span>
+</button>
+</div>
+<div class="flex flex-col gap-0.5">
+<button class="w-full flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left truncate group">
+<span class="material-symbols-outlined text-[16px] group-hover:text-[#d2f20b] transition-colors">chat_bubble</span>
+<span class="font-body-md text-body-md truncate opacity-90">Arquitectura Go + Gin</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left truncate group">
+<span class="material-symbols-outlined text-[16px]">chat_bubble</span>
+<span class="font-body-md text-body-md truncate opacity-70">Greeting</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left truncate group">
+<span class="material-symbols-outlined text-[16px]">chat_bubble</span>
+<span class="font-body-md text-body-md truncate opacity-70">Roadmap de funcionalidades...</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left truncate group">
+<span class="material-symbols-outlined text-[16px]">chat_bubble</span>
+<span class="font-body-md text-body-md truncate opacity-70">Estado de desarrollo del RM...</span>
+</button>
+<button class="w-full flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all scale-95 active:scale-100 text-left truncate group">
+<span class="material-symbols-outlined text-[16px]">chat_bubble</span>
+<span class="font-body-md text-body-md truncate opacity-70">Destilar Mistral 3-3B local...</span>
+</button>
+</div>
+</div>
+<!-- Footer Profile -->
+<div class="mt-auto pt-4 border-t border-border-subtle flex items-center justify-between">
+<button class="flex items-center gap-2 hover:bg-surface-variant p-2 rounded-lg transition-colors scale-95 active:scale-100 flex-1 text-left">
+<div class="w-6 h-6 rounded bg-surface-container-highest flex items-center justify-center text-label-caps font-label-caps text-text-muted">
+                            SP
+                        </div>
+<span class="font-body-md text-body-md text-text-muted truncate">skini peet · Free</span>
+<span class="material-symbols-outlined text-[16px] text-text-muted ml-auto">expand_more</span>
+</button>
+<button class="p-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-colors scale-95 active:scale-100">
+<span class="material-symbols-outlined text-[20px]">download</span>
+</button>
+</div>
+</div>
+</nav>
+<!-- Main Chat Canvas -->
+<main class="flex-1 flex flex-col h-full bg-surface-deep relative">
+<!-- Chat History Area -->
+<div class="flex-1 overflow-y-auto px-margin-page py-6">
+<div class="max-w-content-max-width mx-auto flex flex-col gap-6">
+<!-- User Message -->
+<div class="flex justify-end">
+<div class="bg-chat-bubble-user text-on-surface rounded-2xl rounded-tr-sm px-5 py-3 max-w-[80%] font-body-lg text-body-lg">
+                            Can you show me a basic Go + Gin architecture setup for a new microservice? I need a solid foundation following clean architecture principles.
+                        </div>
+</div>
+<!-- Assistant Message -->
+<div class="flex justify-start">
+<div class="flex gap-4 max-w-[90%]">
+<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+<img alt="Ozy Logo" class="w-full h-full object-contain rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA_0AaxPjB9D8g8LTKqLx_yWXyMsn7O2e4gAJ9OLHKqSE7qMpLQeF_Kfd1QIAMPjY6hde_Tx7TQ6dWVA73ye48glVMcs7-yzIkhcV62U8HG7Q7gJFcA7KdYG62tyyTzfRA30Al8v8k-sUsp4lkngzXTD8Jqw-jaVLlj6CIsrfN98qnj7V0cmMFWyuQeWy24Awu5tsUuUDYN91vUc3siepGG-JrTsuOWYCJa6ipQT3-aA9KmqF9GH__l1A-wwnxueAYk9g">
+</div>
+<div class="flex flex-col gap-4">
+<div class="font-body-lg text-body-lg text-on-surface">
+<p class="mb-4">Certainly. A clean architecture approach in Go with Gin typically involves separating your concerns into distinct layers: Domain, Repository (Data), Usecase (Business Logic), and Delivery (HTTP/Gin Handlers). This makes the service testable, maintainable, and independent of external frameworks.</p>
+<p>Here is a simplified standard directory structure and an example of how you might wire up the main entry point.</p>
+</div>
+<!-- Code Artifact Block -->
+<div class="rounded-lg overflow-hidden border border-border-subtle bg-[#0D0D0D] flex flex-col">
+<div class="flex items-center justify-between px-4 py-2 bg-surface-container border-b border-border-subtle">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px] text-text-muted">code</span>
+<span class="text-label-caps font-label-caps text-text-muted tracking-wider">main.go</span>
+</div>
+<button class="flex items-center gap-1.5 text-text-muted hover:text-on-surface transition-colors scale-95 active:scale-100">
+<span class="material-symbols-outlined text-[14px]">content_copy</span>
+<span class="text-label-caps font-label-caps">Copy code</span>
+</button>
+</div>
+<div class="p-4 overflow-x-auto text-code-sm font-code-sm leading-relaxed text-on-surface">
+<pre><code><span class="token keyword">package</span> main
+
+<span class="token keyword">import</span> (
+    <span class="token string">"log"</span>
+    <span class="token string">"os"</span>
+
+    <span class="token string">"github.com/gin-gonic/gin"</span>
+    <span class="token string">"myapp/delivery/http"</span>
+    <span class="token string">"myapp/repository"</span>
+    <span class="token string">"myapp/usecase"</span>
+    <span class="token string">"myapp/infrastructure/database"</span>
+)
+
+<span class="token keyword">func</span> <span class="token function">main</span>() {
+    <span class="token comment">// 1. Init Database</span>
+    dbConn <span class="token operator">:=</span> database.<span class="token function">NewPostgresDB</span>(os.<span class="token function">Getenv</span>(<span class="token string">"DB_DSN"</span>))
+    <span class="token keyword">if</span> dbConn <span class="token operator">==</span> <span class="token keyword">nil</span> {
+        log.<span class="token function">Fatal</span>(<span class="token string">"Failed to connect to database"</span>)
+    }
+
+    <span class="token comment">// 2. Setup Repositories (Data Layer)</span>
+    userRepo <span class="token operator">:=</span> repository.<span class="token function">NewUserRepository</span>(dbConn)
+
+    <span class="token comment">// 3. Setup Usecases (Business Logic Layer)</span>
+    userUsecase <span class="token operator">:=</span> usecase.<span class="token function">NewUserUsecase</span>(userRepo)
+
+    <span class="token comment">// 4. Setup Delivery (HTTP/Gin Layer)</span>
+    router <span class="token operator">:=</span> gin.<span class="token function">Default</span>()
+    
+    <span class="token comment">// Register routes</span>
+    http.<span class="token function">NewUserHandler</span>(router, userUsecase)
+
+    <span class="token comment">// 5. Start Server</span>
+    port <span class="token operator">:=</span> os.<span class="token function">Getenv</span>(<span class="token string">"PORT"</span>)
+    <span class="token keyword">if</span> port <span class="token operator">==</span> <span class="token string">""</span> {
+        port <span class="token operator">=</span> <span class="token string">"8080"</span>
+    }
+    
+    log.<span class="token function">Printf</span>(<span class="token string">"Server starting on port %s"</span>, port)
+    router.<span class="token function">Run</span>(<span class="token string">":"</span> <span class="token operator">+</span> port)
+}</code></pre>
+</div>
+</div>
+<div class="font-body-lg text-body-lg text-on-surface">
+<p>I can elaborate on any of these layers, or we can look at the dependency injection container pattern if the project grows larger. What specific part would you like to dive into?</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Dock -->
+<div class="px-margin-page pb-6 pt-2 bg-gradient-to-t from-surface-deep via-surface-deep to-transparent z-10">
+<div class="max-w-content-max-width mx-auto">
+<div class="bg-surface-elevated rounded-xl border border-border-subtle shadow-lg flex flex-col focus-within:border-outline focus-within:ring-1 focus-within:ring-outline transition-all">
+<textarea class="w-full bg-transparent border-none text-on-surface font-body-lg text-body-lg p-4 resize-none focus:ring-0 placeholder:text-text-muted min-h-[90px]" placeholder="Respond to Ozy..."></textarea>
+<div class="flex items-center justify-between p-3 border-t border-border-subtle/50">
+<div class="flex items-center gap-2">
+<button class="p-1.5 rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors scale-95 active:scale-100 flex items-center justify-center" title="Add attachment">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+<div class="flex items-center bg-surface-variant rounded-md overflow-hidden">
+<button class="px-3 py-1.5 text-body-md font-body-md text-on-surface bg-surface-bright flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">code</span>
+                                        Code
+                                    </button>
+<button class="px-3 py-1.5 text-body-md font-body-md text-text-muted hover:text-on-surface hover:bg-surface-bright transition-colors">
+                                        Cowork
+                                    </button>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-1 text-text-muted hover:text-on-surface transition-colors text-body-md font-body-md group">
+                                    Sonnet 5 
+                                    <span class="text-text-muted/70 group-hover:text-text-muted transition-colors">Medio</span>
+<span class="material-symbols-outlined text-[16px] ml-0.5">expand_more</span>
+</button>
+<div class="w-[1px] h-4 bg-border-subtle mx-1"></div>
+<button class="p-1.5 rounded-lg text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors scale-95 active:scale-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+<button class="p-1.5 rounded-lg bg-primary-container text-on-primary-fixed hover:bg-primary-fixed transition-colors scale-95 active:scale-100 flex items-center justify-center ml-1">
+<span class="material-symbols-outlined text-[20px] icon-filled">arrow_upward</span>
+</button>
+</div>
+</div>
+</div>
+<div class="text-center mt-3 text-label-caps font-label-caps text-text-muted opacity-60">
+                        Ozy can make mistakes. Consider verifying critical code.
+                    </div>
+</div>
+</div>
+</main>
+<!-- Right Side Artifact Panel (Contextual) -->
+<aside class="w-[320px] bg-surface-container-low border-l border-border-subtle flex flex-col flex-shrink-0 z-40 hidden xl:flex">
+<div class="flex items-center justify-between p-4 border-b border-border-subtle">
+<div class="flex items-center gap-2 text-on-surface font-headline-md text-headline-md">
+<span class="material-symbols-outlined text-primary-container">account_tree</span>
+<span class="text-lg">Project Context</span>
+</div>
+<button class="text-text-muted hover:text-on-surface p-1 rounded-md hover:bg-surface-variant transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="p-4 flex-1 overflow-y-auto">
+<div class="text-label-caps font-label-caps text-text-muted mb-3 uppercase tracking-wider">File Structure</div>
+<div class="flex flex-col gap-1 font-code-sm text-code-sm text-text-muted">
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>myapp/</span>
+</div>
+<div class="flex flex-col pl-4 border-l border-border-subtle ml-2 gap-1">
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>delivery/</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>domain/</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>infrastructure/</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>repository/</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px]">folder</span>
+<span>usecase/</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer text-on-surface bg-surface-variant/50">
+<span class="material-symbols-outlined text-[16px] text-secondary">description</span>
+<span>main.go</span>
+</div>
+<div class="flex items-center gap-2 hover:bg-surface-variant py-1 px-2 rounded cursor-pointer">
+<span class="material-symbols-outlined text-[16px] text-secondary">description</span>
+<span>go.mod</span>
+</div>
+</div>
+</div>
+<div class="mt-8">
+<div class="text-label-caps font-label-caps text-text-muted mb-3 uppercase tracking-wider">Active Document Reference</div>
+<div class="bg-surface p-3 rounded-lg border border-border-subtle flex items-start gap-3 hover:border-outline cursor-pointer transition-colors">
+<div class="w-8 h-8 rounded bg-surface-container flex items-center justify-center flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px] text-tertiary">article</span>
+</div>
+<div class="flex flex-col">
+<span class="font-body-md text-body-md text-on-surface truncate">DOCUMENT_1.md</span>
+<span class="text-label-caps font-label-caps text-text-muted mt-1">Arch Guidelines</span>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</div>
+</body></html>

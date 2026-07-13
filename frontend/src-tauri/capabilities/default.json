@@ -1,0 +1,10 @@
+{
+  "identifier": "default",
+  "description": "Permisos predeterminados de Ozy Desktop",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:default"
+  ]
+}

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+backend/bin/
+backend/tmp/
+
+# Build artifacts
+frontend/dist/
+frontend/.tauri/
+backend/target/
+*.exe
+
+# Runtime data
+data/qdrant/
+backend/data/*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log

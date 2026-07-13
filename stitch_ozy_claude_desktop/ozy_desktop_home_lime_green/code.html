@@ -1,0 +1,324 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Ozy Desktop - Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Literata:opsz,wght@7..72,500;7..72,700&amp;family=JetBrains+Mono:wght@400&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Literata:wght@100..900&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "surface-dim": "#131313",
+                "outline": "#909379",
+                "secondary-container": "#474746",
+                "inverse-primary": "#566500",
+                "on-secondary-fixed-variant": "#474746",
+                "on-primary-fixed": "#181e00",
+                "surface-container": "#201f1f",
+                "secondary": "#c8c6c5",
+                "background": "#131313",
+                "inverse-surface": "#e5e2e1",
+                "error-container": "#93000a",
+                "on-error": "#690005",
+                "primary-container": "#d1f107",
+                "on-error-container": "#ffdad6",
+                "on-tertiary-container": "#636565",
+                "tertiary-container": "#e2e2e2",
+                "on-tertiary": "#2f3131",
+                "on-tertiary-fixed-variant": "#454747",
+                "on-primary-fixed-variant": "#404c00",
+                "on-tertiary-fixed": "#1a1c1c",
+                "surface-container-low": "#1c1b1b",
+                "surface-container-high": "#2a2a2a",
+                "secondary-fixed": "#e5e2e1",
+                "surface-tint": "#b7d300",
+                "outline-variant": "#454933",
+                "secondary-fixed-dim": "#c8c6c5",
+                "error": "#ffb4ab",
+                "on-primary": "#2c3400",
+                "inverse-on-surface": "#313030",
+                "primary-fixed": "#d1f107",
+                "surface-container-highest": "#353534",
+                "on-secondary-fixed": "#1c1b1b",
+                "on-surface-variant": "#c6c9ac",
+                "surface-bright": "#3a3939",
+                "surface-variant": "#353534",
+                "surface": "#131313",
+                "on-primary-container": "#5c6b00",
+                "tertiary": "#ffffff",
+                "on-background": "#e5e2e1",
+                "on-secondary": "#313030",
+                "on-secondary-container": "#b7b5b4",
+                "primary-fixed-dim": "#b7d300",
+                "primary": "#d1f107",
+                "on-surface": "#e5e2e1",
+                "tertiary-fixed": "#e2e2e2",
+                "surface-container-lowest": "#0e0e0e",
+                "tertiary-fixed-dim": "#c6c6c7",
+                "border-subtle": "rgba(255, 255, 255, 0.08)",
+                "text-muted": "#919191",
+                "surface-elevated": "#222222",
+                "surface-deep": "#141414",
+        },
+        "borderRadius": {
+                "DEFAULT": "0.25rem",
+                "lg": "0.5rem",
+                "xl": "0.75rem",
+                "full": "9999px"
+        },
+        "spacing": {
+                "margin-desktop": "64px",
+                "margin-mobile": "20px",
+                "base": "8px",
+                "container-max": "1280px",
+                "gutter": "24px",
+                "stack-gap": "0.75rem",
+                "margin-page": "2rem",
+                "sidebar-width": "260px",
+                "content-max-width": "800px"
+        },
+        "fontFamily": {
+                "display-hero": ["Literata"],
+                "body-md": ["Inter"],
+                "label-caps": ["Inter"],
+                "headline-md": ["Literata"],
+                "code-sm": ["JetBrains Mono"],
+                "display-hero-mobile": ["Literata"],
+                "body-lg": ["Inter"]
+        },
+        "fontSize": {
+                "display-hero": ["48px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "500" }],
+                "body-md": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                "label-caps": ["11px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                "headline-md": ["24px", { "lineHeight": "1.4", "fontWeight": "500" }],
+                "code-sm": ["13px", { "lineHeight": "1.6", "fontWeight": "400" }],
+                "display-hero-mobile": ["32px", { "lineHeight": "1.2", "fontWeight": "500" }],
+                "body-lg": ["16px", { "lineHeight": "1.6", "fontWeight": "400" }]
+        }
+},
+    },
+  }
+</script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1;
+        }
+        
+        /* Custom scrollbar for sidebar */
+        .sidebar-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+        .sidebar-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scroll::-webkit-scrollbar-thumb {
+            background-color: theme('colors.surface-variant');
+            border-radius: theme('borderRadius.full');
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body-md h-screen w-screen overflow-hidden flex flex-col">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-4 h-12 bg-background dark:bg-background border-b border-border-subtle flex-shrink-0">
+<div class="flex items-center gap-4 text-on-surface dark:text-on-surface">
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">menu</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">dock_to_right</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">search</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">arrow_back</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">arrow_forward</span></button>
+</div>
+<div class="flex items-center gap-2">
+<img alt="Logo" class="w-6 h-6 object-cover rounded-md" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqhqGdGgK_H7_5EtVznWIn4948VQcPM6kJeEuyq4HWxtoUxTi1AGqm0pa6VJGarH7Zt_uB4NsOiqVTd2KP7WOMNuykhldui8Dhi-4ZcaEPMMjYV4Syn-oldBUwXZ6m7hkc3KfqArQH068dKZTd2bXsbzHELJsE6w32_2v0io13POTKgon231PBhE6_D6oNfR2LkjpvEuJYjcDUPOXXM9B9fuTLzm9fSiOjycU4CnaL7xoEHm64Cl9Oo6L9AaAvKNeG5A">
+<span class="text-headline-md font-headline-md hidden">Ozy</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface dark:text-on-surface">
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">face</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">minimize</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">fullscreen</span></button>
+<button class="hover:bg-surface-variant transition-colors p-1.5 rounded-lg text-text-muted"><span class="material-symbols-outlined text-[20px]">close</span></button>
+</div>
+</header>
+<div class="flex h-full overflow-hidden">
+<!-- SideNavBar -->
+<nav class="bg-surface-container-low dark:bg-surface-container-low border-r border-border-subtle flex flex-col p-4 gap-stack-gap h-full flex-shrink-0 transition-all duration-300 w-[260px] hidden md:flex relative z-10">
+<!-- App Switcher (Top of sidebar in design) -->
+<div class="flex gap-1 mb-2 bg-surface-elevated p-1 rounded-xl border border-border-subtle">
+<button class="flex-1 bg-surface-container-high text-on-surface rounded-lg py-1.5 px-3 flex items-center justify-center gap-2 transition-all">
+<span class="material-symbols-outlined text-[18px]">home</span>
+<span class="text-[13px] font-medium">Home</span>
+</button>
+<button class="flex-1 text-text-muted hover:text-on-surface py-1.5 px-3 flex items-center justify-center gap-2 transition-all rounded-lg hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[18px]">code</span>
+<span class="text-[13px] font-medium">Code</span>
+</button>
+</div>
+<!-- New Button -->
+<button class="w-full flex items-center gap-2 px-3 py-2 bg-primary text-on-primary hover:bg-primary-fixed-dim rounded-lg transition-all text-body-md font-body-md mb-2 font-medium">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>+ Nuevo</span>
+</button>
+<!-- Main Nav Items -->
+<div class="flex flex-col gap-0.5 mb-6">
+<a class="flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all text-body-md font-body-md group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">inventory_2</span>
+<span>Proyectos</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all text-body-md font-body-md group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">widgets</span>
+<span>Artefactos</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all text-body-md font-body-md group" href="#">
+<span class="material-symbols-outlined text-[18px] group-hover:text-primary transition-colors">settings_suggest</span>
+<span>Personalizar</span>
+</a>
+</div>
+<!-- Recentes Section -->
+<div class="flex-1 overflow-hidden flex flex-col">
+<div class="flex items-center justify-between px-3 mb-2 text-text-muted text-label-caps font-label-caps">
+<span>Recientes</span>
+<button class="hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[14px]">tune</span></button>
+</div>
+<div class="flex-1 overflow-y-auto sidebar-scroll pr-2 flex flex-col gap-0.5">
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Greeting</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Roadmap de funcionalidades faltantes</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Estado de desarrollo del RMM: 90% full</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Destilar Mistral 3-3B localmente</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Ejecutar quen 3.5 sin WSL</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">RMM frontend/backend production ready</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Arquitectura de base de datos para...</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-1.5 text-text-muted hover:text-on-surface hover:bg-surface-variant rounded-lg transition-all group truncate text-[13px]" href="#">
+<span class="material-symbols-outlined text-[16px] shrink-0 opacity-70 group-hover:opacity-100">chat_bubble</span>
+<span class="truncate">Plan de pestañas para device detail...</span>
+</a>
+</div>
+</div>
+<!-- Onboarding Widget (Bottom of sidebar) -->
+<div class="mt-4 bg-surface-elevated rounded-xl border border-border-subtle p-4 flex flex-col gap-3">
+<div class="flex justify-between items-center text-[13px]">
+<span class="font-medium text-on-surface">Comenzar con Claude</span>
+<span class="text-text-muted">2 / 3</span>
+</div>
+<div class="h-1 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[66%]"></div>
+</div>
+<div class="flex flex-col gap-3 mt-2">
+<div class="flex items-start gap-3 opacity-50 line-through">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 fill">check_circle</span>
+<span class="text-[13px] leading-tight">Trae tu memoria de otra IA</span>
+</div>
+<div class="flex items-start gap-3 opacity-50 line-through">
+<span class="material-symbols-outlined text-[18px] text-primary shrink-0 fill">check_circle</span>
+<span class="text-[13px] leading-tight">Conecta tus herramientas cotidianas</span>
+</div>
+<div class="flex items-start gap-3">
+<div class="w-[18px] h-[18px] rounded-full border border-text-muted shrink-0 mt-0.5"></div>
+<div class="flex flex-col">
+<span class="text-[13px] font-medium text-on-surface leading-tight">Probar Cowork</span>
+<span class="text-[12px] text-text-muted leading-snug mt-1">Actualiza para que Claude realice tareas reales por ti</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer User Section -->
+<div class="mt-4 pt-4 border-t border-border-subtle flex items-center justify-between">
+<button class="flex items-center gap-2 text-text-muted hover:text-on-surface transition-colors w-full">
+<div class="w-6 h-6 rounded-md bg-surface-variant flex items-center justify-center text-[10px] font-bold text-on-surface">SP</div>
+<span class="text-[13px] font-medium">skini peet</span>
+<span class="text-[12px] text-text-muted ml-1">· Free</span>
+<span class="material-symbols-outlined text-[16px] ml-auto">expand_more</span>
+</button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col items-center justify-center relative bg-surface-deep overflow-y-auto">
+<div class="w-full max-w-content-max-width px-gutter flex flex-col items-center z-10 -mt-20">
+<!-- Hero Heading -->
+<div class="flex items-center justify-center gap-4 mb-12">
+<img alt="Logo" class="w-[40px] h-[40px] object-cover rounded-lg" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDh0CeAKdgUoWG81iWu4sX5eAzE1UA53_XdjQCQf-wrBaqU16whVd2nw1Tr25zAE8FUzxXJCf0xbVCPWwrVbdAjuhw7zxHPcuPjcGM5zHhnE-pN1YViVFysp_Svtu9H-teHqqzPFOLAHJSRbDpvmnHRZyThWthZMnNylFUeZO7M2o4qCFEbVhxsRdJZatilktrJiFWePrCHXw0mwyGZZyUsNGwnHTBnKFkXJXXn9Zszsczm0TTeCSvycdXuFwiex6EdUQ">
+<h1 class="text-display-hero-mobile md:text-display-hero font-display-hero text-on-surface text-center">
+                        ¿Qué vamos a construir hoy?
+                    </h1>
+</div>
+<!-- Chat Input Container -->
+<div class="w-full bg-surface-elevated rounded-[1.25rem] border border-border-subtle p-4 flex flex-col shadow-lg shadow-black/20 focus-within:border-outline-variant transition-colors group">
+<!-- Text Area -->
+<textarea class="w-full bg-transparent border-none text-on-surface placeholder:text-text-muted resize-none focus:ring-0 text-body-lg font-body-lg min-h-[80px]" placeholder="¿Cómo puedo ayudarle hoy?"></textarea>
+<!-- Bottom Input Actions -->
+<div class="flex items-center justify-between mt-4">
+<div class="flex items-center gap-2">
+<button class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center text-on-surface hover:bg-surface-bright transition-colors border border-border-subtle">
+<span class="material-symbols-outlined text-[20px]">add</span>
+</button>
+<div class="flex bg-surface-variant rounded-full border border-border-subtle p-0.5">
+<button class="px-3 py-1 rounded-full bg-surface-container-highest text-on-surface text-[12px] font-medium">Chat</button>
+<button class="px-3 py-1 rounded-full text-text-muted hover:text-on-surface text-[12px] font-medium transition-colors">Cowork</button>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-1 text-text-muted hover:text-on-surface text-[13px] font-medium transition-colors">
+<span class="text-on-surface">Sonnet 5</span> Medio <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="text-text-muted hover:text-on-surface transition-colors flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+<button class="text-text-muted hover:text-on-surface transition-colors flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-variant">
+<span class="material-symbols-outlined text-[20px]">graphic_eq</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Action Chips -->
+<div class="flex flex-wrap items-center justify-center gap-3 mt-6 w-full">
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded-full border border-border-subtle text-on-surface hover:bg-surface-variant transition-colors text-[13px] font-medium">
+<span class="material-symbols-outlined text-[16px] text-text-muted">code</span> Código
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded-full border border-border-subtle text-on-surface hover:bg-surface-variant transition-colors text-[13px] font-medium">
+<span class="material-symbols-outlined text-[16px] text-text-muted">edit</span> Escribir
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded-full border border-border-subtle text-on-surface hover:bg-surface-variant transition-colors text-[13px] font-medium">
+<span class="material-symbols-outlined text-[16px] text-text-muted">school</span> Aprender
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded-full border border-border-subtle text-on-surface hover:bg-surface-variant transition-colors text-[13px] font-medium">
+<span class="material-symbols-outlined text-[16px] text-text-muted">local_cafe</span> Vida personal
+                    </button>
+<button class="flex items-center gap-2 px-4 py-2 bg-surface-container rounded-full border border-border-subtle text-on-surface hover:bg-surface-variant transition-colors text-[13px] font-medium">
+<span class="material-symbols-outlined text-[16px] text-text-muted">lightbulb</span> Selección de Claude
+                    </button>
+</div>
+</div>
+<!-- Minimalist decorative background elements -->
+<div class="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
+<div class="absolute top-1/4 left-1/4 w-[40vw] h-[40vw] bg-primary-fixed-dim/5 rounded-full blur-[100px] mix-blend-screen"></div>
+<div class="absolute bottom-1/4 right-1/4 w-[30vw] h-[30vw] bg-secondary-fixed-dim/5 rounded-full blur-[100px] mix-blend-screen"></div>
+</div>
+</main>
+</div>
+</body></html>
