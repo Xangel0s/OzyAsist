@@ -198,6 +198,10 @@ export const useChatStore = create<ChatState>()(
       ),
     }));
 
+    if (isFirstMessage && title !== chat.title) {
+      get().updateChatTitle(chatId, title);
+    }
+
     try {
       await wsClient.connect();
 
