@@ -128,7 +128,7 @@ export default function ProjectContext() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {!activeProjectId ? (
           <div className="text-white/30 text-[13px] text-center py-8 px-4">
             Selecciona un proyecto para ver su estructura.
@@ -178,7 +178,7 @@ export default function ProjectContext() {
             ) : null}
           </div>
         ) : (
-          <div className="h-full flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             {selectedFile && (
               <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between">
                 <span className="text-[11px] text-white/40 truncate flex-1">

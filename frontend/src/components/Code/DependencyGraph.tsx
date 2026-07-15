@@ -112,7 +112,7 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
   );
 
   return (
-    <div className="w-full h-full bg-[#1a1a1a] rounded-xl overflow-hidden">
+    <div className="w-full bg-[#1a1a1a] rounded-xl overflow-hidden flex-1 min-h-0">
       <ReactFlow
         nodes={nodes}
         edges={edgeState}
