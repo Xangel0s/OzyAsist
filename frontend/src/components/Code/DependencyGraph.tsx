@@ -59,14 +59,14 @@ function buildGraph(edges: GraphEdge[]) {
         isEntry: data.importedBy.size === 0 && data.imports.size > 0,
       },
       style: {
-        background: "#1e1e1e",
-        border: "1px solid rgba(255,255,255,0.1)",
+        background: "#2a2a2a",
+        border: "1px solid rgba(200,230,74,0.3)",
         borderRadius: "8px",
-        padding: "8px 12px",
-        fontSize: "11px",
+        padding: "10px 14px",
+        fontSize: "12px",
         color: "#fff",
-        width: "fit-content",
-        maxWidth: "180px",
+        width: 180,
+        fontWeight: 500,
       },
     });
   });
@@ -78,12 +78,12 @@ function buildGraph(edges: GraphEdge[]) {
       source: edge.from_symbol,
       target: edge.to_symbol,
       animated: edge.edge_type === "import",
-      style: { stroke: "rgba(255,255,255,0.15)", strokeWidth: 1 },
+      style: { stroke: "rgba(200,230,74,0.4)", strokeWidth: 2 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: "rgba(255,255,255,0.2)",
-        width: 12,
-        height: 12,
+        color: "rgba(200,230,74,0.5)",
+        width: 16,
+        height: 16,
       },
     });
   }
@@ -122,15 +122,16 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
         fitView
         fitViewOptions={{ padding: 0.2 }}
         defaultEdgeOptions={{
-          style: { stroke: "rgba(255,255,255,0.15)", strokeWidth: 1 },
+          style: { stroke: "rgba(200,230,74,0.4)", strokeWidth: 2 },
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="rgba(255,255,255,0.03)" gap={20} />
+        <Background color="rgba(200,230,74,0.03)" gap={20} />
         <Controls
           style={{ background: "#1e1e1e", borderColor: "rgba(255,255,255,0.1)" }}
         />
         <MiniMap
+          nodeColor="#2a2a2a"
           maskColor="rgba(0,0,0,0.5)"
           style={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)" }}
         />

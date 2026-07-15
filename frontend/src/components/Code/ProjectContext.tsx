@@ -328,7 +328,7 @@ export default function ProjectContext() {
                   </span>
                 </div>
               ) : graphEdges.length > 0 ? (
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 h-full">
                   <DependencyGraph
                     edges={graphEdges}
                     onNodeClick={handleFileClick}
@@ -391,7 +391,7 @@ export default function ProjectContext() {
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
-            <div className="flex-1 min-h-0">
+            <div className="flex-1 min-h-0 h-full">
               <DependencyGraph
                 edges={graphEdges}
                 onNodeClick={(path) => {
