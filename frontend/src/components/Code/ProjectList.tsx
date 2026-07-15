@@ -66,9 +66,9 @@ export default function ProjectList({ onNewProject, onSelectProject }: ProjectLi
 
           {!loading &&
             filtered.map((project) => (
-              <button
+              <div
                 key={project.id}
-                className="bg-[#1e1e1e] rounded-xl border border-white/10 p-5 text-left hover:bg-[#252525] hover:border-white/15 transition-all relative group"
+                className="bg-[#1e1e1e] rounded-xl border border-white/10 p-5 text-left hover:bg-[#252525] hover:border-white/15 transition-all relative group cursor-pointer"
                 onClick={() => onSelectProject(project.id)}
               >
                 <div className="w-10 h-10 rounded-lg bg-[#c8e64a]/15 flex items-center justify-center mb-3">
@@ -101,7 +101,7 @@ export default function ProjectList({ onNewProject, onSelectProject }: ProjectLi
                 >
                   <span className="material-symbols-outlined text-[16px]">delete</span>
                 </button>
-              </button>
+              </div>
             ))}
 
           {!loading && filtered.length === 0 && (

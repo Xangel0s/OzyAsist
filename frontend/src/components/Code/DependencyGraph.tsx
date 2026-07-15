@@ -23,6 +23,7 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
     const nodeMap = new Map<string, { imports: Set<string>; importedBy: Set<string> }>();
 
     for (const edge of edges) {
+      if (!edge.from_symbol || !edge.to_symbol) continue;
       if (!nodeMap.has(edge.from_symbol)) {
         nodeMap.set(edge.from_symbol, { imports: new Set(), importedBy: new Set() });
       }
@@ -37,11 +38,12 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
     const edgeList: Edge[] = [];
     const fileList = Array.from(nodeMap.keys()).sort();
 
-    const cols = Math.ceil(Math.sqrt(fileList.length));
+    const cols = Math.max(1, Math.ceil(Math.sqrt(fileList.length)));
     const spacingX = 220;
     const spacingY = 100;
 
     fileList.forEach((file, i) => {
+      if (!file) return;
       const col = i % cols;
       const row = Math.floor(i / cols);
       const data = nodeMap.get(file)!;
@@ -71,6 +73,7 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
     });
 
     for (const edge of edges) {
+      if (!edge.from_symbol || !edge.to_symbol) continue;
       edgeList.push({
         id: `${edge.from_symbol}->${edge.to_symbol}`,
         source: edge.from_symbol,
