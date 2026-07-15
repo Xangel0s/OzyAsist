@@ -231,7 +231,7 @@ func GetFileContent(c *gin.Context) {
 
 	project, err := db.GetProject(projectID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "project not found: " + err.Error()})
 		return
 	}
 	if project.RootPath == "" {
@@ -249,7 +249,7 @@ func GetFileContent(c *gin.Context) {
 
 	info, err := os.Stat(fullPath)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found: " + fullPath + " (" + err.Error() + ")"})
 		return
 	}
 	if info.IsDir() {
@@ -264,7 +264,7 @@ func GetFileContent(c *gin.Context) {
 
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read file"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read file: " + err.Error()})
 		return
 	}
 

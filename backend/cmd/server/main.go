@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/ozyassist/backend/internal/api"
@@ -17,7 +18,13 @@ func main() {
 
 	dbPath := os.Getenv("OZY_DB_PATH")
 	if dbPath == "" {
-		dbPath = "data/ozyassist.db"
+		cwd, _ := os.Getwd()
+		candidate := filepath.Join(cwd, "data", "ozyassist.db")
+		if _, err := os.Stat(candidate); err == nil {
+			dbPath = candidate
+		} else {
+			dbPath = filepath.Join(cwd, "backend", "data", "ozyassist.db")
+		}
 	}
 
 	if err := db.Init(dbPath); err != nil {
