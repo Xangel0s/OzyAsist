@@ -221,6 +221,60 @@ func GetAllProjectGraph(c *gin.Context) {
 	c.JSON(http.StatusOK, edges)
 }
 
+func GetFileContent(c *gin.Context) {
+	projectID := c.Param("id")
+	relPath := c.Query("path")
+	if relPath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path query param required"})
+		return
+	}
+
+	project, err := db.GetProject(projectID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+		return
+	}
+	if project.RootPath == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "project has no root_path"})
+		return
+	}
+
+	cleanPath := filepath.Clean(relPath)
+	fullPath := filepath.Join(project.RootPath, cleanPath)
+
+	if !strings.HasPrefix(fullPath, filepath.Clean(project.RootPath)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "path traversal not allowed"})
+		return
+	}
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+	if info.IsDir() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path is a directory"})
+		return
+	}
+
+	if info.Size() > 1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file too large (>1MB)"})
+		return
+	}
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not read file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"path":    cleanPath,
+		"content": string(content),
+		"size":    info.Size(),
+	})
+}
+
 type FileUpload struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`

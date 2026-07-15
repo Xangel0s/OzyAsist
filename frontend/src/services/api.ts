@@ -152,6 +152,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify(files),
       }),
+    readFile: (id: string, path: string) =>
+      request<{ path: string; content: string; size: number }>(
+        `/projects/${id}/file?path=${encodeURIComponent(path)}`,
+      ),
   },
 
   skills: {

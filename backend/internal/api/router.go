@@ -42,6 +42,7 @@ func NewRouter() *gin.Engine {
 		apiGroup.GET("/projects/:id/tree", handlers.GetProjectTree)
 		apiGroup.GET("/projects/:id/graph/*filepath", handlers.GetProjectGraph)
 		apiGroup.GET("/projects/:id/fullgraph", handlers.GetAllProjectGraph)
+		apiGroup.GET("/projects/:id/file", handlers.GetFileContent)
 		apiGroup.POST("/projects/:id/upload-files", handlers.UploadProjectFiles)
 
 		// Skills
