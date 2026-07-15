@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useChatStore } from "../../store/chatStore";
+import { useProjectsStore } from "../../store/projectsStore";
 import { useScrollToBottom } from "../../hooks";
 import ChatMessage from "../Chat/ChatMessage";
 import CodeInput from "./CodeInput";
@@ -15,6 +16,7 @@ export default function CodePage() {
   const [showAnalyzer, setShowAnalyzer] = useState(false);
   const [view, setView] = useState<CodeView>("projects");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const setActiveProject = useProjectsStore((s) => s.setActiveProject);
   const consentPending = useChatStore((s) => s.consentPending);
   const resolveConsent = useChatStore((s) => s.resolveConsent);
   const activeChatId = useChatStore((s) => s.activeChatId);
@@ -53,6 +55,7 @@ export default function CodePage() {
     return <AnalyzeProjectStep onDone={(projectId) => {
       setShowAnalyzer(false);
       setSelectedProjectId(projectId);
+      setActiveProject(projectId);
       setView("chats");
     }} />;
   }
@@ -63,6 +66,7 @@ export default function CodePage() {
         onNewProject={() => setShowAnalyzer(true)}
         onSelectProject={(projectId) => {
           setSelectedProjectId(projectId);
+          setActiveProject(projectId);
           setView("chats");
         }}
       />
@@ -76,6 +80,7 @@ export default function CodePage() {
         onBack={() => {
           setView("projects");
           setSelectedProjectId(null);
+          setActiveProject(null);
         }}
         onSelectChat={(chatId) => {
           setActiveChat(chatId);
@@ -148,6 +153,7 @@ export default function CodePage() {
       onNewProject={() => setShowAnalyzer(true)}
       onSelectProject={(projectId) => {
         setSelectedProjectId(projectId);
+        setActiveProject(projectId);
         setView("chats");
       }}
     />
