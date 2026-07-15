@@ -41,6 +41,24 @@ func Available() []string {
 	return names
 }
 
+type ProviderInfo struct {
+	Name   string   `json:"provider"`
+	Models []string `json:"models"`
+}
+
+func ListAvailable() []ProviderInfo {
+	global.mu.RLock()
+	defer global.mu.RUnlock()
+	result := make([]ProviderInfo, 0, len(global.providers))
+	for name, p := range global.providers {
+		result = append(result, ProviderInfo{
+			Name:   name,
+			Models: p.Models(),
+		})
+	}
+	return result
+}
+
 func InitProviders() {
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		Register("openai", NewOpenAI(key))

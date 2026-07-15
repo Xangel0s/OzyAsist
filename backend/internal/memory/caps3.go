@@ -45,16 +45,19 @@ func (c *Caps3Store) Set(key, value string, ttlSeconds int) {
 
 func (c *Caps3Store) Get(key string) (string, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	entry, ok := c.buf[key]
 	if !ok {
+		c.mu.RUnlock()
 		return "", false
 	}
 	if entry.ExpiresAt > 0 && time.Now().Unix() > entry.ExpiresAt {
+		c.mu.RUnlock()
+		c.mu.Lock()
 		delete(c.buf, key)
+		c.mu.Unlock()
 		return "", false
 	}
+	c.mu.RUnlock()
 	return entry.Value, true
 }
 

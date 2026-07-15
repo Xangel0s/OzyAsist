@@ -1,11 +1,31 @@
+import { useEffect, useRef } from "react";
+
 interface ConsentModalProps {
   intent: string;
   onResolve: (decision: "always" | "once" | "no") => void;
 }
 
 export default function ConsentModal({ intent, onResolve }: ConsentModalProps) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const firstBtnRef = useRef<HTMLButtonElement>(null);
+  const onResolveRef = useRef(onResolve);
+  onResolveRef.current = onResolve;
+
+  useEffect(() => {
+    firstBtnRef.current?.focus();
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onResolveRef.current("no");
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
+  const handleOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === overlayRef.current) onResolve("no");
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60">
+    <div ref={overlayRef} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60" onClick={handleOverlayClick}>
       <div className="bg-surface-elevated border border-border-subtle rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -30,6 +50,7 @@ export default function ConsentModal({ intent, onResolve }: ConsentModalProps) {
 
           <div className="flex flex-col gap-2">
             <button
+              ref={firstBtnRef}
               className="w-full flex items-center gap-3 px-4 py-3 bg-primary-container text-on-primary rounded-xl hover:bg-primary-fixed-dim transition-colors text-body-md font-medium"
               onClick={() => onResolve("always")}
             >

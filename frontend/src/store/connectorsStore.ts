@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { api, type ConnectorDTO } from "../services/api";
 
 export type ConnectorType = "mcp" | "custom";
@@ -34,7 +35,9 @@ const dtoToConnector = (dto: ConnectorDTO): Connector => {
   };
 };
 
-export const useConnectorsStore = create<ConnectorsState>((set) => ({
+export const useConnectorsStore = create<ConnectorsState>()(
+  persist(
+    (set) => ({
   connectors: [],
   loading: true,
 
@@ -77,6 +80,14 @@ export const useConnectorsStore = create<ConnectorsState>((set) => ({
       set({ loading: false });
     }
   },
-}));
+}),
+    {
+      name: "ozy-connectors",
+      partialize: (state) => ({
+        connectors: state.connectors,
+      }),
+    },
+  ),
+);
 
 useConnectorsStore.getState().loadConnectors();

@@ -19,6 +19,7 @@ export default function SearchModal() {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const setActiveView = useUIStore((s) => s.setActiveView);
   const setActiveChat = useChatStore((s) => s.setActiveChat);
+  const setActiveProject = useProjectsStore((s) => s.setActiveProject);
   const chats = useChatStore((s) => s.chats);
   const projects = useProjectsStore((s) => s.projects);
   const [query, setQuery] = useState("");
@@ -71,8 +72,9 @@ export default function SearchModal() {
     p.name.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleSelectChat = (chatId: string, _mode: string) => {
+  const handleSelectChat = (chatId: string, mode: string) => {
     setActiveChat(chatId);
+    setActiveView(mode === "code" ? "code" : "chat");
     setSearchOpen(false);
   };
 
@@ -141,7 +143,7 @@ export default function SearchModal() {
                     <button
                       key={p.id}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors text-left"
-                      onClick={() => { setActiveView("projects"); setSearchOpen(false); }}
+                      onClick={() => { setActiveProject(p.id); setActiveView("projects"); setSearchOpen(false); }}
                     >
                       <span className="material-symbols-outlined text-[16px]">inventory_2</span>
                       <span className="truncate">{p.name}</span>
@@ -176,7 +178,7 @@ export default function SearchModal() {
                     <button
                       key={chat.id}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors text-left"
-                      onClick={() => handleSelectChat(chat.id, "chat")}
+                      onClick={() => handleSelectChat(chat.id, chat.mode)}
                     >
                       <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
                       <span className="truncate">{chat.title}</span>
@@ -192,6 +194,7 @@ export default function SearchModal() {
                       key={project.id}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors text-left"
                       onClick={() => {
+                        setActiveProject(project.id);
                         setActiveView("projects");
                         setSearchOpen(false);
                       }}

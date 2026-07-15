@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { api } from "../services/api";
+import { persist } from "zustand/middleware";
+import { api, type ChatDTO, type MessageDTO } from "../services/api";
 import { wsClient } from "../services/ws";
 import { useMemoryStore } from "./memoryStore";
 import { useToastStore } from "./toastStore";
@@ -15,6 +16,7 @@ export interface Message {
 export interface Chat {
   id: string;
   title: string;
+  projectId?: string;
   mode: "chat" | "code";
   provider: string;
   model: string;
@@ -27,8 +29,9 @@ interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
   isResponding: boolean;
-  coworkMode: boolean;
   consentPending: { chatId: string; intent: string } | null;
+  defaultProvider: string;
+  defaultModel: string;
   setActiveChat: (id: string) => void;
   addChat: (chat: Chat) => void;
   addMessage: (chatId: string, message: Message) => void;
@@ -42,19 +45,25 @@ interface ChatState {
   resolveConsent: (decision: "always" | "once" | "no") => void;
   dismissConsent: () => void;
   regenerateMessage: (chatId: string) => Promise<void>;
-  toggleCowork: () => void;
-  setCoworkMode: (mode: boolean) => void;
   loadMessages: (chatId: string) => Promise<void>;
+  updateChatProvider: (chatId: string, provider: string, model: string) => void;
+  loadProviders: () => Promise<void>;
 }
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set, get) => ({
   chats: [],
   activeChatId: null,
   isResponding: false,
-  coworkMode: false,
   consentPending: null,
+  defaultProvider: "openrouter",
+  defaultModel: "openrouter/auto",
 
   setActiveChat: (id) => {
+    if (get().isResponding) {
+      wsClient.cancelStream(get().activeChatId ?? "");
+    }
     set({ activeChatId: id });
     const chat = get().chats.find((c) => c.id === id);
     if (chat && chat.messages.length === 0 && !chat._messagesLoaded) {
@@ -87,22 +96,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     })),
 
-  updateChatTitle: (chatId, title) =>
+  updateChatTitle: (chatId, title) => {
     set((s) => ({
       chats: s.chats.map((c) =>
         c.id === chatId ? { ...c, title } : c,
       ),
-    })),
+    }));
+    api.chats.update(chatId, { name: title }).catch(() => {});
+  },
 
   loadChats: async () => {
     try {
       const dtos = await api.chats.list();
-      const chats: Chat[] = dtos.map((dto: any) => ({
+      const { defaultProvider, defaultModel } = get();
+      const chats: Chat[] = dtos.map((dto: ChatDTO) => ({
         id: dto.id,
         title: dto.name || "Chat",
+        projectId: dto.projectId,
         mode: dto.mode || "chat",
-        provider: dto.provider || "opencode",
-        model: dto.model || "deepseek-v4-pro",
+        provider: dto.provider || defaultProvider,
+        model: dto.model || defaultModel,
         messages: [],
         createdAt: dto.createdAt,
       }));
@@ -114,19 +127,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   createChat: async (mode, projectId?) => {
     try {
+      const { defaultProvider, defaultModel } = get();
       const dto = await api.chats.create({
         title: "Nuevo chat",
         mode,
-        provider: "opencode",
-        model: "deepseek-v4-pro",
+        provider: defaultProvider,
+        model: defaultModel,
         projectId,
       });
       const chat: Chat = {
         id: dto.id,
         title: dto.name || "Nuevo chat",
         mode: mode,
-        provider: dto.provider || "opencode",
-        model: dto.model || "deepseek-v4-pro",
+        provider: dto.provider || get().defaultProvider,
+        model: dto.model || get().defaultModel,
         messages: [],
         createdAt: dto.createdAt,
         _messagesLoaded: true,
@@ -168,15 +182,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       timestamp: new Date().toISOString(),
     };
 
-    set((s) => ({
-      isResponding: true,
-      chats: s.chats.map((c) =>
-        c.id === chatId
-          ? { ...c, messages: [...c.messages, userMsg], title: isFirstMessage ? title : c.title }
-          : c,
-      ),
-    }));
-
     const assistantMsg: Message = {
       id: `a-${Date.now()}`,
       role: "assistant",
@@ -185,9 +190,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
 
     set((s) => ({
+      isResponding: true,
       chats: s.chats.map((c) =>
         c.id === chatId
-          ? { ...c, messages: [...c.messages, assistantMsg] }
+          ? { ...c, messages: [...c.messages, userMsg, assistantMsg], title: isFirstMessage ? title : c.title }
           : c,
       ),
     }));
@@ -210,8 +216,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         onConsentRequired: (intent) => {
           const chat = get().chats.find((c) => c.id === chatId);
-          const isFirstMsg = chat?.messages.length === 1;
-          if (isFirstMsg) {
+          const hasMsgs = (chat?.messages.length ?? 0) > 2;
+          if (!hasMsgs) {
             set((s) => ({
               isResponding: false,
               consentPending: { chatId, intent },
@@ -225,23 +231,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
             set({ consentPending: { chatId, intent } });
           }
         },
-        onDone: (messageId) => {
+        onDone: (_messageId) => {
           const fullContent = pendingContent.join("");
-          assistantMsg.id = messageId;
-          assistantMsg.content = fullContent;
-          assistantMsg.timestamp = new Date().toISOString();
-
-          get().updateMessage(chatId, assistantMsg.id, {
+          const updated: Partial<Message> = {
             content: fullContent,
-            timestamp: assistantMsg.timestamp,
-          });
+            timestamp: new Date().toISOString(),
+          };
+          get().updateMessage(chatId, assistantMsg.id, updated);
 
-          const firstLine = fullContent.split("\n")[0].slice(0, 60);
-          useMemoryStore.getState().addEntry({
-            topic: `Asistente: ${firstLine.length < 60 ? firstLine : firstLine + "..."}`,
-            content: fullContent,
-            source: "chat",
-          });
+          if (fullContent.trim()) {
+            const firstLine = fullContent.split("\n")[0].slice(0, 60);
+            useMemoryStore.getState().addEntry({
+              topic: `Asistente: ${firstLine.length < 60 ? firstLine : firstLine + "..."}`,
+              content: fullContent,
+              source: "chat",
+            });
+          }
 
           set({ isResponding: false });
         },
@@ -271,7 +276,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   regenerateMessage: async (chatId) => {
     const chat = get().chats.find((c) => c.id === chatId);
-    if (!chat || get().isResponding) return;
+    if (!chat || get().isResponding || get().consentPending) return;
 
     const messages = [...chat.messages];
     let lastUserIdx = -1;
@@ -316,7 +321,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     const pendingContent: string[] = [];
 
-    wsClient.sendConsentResponse(pending.chatId, decision, {
+    const sent = wsClient.sendConsentResponse(pending.chatId, decision, {
       onText: (text) => {
         pendingContent.push(text);
         get().updateMessage(pending.chatId, assistantMsg.id, { content: pendingContent.join("") });
@@ -335,8 +340,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       onAgentDone: (_taskId, results) => {
         let summary = "";
         try {
-          const steps = JSON.parse(results);
-          steps.forEach((s: any) => {
+          const stepsList: { stepId: number; success: boolean; output?: string; error?: string }[] = JSON.parse(results);
+          stepsList.forEach((s) => {
             summary += `${s.success ? "✅" : "❌"} Paso ${s.stepId}: ${s.output || s.error}\n`;
           });
           get().updateMessage(pending.chatId, assistantMsg.id, { content: summary });
@@ -348,11 +353,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         useMemoryStore.getState().addEntry({
           topic: `Agente: ${firstLine || "Tarea completada"}`,
           content: summary,
-          source: "chat" as any,
+          source: "chat" as const,
         });
         set({ isResponding: false });
       },
       onDone: () => {
+        const fullContent = pendingContent.join("");
+        if (!fullContent.trim()) {
+          get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Acción rechazada]" });
+        }
         set({ isResponding: false });
       },
       onError: (error) => {
@@ -360,19 +369,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set({ isResponding: false });
       },
     });
+    if (!sent) {
+      get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Error: No hay conexión con el servidor]" });
+      set({ isResponding: false });
+    }
   },
 
   dismissConsent: () => {
+    const pending = get().consentPending;
+    if (pending) {
+      wsClient.cancelStream(pending.chatId);
+    }
     set({ consentPending: null, isResponding: false });
   },
 
-  toggleCowork: () => set((s) => ({ coworkMode: !s.coworkMode })),
-  setCoworkMode: (mode) => set({ coworkMode: mode }),
+  updateChatProvider: (chatId, provider, model) =>
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, provider, model } : c,
+      ),
+    })),
+
+  loadProviders: async () => {
+    try {
+      const providers = await api.models.list();
+      if (providers.length > 0) {
+        const first = providers[0];
+        const modelId = first.models[0] || "openrouter/auto";
+        set({ defaultProvider: first.provider, defaultModel: modelId });
+      }
+    } catch {
+      // keep defaults
+    }
+  },
 
   loadMessages: async (chatId) => {
     try {
       const data = await api.chats.getById(chatId);
-      const messages: Message[] = (data.messages || []).map((m: any) => ({
+      const messages: Message[] = (data.messages || []).map((m: MessageDTO) => ({
         id: m.id,
         role: m.role,
         content: m.content,
@@ -381,10 +415,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }));
       set((s) => ({
         chats: s.chats.map((c) =>
-          c.id === chatId ? { ...c, messages } : c,
+          c.id === chatId ? { ...c, messages, _messagesLoaded: true } : c,
         ),
       }));
     } catch {
     }
   },
-}));
+}),
+    {
+      name: "ozy-chats",
+      partialize: (state) => ({
+        chats: state.chats,
+        activeChatId: state.activeChatId,
+        defaultProvider: state.defaultProvider,
+        defaultModel: state.defaultModel,
+      }),
+    },
+  ),
+);
+
+// Load chats and providers from backend on init
+useChatStore.getState().loadProviders();
+useChatStore.getState().loadChats();

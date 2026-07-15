@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/ozyassist/backend/internal/agent"
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/db/models"
@@ -57,6 +56,9 @@ func processAttachments(chat *models.Chat, attachments []attachment, content str
 
 	var ocrTexts []string
 	for _, att := range attachments {
+		if strings.Contains(att.ID, "..") || strings.ContainsAny(att.ID, "\\/") {
+			continue
+		}
 		path := filepath.Join("data/uploads", att.ID)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			continue
@@ -94,50 +96,11 @@ type serverMessage struct {
 	Warning   string `json:"warning,omitempty"`
 }
 
-func handleChatMessage(conn *websocket.Conn, msg clientMessage) {
+func handleChatMessage(client *Client, msg clientMessage) {
 	chat, err := db.GetChat(msg.ChatID)
 	if err != nil {
-		writeJSON(conn, serverMessage{Type: "error", Content: "chat no encontrado: " + err.Error()})
+		writeJSON(client, serverMessage{Type: "error", Content: "chat no encontrado: " + err.Error()})
 		return
-	}
-
-	// Agent consent check — only in code mode with a project
-	if chat.ProjectID != "" && chat.Mode == "code" && agent.DetectActionIntent(msg.Content) {
-		project, err := db.GetProject(chat.ProjectID)
-		if err == nil {
-			switch project.AgentConsent {
-			case "always":
-				runAgentTask(conn, msg, chat, project, "always")
-				return
-			case "ask":
-				writeJSON(conn, serverMessage{Type: "consent_required", Content: msg.Content})
-				storePendingConsent(conn, msg, chat, project.UserID, project.PermissionLevel)
-				return
-			}
-		}
-	}
-
-	handleChatMessageNormal(conn, msg, chat)
-}
-
-func handleChatMessageNormal(conn *websocket.Conn, msg clientMessage, chat *models.Chat) {
-
-	ctx, cancel := context.WithCancel(context.Background())
-	sessID := uuid.NewString()
-	activeStreamsMu.Lock()
-	activeStreams[sessID] = &streamSession{cancel: cancel, chatID: msg.ChatID}
-	activeStreamsMu.Unlock()
-
-	defer func() {
-		activeStreamsMu.Lock()
-		delete(activeStreams, sessID)
-		activeStreamsMu.Unlock()
-	}()
-
-	// Process attachments (OCR images, etc.)
-	proc := processAttachments(chat, msg.Attachments, msg.Content)
-	for _, w := range proc.warnings {
-		writeJSON(conn, serverMessage{Type: "warn", Warning: w})
 	}
 
 	userMsg := &models.Message{
@@ -153,10 +116,52 @@ func handleChatMessageNormal(conn *websocket.Conn, msg clientMessage, chat *mode
 	}
 	if err := db.CreateMessage(userMsg); err != nil {
 		log.Printf("Error guardando mensaje user: %v", err)
-		writeJSON(conn, serverMessage{Type: "error", Content: "error guardando mensaje"})
+		writeJSON(client, serverMessage{Type: "error", Content: "error guardando mensaje"})
 		return
 	}
 	memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "user", msg.Content)
+
+	// Agent consent check — only in code mode with a project
+	if chat.ProjectID != "" && chat.Mode == "code" && agent.DetectActionIntent(msg.Content) {
+		project, err := db.GetProject(chat.ProjectID)
+		if err != nil {
+			writeJSON(client, serverMessage{Type: "error", Content: "proyecto no encontrado: " + err.Error()})
+			return
+		}
+		switch project.AgentConsent {
+		case "always":
+			runAgentTask(client, msg, chat, project, "always")
+			return
+		case "ask":
+			writeJSON(client, serverMessage{Type: "consent_required", Content: msg.Content})
+			storePendingConsent(client, msg, chat, project.UserID, project.PermissionLevel)
+			return
+		}
+	}
+
+	handleChatMessageNormal(client, msg, chat)
+}
+
+func handleChatMessageNormal(client *Client, msg clientMessage, chat *models.Chat) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sessID := uuid.NewString()
+	activeStreamsMu.Lock()
+	activeStreams[sessID] = &streamSession{cancel: cancel, chatID: msg.ChatID}
+	activeStreamsMu.Unlock()
+
+	defer func() {
+		activeStreamsMu.Lock()
+		delete(activeStreams, sessID)
+		activeStreamsMu.Unlock()
+	}()
+
+	// Process attachments (OCR images, etc.)
+	proc := processAttachments(chat, msg.Attachments, msg.Content)
+	for _, w := range proc.warnings {
+		writeJSON(client, serverMessage{Type: "warn", Warning: w})
+	}
 
 	prevMessages, err := db.GetMessages(msg.ChatID)
 	if err != nil {
@@ -165,11 +170,16 @@ func handleChatMessageNormal(conn *websocket.Conn, msg clientMessage, chat *mode
 
 	providerName := chat.Provider
 	if providerName == "" {
-		providerName = "openai"
+		available := providers.Available()
+		if len(available) > 0 {
+			providerName = available[0]
+		} else {
+			providerName = "openrouter"
+		}
 	}
 	provider, err := providers.Get(providerName)
 	if err != nil {
-		writeJSON(conn, serverMessage{Type: "error", Content: "provider no disponible: " + err.Error()})
+		writeJSON(client, serverMessage{Type: "error", Content: "provider no disponible: " + err.Error()})
 		return
 	}
 
@@ -228,7 +238,7 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 
 	chunkCh, err := provider.StreamCompletion(ctx, history, providers.CompletionOptions{Stream: true, Model: chat.Model})
 	if err != nil {
-		writeJSON(conn, serverMessage{Type: "error", Content: err.Error()})
+		writeJSON(client, serverMessage{Type: "error", Content: err.Error()})
 		return
 	}
 
@@ -240,14 +250,14 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 		switch chunk.Type {
 		case "text":
 			fullContent += chunk.Content
-			writeJSON(conn, serverMessage{Type: "text", Content: chunk.Content})
+			writeJSON(client, serverMessage{Type: "text", Content: chunk.Content})
 		case "tool_call":
 			toolCalls = append(toolCalls, map[string]any{
 				"id":        chunk.ToolID,
 				"name":      chunk.ToolName,
 				"arguments": chunk.ToolInput,
 			})
-			writeJSON(conn, serverMessage{
+			writeJSON(client, serverMessage{
 				Type:      "tool_call",
 				ToolID:    chunk.ToolID,
 				ToolName:  chunk.ToolName,
@@ -269,9 +279,9 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 				log.Printf("Error guardando mensaje assistant: %v", err)
 			}
 			memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "assistant", fullContent)
-			writeJSON(conn, serverMessage{Type: "done", MessageID: msgID})
+			writeJSON(client, serverMessage{Type: "done", MessageID: msgID})
 		case "error":
-			writeJSON(conn, serverMessage{Type: "error", Content: chunk.Content})
+			writeJSON(client, serverMessage{Type: "error", Content: chunk.Content})
 		}
 	}
 }
@@ -288,7 +298,7 @@ func CancelStream(chatID string) {
 }
 
 type pendingConsent struct {
-	conn            *websocket.Conn
+	client          *Client
 	msg             clientMessage
 	chat            *models.Chat
 	userID          string
@@ -298,20 +308,20 @@ type pendingConsent struct {
 var consentMu sync.Mutex
 var pendingConsents = map[string]*pendingConsent{}
 
-func storePendingConsent(conn *websocket.Conn, msg clientMessage, chat *models.Chat, userID, permissionLevel string) {
+func storePendingConsent(client *Client, msg clientMessage, chat *models.Chat, userID, permissionLevel string) {
 	consentMu.Lock()
-	pendingConsents[chat.ID] = &pendingConsent{conn, msg, chat, userID, permissionLevel}
+	pendingConsents[chat.ID] = &pendingConsent{client, msg, chat, userID, permissionLevel}
 	consentMu.Unlock()
 }
 
-func handleConsentResponse(conn *websocket.Conn, msg clientMessage) {
+func handleConsentResponse(client *Client, msg clientMessage) {
 	consentMu.Lock()
 	p, ok := pendingConsents[msg.ChatID]
 	delete(pendingConsents, msg.ChatID)
 	consentMu.Unlock()
 
 	if !ok {
-		writeJSON(conn, serverMessage{Type: "error", Content: "no pending consent"})
+		writeJSON(client, serverMessage{Type: "error", Content: "no pending consent"})
 		return
 	}
 
@@ -322,19 +332,19 @@ func handleConsentResponse(conn *websocket.Conn, msg clientMessage) {
 		if err == nil {
 			db.UpdateProjectConsent(project.ID, "always")
 		}
-		runAgentTask(conn, p.msg, p.chat, project, "always")
+		runAgentTask(client, p.msg, p.chat, project, "always")
 	case "once":
-		runAgentTask(conn, p.msg, p.chat, nil, "once")
+		runAgentTask(client, p.msg, p.chat, nil, "once")
 	case "no":
 		// Process as normal chat — re-call handleChatMessage but skip consent check
-		processAsNormalChat(conn, p.msg, p.chat)
+		processAsNormalChat(client, p.msg, p.chat)
 	}
 }
 
-func runAgentTask(conn *websocket.Conn, msg clientMessage, chat *models.Chat, project *models.Project, mode string) {
+func runAgentTask(client *Client, msg clientMessage, chat *models.Chat, project *models.Project, mode string) {
 	provider, err := providers.Get(chat.Provider)
 	if err != nil {
-		writeJSON(conn, serverMessage{Type: "error", Content: "provider no disponible"})
+		writeJSON(client, serverMessage{Type: "error", Content: "provider no disponible"})
 		return
 	}
 
@@ -343,33 +353,53 @@ func runAgentTask(conn *websocket.Conn, msg clientMessage, chat *models.Chat, pr
 		permLevel = project.PermissionLevel
 	}
 
-	writeJSON(conn, serverMessage{Type: "agent_start", Content: msg.Content})
+	// Process attachments (OCR images, etc.)
+	proc := processAttachments(chat, msg.Attachments, msg.Content)
+	for _, w := range proc.warnings {
+		writeJSON(client, serverMessage{Type: "warn", Warning: w})
+	}
+
+	writeJSON(client, serverMessage{Type: "agent_start", Content: proc.content})
 
 	taskID, results, err := agent.CreateAndExecuteTask(provider, chat.ProjectID, chat.ID,
-		chat.UserID, msg.Content, permLevel,
+		chat.UserID, proc.content, permLevel,
 		func(sr agent.StepResult) {
 			data, _ := json.Marshal(sr)
-			writeJSON(conn, serverMessage{Type: "agent_step", Content: string(data)})
+			writeJSON(client, serverMessage{Type: "agent_step", Content: string(data)})
 		})
 
 	if err != nil {
-		writeJSON(conn, serverMessage{Type: "error", Content: "agent task failed: " + err.Error()})
+		writeJSON(client, serverMessage{Type: "error", Content: "agent task failed: " + err.Error()})
 		return
 	}
 
 	resultsJSON, _ := json.Marshal(results)
-	writeJSON(conn, serverMessage{
+	assistantMsg := &models.Message{
+		ID:        taskID,
+		ChatID:    msg.ChatID,
+		Role:      "assistant",
+		Content:   string(resultsJSON),
+		CreatedAt: time.Now(),
+	}
+	if err := db.CreateMessage(assistantMsg); err != nil {
+		log.Printf("Error guardando mensaje assistant de agente: %v", err)
+	}
+	memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "assistant", string(resultsJSON))
+	writeJSON(client, serverMessage{
 		Type:      "agent_done",
 		Content:   string(resultsJSON),
 		MessageID: taskID,
 	})
 }
 
-func processAsNormalChat(conn *websocket.Conn, msg clientMessage, chat *models.Chat) {
-	handleChatMessageNormal(conn, msg, chat)
+func processAsNormalChat(client *Client, msg clientMessage, chat *models.Chat) {
+	handleChatMessageNormal(client, msg, chat)
 }
 
-func writeJSON(conn *websocket.Conn, msg serverMessage) {
+func writeJSON(client *Client, msg serverMessage) {
 	data, _ := json.Marshal(msg)
-	conn.WriteMessage(websocket.TextMessage, data)
+	select {
+	case client.Send <- data:
+	default:
+	}
 }

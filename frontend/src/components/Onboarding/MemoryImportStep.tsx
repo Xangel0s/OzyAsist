@@ -12,8 +12,11 @@ export default function MemoryImportStep({ onNext }: MemoryImportStepProps) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showHelper, setShowHelper] = useState(false);
   const importFromMd = useMemoryStore((s) => s.importFromMd);
-  const entryCount = useMemoryStore((s) => s.entries.length);
   const updateProfileMd = useAuthStore((s) => s.updateProfileMd);
+
+  const detectedSections = content
+    ? content.split("\n").filter((l) => l.startsWith("## ")).length || 1
+    : 0;
 
   const handleFile = (f: File) => {
     setFile(f);
@@ -122,7 +125,7 @@ export default function MemoryImportStep({ onNext }: MemoryImportStepProps) {
         disabled={!content}
         onClick={handleContinue}
       >
-        {content ? `Importar (${entryCount} secciones detectadas)` : "Continuar"}
+        {content ? `Importar (${detectedSections} secciones detectadas)` : "Continuar"}
       </button>
       <button
         className="w-full mt-2 px-4 py-2 text-text-muted hover:text-on-surface text-body-md transition-colors"

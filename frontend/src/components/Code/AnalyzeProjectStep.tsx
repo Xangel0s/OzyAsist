@@ -1,154 +1,156 @@
 import { useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useProjectsStore } from "../../store/projectsStore";
 import { api } from "../../services/api";
 
 const permissionLevels = [
-  {
-    value: "read_only",
-    label: "Solo lectura",
-    desc: "El agente puede leer archivos pero no escribir ni ejecutar comandos.",
-  },
-  {
-    value: "sandboxed",
-    label: "Sandbox",
-    desc: "El agente puede leer, escribir y ejecutar comandos dentro del proyecto. Comandos destructivos requieren confirmación.",
-  },
-  {
-    value: "trusted",
-    label: "Confianza total",
-    desc: "El agente tiene acceso completo sin restricciones. Comandos destructivos se ejecutan sin confirmación.",
-  },
+  { value: "read_only", label: "Lectura", icon: "visibility" },
+  { value: "sandboxed", label: "Sandbox", icon: "shield" },
+  { value: "trusted", label: "Total", icon: "verified_user" },
 ];
 
-export default function AnalyzeProjectStep({ onDone }: { onDone?: () => void }) {
+export default function AnalyzeProjectStep({ onDone }: { onDone?: (projectId: string) => void }) {
   const createProject = useProjectsStore((s) => s.createProject);
   const [path, setPath] = useState("");
-  const [name, setName] = useState("");
   const [permission, setPermission] = useState("sandboxed");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState("");
 
-  const handleSelectFolder = async () => {
-    try {
-      const selected = await open({ directory: true });
-      if (selected) {
-        setPath(selected);
-        setName(selected.split(/[/\\]/).pop() || "Proyecto");
-        setError("");
-      }
-    } catch {
-      // dialog cancelled or not in Tauri (web dev fallback)
-    }
-  };
+  const folderName = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || "";
 
   const handleAnalyze = async () => {
-    if (!path) return;
+    if (!path.trim()) return;
     setLoading(true);
     setError("");
+    setProgress("Creando proyecto...");
+
     try {
-      const projectId = await createProject(name, path, undefined);
+      const projectId = await createProject(
+        folderName || "Proyecto",
+        path.trim(),
+        undefined,
+        permission,
+      );
       if (!projectId) {
-        setError("Error al crear el proyecto. ¿El servidor está corriendo?");
-        setLoading(false);
+        setError("Error al crear el proyecto. Verificá que el servidor esté corriendo.");
         return;
       }
-      // Index the project
+
+      setProgress("Indexando archivos...");
       try {
-        await api.projects.index(projectId);
+        const result = await api.projects.index(projectId);
+        setProgress(`Indexación completa: ${result.files} archivos, ${result.imports} importaciones`);
       } catch {
-        // non-fatal: tree/graph may be incomplete
+        setProgress("Proyecto creado (indexación opcional no disponible)");
       }
-      onDone?.();
-    } catch (e: any) {
-      setError(e?.message || "Error al analizar el proyecto");
+
+      await new Promise((r) => setTimeout(r, 500));
+      onDone?.(projectId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error al analizar");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-surface-deep p-8">
-      <div className="max-w-md w-full">
+    <div className="flex-1 flex flex-col items-center justify-center bg-[#1a1a1a] p-6">
+      <div className="w-full max-w-[340px]">
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-xl flex items-center justify-center overflow-hidden mx-auto mb-4">
-            <img src="/ozybaselogo.png" alt="Ozy" className="w-full h-full object-contain" />
+          <div className="w-14 h-14 rounded-2xl bg-[#2a2a2a] flex items-center justify-center mx-auto mb-4">
+            <img src="/ozybaselogo.png" alt="Ozy" className="w-8 h-8 object-contain" />
           </div>
-          <h2 className="text-headline-md font-headline-md text-on-surface mb-2">
-            Analizar proyecto
-          </h2>
-          <p className="text-body-md text-text-muted">
-            Selecciona una carpeta de código para que Ozy entienda su estructura y dependencias.
-          </p>
+          <h2 className="text-[18px] font-semibold text-white mb-2">Analizar proyecto</h2>
+          <p className="text-[13px] text-white/40">Ingresá la ruta completa de tu proyecto para analizarlo.</p>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <button
-            className="w-full flex items-center gap-3 px-4 py-3 bg-surface-container rounded-xl border border-border-subtle text-on-surface hover:bg-surface-container-high transition-colors text-left"
-            onClick={handleSelectFolder}
-          >
-            <span className="material-symbols-outlined text-[24px] text-primary-container">
-              folder_open
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-body-md truncate">
-                {path || "Seleccionar carpeta del proyecto"}
+        <div className="bg-[#1e1e1e] rounded-xl border border-white/10 p-4 flex flex-col gap-4">
+          <div>
+            <label className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-2 block">
+              Ruta del proyecto
+            </label>
+
+            {path && folderName && (
+              <div className="flex items-center gap-2 bg-[#c8e64a]/10 rounded-lg px-3 py-2.5 mb-2">
+                <span className="material-symbols-outlined text-[#c8e64a] text-[18px]">folder</span>
+                <span className="flex-1 text-[13px] text-white font-medium truncate">{folderName}</span>
+                <button
+                  className="w-6 h-6 rounded flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors shrink-0"
+                  onClick={() => { setPath(""); setError(""); setProgress(""); }}
+                  type="button"
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
               </div>
-              {path && (
-                <div className="text-label-caps text-text-muted mt-0.5 truncate">{path}</div>
-              )}
-            </div>
-          </button>
+            )}
+
+            <input
+              className="w-full bg-[#2a2a2a] border border-white/10 rounded-lg px-3 py-2.5 text-white text-[13px] outline-none focus:border-[#c8e64a]/50 transition-all placeholder:text-white/25 font-mono"
+              value={path}
+              onChange={(e) => { setPath(e.target.value); setError(""); }}
+              placeholder="C:\Users\Lenovo\Documents\mi-proyecto"
+              spellCheck={false}
+            />
+            <p className="text-[11px] text-white/25 mt-1.5">
+              Ruta absoluta en tu disco local
+            </p>
+          </div>
 
           <div>
-            <label className="text-label-caps text-text-muted mb-2 block">
-              Nivel de permiso del agente
+            <label className="text-[11px] font-medium text-white/40 uppercase tracking-wider mb-2 block">
+              Permisos
             </label>
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {permissionLevels.map((lvl) => (
                 <button
                   key={lvl.value}
-                  className={`flex items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
+                  className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-lg border transition-all text-[11px] font-medium ${
                     permission === lvl.value
-                      ? "border-primary-container bg-primary-container/10"
-                      : "border-border-subtle bg-surface-container hover:bg-surface-container-high"
+                      ? "border-[#c8e64a] bg-[#c8e64a]/10 text-white"
+                      : "border-white/10 bg-[#2a2a2a] text-white/50 hover:bg-[#333]"
                   }`}
                   onClick={() => setPermission(lvl.value)}
                 >
-                  <span
-                    className={`material-symbols-outlined text-[18px] mt-0.5 ${
-                      permission === lvl.value ? "text-primary-container fill" : "text-text-muted"
-                    }`}
-                  >
-                    {permission === lvl.value ? "check_circle" : "radio_button_unchecked"}
+                  <span className={`material-symbols-outlined text-[18px] ${
+                    permission === lvl.value ? "text-[#c8e64a]" : "text-white/40"
+                  }`}>
+                    {lvl.icon}
                   </span>
-                  <div>
-                    <div className="text-body-md text-on-surface">{lvl.label}</div>
-                    <div className="text-label-caps text-text-muted mt-0.5">{lvl.desc}</div>
-                  </div>
+                  {lvl.label}
                 </button>
               ))}
             </div>
           </div>
 
           {error && (
-            <div className="text-body-md text-red-400 bg-red-400/10 rounded-lg p-3">{error}</div>
+            <div className="flex items-center gap-2 text-[12px] text-red-400 bg-red-400/10 rounded-lg p-2.5">
+              <span className="material-symbols-outlined text-[16px]">error</span>
+              {error}
+            </div>
+          )}
+
+          {progress && !error && (
+            <div className="flex items-center gap-2 text-[12px] text-[#c8e64a] bg-[#c8e64a]/10 rounded-lg p-2.5">
+              <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+              {progress}
+            </div>
           )}
 
           <button
-            className="w-full px-4 py-3 bg-primary-container text-on-primary rounded-xl hover:bg-primary-fixed-dim transition-colors text-body-md font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!path || loading}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-[#c8e64a] text-[#1a1a1a] rounded-lg hover:bg-[#b8d63a] transition-all text-[13px] font-semibold disabled:opacity-30 disabled:cursor-not-allowed"
+            disabled={!path.trim() || loading}
             onClick={handleAnalyze}
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="material-symbols-outlined text-[18px] animate-spin">
-                  progress_activity
-                </span>
-                Analizando estructura del proyecto...
-              </span>
+              <>
+                <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                Analizando...
+              </>
             ) : (
-              "Analizar proyecto"
+              <>
+                <span className="material-symbols-outlined text-[16px]">search</span>
+                Analizar
+              </>
             )}
           </button>
         </div>

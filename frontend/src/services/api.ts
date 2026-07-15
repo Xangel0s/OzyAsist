@@ -58,6 +58,41 @@ export interface ConnectorDTO {
   authConfig?: string;
 }
 
+export interface TreeNode {
+  name: string;
+  path: string;
+  type: "file" | "folder";
+  children?: TreeNode[];
+}
+
+export interface SearchHit {
+  id: string;
+  text: string;
+  score: number;
+}
+
+export interface SearchResults {
+  messages: SearchHit[];
+  chats: SearchHit[];
+  projects: SearchHit[];
+  memory: SearchHit[];
+}
+
+export interface GraphEdge {
+  id: string;
+  project_id: string;
+  from_symbol: string;
+  to_symbol: string;
+  edge_type: string;
+  created_at: string;
+}
+
+export interface AgentTaskResult {
+  taskId: string;
+  plan: string;
+  results: { stepId: number; success: boolean; output?: string; error?: string }[];
+}
+
 export const api = {
   chats: {
     list: () => request<ChatDTO[]>("/chats"),
@@ -67,6 +102,11 @@ export const api = {
         body: JSON.stringify({ name: data.title, mode: data.mode, provider: data.provider, model: data.model, project_id: data.projectId }),
       }),
     getById: (id: string) => request<{ chat: ChatDTO; messages: MessageDTO[] }>(`/chats/${id}`),
+    update: (id: string, data: { name?: string; provider?: string; model?: string }) =>
+      request<ChatDTO>(`/chats/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
     delete: (id: string) => request<void>(`/chats/${id}`, { method: "DELETE" }),
     updateFeedback: (chatId: string, messageId: string, feedback: string) =>
       request<{ ok: boolean }>(`/chats/${chatId}/messages/${messageId}/feedback`, {
@@ -101,11 +141,17 @@ export const api = {
     index: (id: string) =>
       request<{ files: number; imports: number }>(`/projects/${id}/index`, { method: "POST" }),
     tree: (id: string) =>
-      request<{ tree: any; indexed: boolean }>(`/projects/${id}/tree`),
+      request<{ tree: TreeNode; indexed: boolean }>(`/projects/${id}/tree`),
     graph: (id: string, filepath: string) =>
       request<{ file: string; neighbors: { file: string; relation: string }[] }>(
         `/projects/${id}/graph/${encodeURIComponent(filepath)}`,
       ),
+    fullGraph: (id: string) => request<GraphEdge[]>(`/projects/${id}/fullgraph`),
+    uploadFiles: (id: string, files: { path: string; content: string }[]) =>
+      request<{ files: number; imports: number }>(`/projects/${id}/upload-files`, {
+        method: "POST",
+        body: JSON.stringify(files),
+      }),
   },
 
   skills: {
@@ -142,7 +188,7 @@ export const api = {
 
   search: {
     global: (q: string) =>
-      request<{ messages: any[]; chats: any[]; projects: any[]; memory: any[] }>(
+      request<SearchResults>(
         `/search?q=${encodeURIComponent(q)}`,
       ),
   },
@@ -161,7 +207,7 @@ export const api = {
 
   agent: {
     createTask: (data: { chatId?: string; projectId?: string; goal: string; permissionLevel?: string }) =>
-      request<{ taskId: string; plan: any; results: any[] }>("/agent/tasks", {
+      request<AgentTaskResult>("/agent/tasks", {
         method: "POST",
         body: JSON.stringify(data),
       }),
@@ -186,7 +232,7 @@ export const api = {
   },
 
   models: {
-    list: () => request<{ provider: string; models: { id: string; name: string }[] }[]>("/models"),
+    list: () => request<{ provider: string; models: string[] }[]>("/models"),
     select: (data: { provider: string; model: string }) =>
       request<void>("/models/select", { method: "POST", body: JSON.stringify(data) }),
   },

@@ -26,10 +26,7 @@ func Observe(c *gin.Context) {
 		return
 	}
 
-	prov, err := providers.Get("opencode")
-	if err != nil {
-		prov, _ = providers.Get("openai")
-	}
+	prov := pickFirstProvider()
 	if prov == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no provider available"})
 		return
@@ -99,10 +96,7 @@ func SidebarCommand(c *gin.Context) {
 		return
 	}
 
-	prov, err := providers.Get("opencode")
-	if err != nil {
-		prov, _ = providers.Get("openai")
-	}
+	prov := pickFirstProvider()
 	if prov == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no provider available"})
 		return
@@ -139,4 +133,13 @@ Responde al comando del usuario de manera útil y directa. Si es una pregunta so
 	c.JSON(http.StatusOK, gin.H{
 		"response": response,
 	})
+}
+
+func pickFirstProvider() providers.Provider {
+	for _, name := range []string{"opencode", "openai", "anthropic", "openrouter", "lmstudio"} {
+		if p, err := providers.Get(name); err == nil && p != nil {
+			return p
+		}
+	}
+	return nil
 }

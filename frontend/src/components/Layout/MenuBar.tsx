@@ -50,6 +50,55 @@ export default function MenuBar() {
 
   const close = () => { setOpen(false); setSubMenu(null); };
 
+  const dispatchKey = (key: string, shift = false) => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key, ctrlKey: true, shiftKey: shift, bubbles: true }),
+    );
+    close();
+  };
+
+  const handleCopy = () => {
+    const sel = document.getSelection();
+    if (sel) {
+      navigator.clipboard.writeText(sel.toString()).catch(() => {});
+    }
+    close();
+  };
+
+  const handleCut = () => {
+    const sel = document.getSelection();
+    if (sel) {
+      navigator.clipboard.writeText(sel.toString()).then(() => {
+        document.execCommand("delete");
+      }).catch(() => {});
+    }
+    close();
+  };
+
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? 0;
+        el.setRangeText(text, start, end, "end");
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } catch {}
+    close();
+  };
+
+  const handleSelectAll = () => {
+    const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) {
+      el.select();
+    } else {
+      document.getSelection()?.selectAllChildren(document.body);
+    }
+    close();
+  };
+
   const menus: MenuGroup[] = [
     {
       label: "Archivo", icon: "folder",
@@ -64,14 +113,14 @@ export default function MenuBar() {
     {
       label: "Editar", icon: "edit",
       items: [
-        { label: "Deshacer", shortcut: "Ctrl+Z", action: () => { document.execCommand("undo"); close(); } },
-        { label: "Rehacer", shortcut: "Ctrl+Shift+Z", action: () => { document.execCommand("redo"); close(); } },
+        { label: "Deshacer", shortcut: "Ctrl+Z", action: () => dispatchKey("z") },
+        { label: "Rehacer", shortcut: "Ctrl+Shift+Z", action: () => dispatchKey("z", true) },
         { label: "", action: () => {}, divider: true },
-        { label: "Cortar", shortcut: "Ctrl+X", action: () => { document.execCommand("cut"); close(); } },
-        { label: "Copiar", shortcut: "Ctrl+C", action: () => { document.execCommand("copy"); close(); } },
-        { label: "Pegar", shortcut: "Ctrl+V", action: () => { document.execCommand("paste"); close(); } },
+        { label: "Cortar", shortcut: "Ctrl+X", action: handleCut },
+        { label: "Copiar", shortcut: "Ctrl+C", action: handleCopy },
+        { label: "Pegar", shortcut: "Ctrl+V", action: handlePaste },
         { label: "", action: () => {}, divider: true },
-        { label: "Seleccionar todo", shortcut: "Ctrl+A", action: () => { document.execCommand("selectAll"); close(); } },
+        { label: "Seleccionar todo", shortcut: "Ctrl+A", action: handleSelectAll },
         { label: "", action: () => {}, divider: true },
         { label: "Buscar", shortcut: "Ctrl+F", action: () => { setSearchOpen(true); close(); } },
         { label: "Buscar siguiente", shortcut: "Ctrl+G", action: () => { setSearchOpen(true); close(); } },

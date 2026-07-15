@@ -1,17 +1,25 @@
 package db
 
 import (
+	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/ozyassist/backend/internal/db/models"
 )
 
+func escapeLike(s string) string {
+	return strings.NewReplacer(`%`, `\%`, `_`, `\_`).Replace(s)
+}
+
 var defaultUserID string
 
 func EnsureDefaultUser() error {
 	var count int
-	DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err := DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		count = 0
+	}
 	if count > 0 {
 		row := DB.QueryRow("SELECT id FROM users LIMIT 1")
 		return row.Scan(&defaultUserID)
@@ -45,6 +53,13 @@ func CreateChat(c *models.Chat) error {
 	return err
 }
 
+func UpdateChat(c *models.Chat) error {
+	_, err := DB.Exec(
+		`UPDATE chats SET name = ?, project_id = NULLIF(?, ''), mode = ?, provider = ?, model = ? WHERE id = ?`,
+		c.Name, c.ProjectID, c.Mode, c.Provider, c.Model, c.ID)
+	return err
+}
+
 func GetChat(chatID string) (*models.Chat, error) {
 	row := DB.QueryRow(
 		`SELECT id, user_id, COALESCE(project_id,''), COALESCE(name,''), mode, provider, model, created_at
@@ -66,7 +81,7 @@ func ListChats() ([]models.Chat, error) {
 	}
 	defer rows.Close()
 
-	var chats []models.Chat
+	chats := make([]models.Chat, 0)
 	for rows.Next() {
 		var c models.Chat
 		if err := rows.Scan(&c.ID, &c.UserID, &c.ProjectID, &c.Name, &c.Mode, &c.Provider, &c.Model, &c.CreatedAt); err != nil {
@@ -106,7 +121,7 @@ func ListProjects() ([]models.Project, error) {
 	}
 	defer rows.Close()
 
-	var projects []models.Project
+	projects := make([]models.Project, 0)
 	for rows.Next() {
 		var p models.Project
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.RootPath, &p.InstructionsMd, &p.FileTreeJSON, &p.PermissionLevel, &p.AgentConsent, &p.CreatedAt); err != nil {
@@ -129,6 +144,11 @@ func UpdateProjectConsent(projectID, consent string) error {
 	return err
 }
 
+func execTx(tx *sql.Tx, query string, args ...any) error {
+	_, err := tx.Exec(query, args...)
+	return err
+}
+
 func DeleteProject(id string) error {
 	tx, err := DB.Begin()
 	if err != nil {
@@ -136,10 +156,18 @@ func DeleteProject(id string) error {
 	}
 	defer tx.Rollback()
 
-	tx.Exec("UPDATE chats SET project_id = NULL WHERE project_id = ?", id)
-	tx.Exec("UPDATE agent_tasks SET project_id = NULL WHERE project_id = ?", id)
-	tx.Exec("DELETE FROM code_graph_edges WHERE project_id = ?", id)
-	tx.Exec("DELETE FROM projects WHERE id = ?", id)
+	if err := execTx(tx, "UPDATE chats SET project_id = NULL WHERE project_id = ?", id); err != nil {
+		return err
+	}
+	if err := execTx(tx, "UPDATE agent_tasks SET project_id = NULL WHERE project_id = ?", id); err != nil {
+		return err
+	}
+	if err := execTx(tx, "DELETE FROM code_graph_edges WHERE project_id = ?", id); err != nil {
+		return err
+	}
+	if err := execTx(tx, "DELETE FROM projects WHERE id = ?", id); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -150,8 +178,12 @@ func DeleteChat(chatID string) error {
 	}
 	defer tx.Rollback()
 
-	tx.Exec("DELETE FROM messages WHERE chat_id = ?", chatID)
-	tx.Exec("DELETE FROM chats WHERE id = ?", chatID)
+	if err := execTx(tx, "DELETE FROM messages WHERE chat_id = ?", chatID); err != nil {
+		return err
+	}
+	if err := execTx(tx, "DELETE FROM chats WHERE id = ?", chatID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -187,7 +219,7 @@ func FTS5SearchMessages(query string, limit int) ([]SearchResult, error) {
 	}
 	defer rows.Close()
 
-	var results []SearchResult
+	results := make([]SearchResult, 0)
 	for rows.Next() {
 		var r SearchResult
 		var title string
@@ -203,15 +235,16 @@ func FTS5SearchMessages(query string, limit int) ([]SearchResult, error) {
 
 // SearchChats busca chats por nombre (LIKE).
 func SearchChats(query string, limit int) ([]SearchResult, error) {
+	escaped := escapeLike(query)
 	rows, err := DB.Query(
-		`SELECT id, name, '' as snippet FROM chats WHERE name LIKE ? ORDER BY created_at DESC LIMIT ?`,
-		"%"+query+"%", limit)
+		`SELECT id, name, '' as snippet FROM chats WHERE name LIKE ? ESCAPE '\' ORDER BY created_at DESC LIMIT ?`,
+		"%"+escaped+"%", limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var results []SearchResult
+	results := make([]SearchResult, 0)
 	for rows.Next() {
 		var r SearchResult
 		if err := rows.Scan(&r.ID, &r.Title, &r.Snippet); err != nil {
@@ -226,15 +259,16 @@ func SearchChats(query string, limit int) ([]SearchResult, error) {
 
 // SearchProjects busca proyectos por nombre (LIKE).
 func SearchProjects(query string, limit int) ([]SearchResult, error) {
+	escaped := escapeLike(query)
 	rows, err := DB.Query(
-		`SELECT id, name, COALESCE(root_path,'') FROM projects WHERE name LIKE ? ORDER BY created_at DESC LIMIT ?`,
-		"%"+query+"%", limit)
+		`SELECT id, name, COALESCE(root_path,'') FROM projects WHERE name LIKE ? ESCAPE '\' ORDER BY created_at DESC LIMIT ?`,
+		"%"+escaped+"%", limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var results []SearchResult
+	results := make([]SearchResult, 0)
 	for rows.Next() {
 		var r SearchResult
 		if err := rows.Scan(&r.ID, &r.Title, &r.Snippet); err != nil {
@@ -265,7 +299,7 @@ func ListMemoryEntries(userID string, limit int) ([]models.MemoryEntry, error) {
 	}
 	defer rows.Close()
 
-	var entries []models.MemoryEntry
+	entries := make([]models.MemoryEntry, 0)
 	for rows.Next() {
 		var e models.MemoryEntry
 		if err := rows.Scan(&e.ID, &e.UserID, &e.ProjectID, &e.Source, &e.SourceID, &e.Topic, &e.Content, &e.CreatedAt); err != nil {
@@ -290,7 +324,7 @@ func FTS5SearchMemory(query string, limit int) ([]SearchResult, error) {
 	}
 	defer rows.Close()
 
-	var results []SearchResult
+	results := make([]SearchResult, 0)
 	for rows.Next() {
 		var r SearchResult
 		if err := rows.Scan(&r.ID, &r.Title, &r.Snippet, &r.Score); err != nil {
@@ -319,7 +353,7 @@ func ListSkills(userID string) ([]models.Skill, error) {
 	}
 	defer rows.Close()
 
-	var skills []models.Skill
+	skills := make([]models.Skill, 0)
 	for rows.Next() {
 		var s models.Skill
 		if err := rows.Scan(&s.ID, &s.UserID, &s.Name, &s.Description, &s.TriggerPattern, &s.ExecutionType, &s.ConfigJSON, &s.CreatedAt); err != nil {
@@ -364,7 +398,7 @@ func ListConnectors(userID string) ([]models.Connector, error) {
 	}
 	defer rows.Close()
 
-	var connectors []models.Connector
+	connectors := make([]models.Connector, 0)
 	for rows.Next() {
 		var c models.Connector
 		if err := rows.Scan(&c.ID, &c.UserID, &c.Name, &c.Type, &c.Endpoint, &c.AuthConfigJSON, &c.CreatedAt); err != nil {
@@ -389,18 +423,23 @@ func CreateAgentTask(t *models.AgentTask) error {
 }
 
 func UpdateTaskStatus(id, status, summary string) error {
-	_, err := DB.Exec(
-		`UPDATE agent_tasks SET status = ?, summary = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`,
-		status, summary, id)
+	terminal := status == "completed" || status == "failed" || status == "cancelled"
+	var query string
+	if terminal {
+		query = `UPDATE agent_tasks SET status = ?, summary = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`
+	} else {
+		query = `UPDATE agent_tasks SET status = ?, summary = ? WHERE id = ?`
+	}
+	_, err := DB.Exec(query, status, summary, id)
 	return err
 }
 
 func GetTask(id string) (*models.AgentTask, error) {
 	row := DB.QueryRow(
-		`SELECT id, COALESCE(project_id,''), COALESCE(chat_id,''), goal, COALESCE(plan_json,'[]'), status, permission_level, COALESCE(summary,''), created_at
+		`SELECT id, COALESCE(project_id,''), COALESCE(chat_id,''), goal, COALESCE(plan_json,'[]'), status, permission_level, COALESCE(summary,''), created_at, completed_at
 		 FROM agent_tasks WHERE id = ?`, id)
 	var t models.AgentTask
-	err := row.Scan(&t.ID, &t.ProjectID, &t.ChatID, &t.Goal, &t.PlanJSON, &t.Status, &t.PermissionLevel, &t.Summary, &t.CreatedAt)
+	err := row.Scan(&t.ID, &t.ProjectID, &t.ChatID, &t.Goal, &t.PlanJSON, &t.Status, &t.PermissionLevel, &t.Summary, &t.CreatedAt, &t.CompletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +469,7 @@ func GetMessages(chatID string) ([]models.Message, error) {
 	}
 	defer rows.Close()
 
-	var msgs []models.Message
+	msgs := make([]models.Message, 0)
 	for rows.Next() {
 		var m models.Message
 		if err := rows.Scan(&m.ID, &m.ChatID, &m.Role, &m.Content, &m.AttachmentsJSON, &m.ToolCallsJSON, &m.Feedback, &m.CreatedAt); err != nil {
@@ -466,7 +505,7 @@ func GetGraphNeighbors(projectID, filePath string) ([]models.CodeGraphEdge, erro
 	}
 	defer rows.Close()
 
-	var edges []models.CodeGraphEdge
+	edges := make([]models.CodeGraphEdge, 0)
 	for rows.Next() {
 		var e models.CodeGraphEdge
 		if err := rows.Scan(&e.ID, &e.ProjectID, &e.FromSymbol, &e.ToSymbol, &e.EdgeType, &e.CreatedAt); err != nil {
@@ -479,5 +518,33 @@ func GetGraphNeighbors(projectID, filePath string) ([]models.CodeGraphEdge, erro
 
 func ClearGraphEdges(projectID string) error {
 	_, err := DB.Exec(`DELETE FROM code_graph_edges WHERE project_id = ?`, projectID)
+	return err
+}
+
+func GetAllGraphEdges(projectID string) ([]models.CodeGraphEdge, error) {
+	rows, err := DB.Query(
+		`SELECT id, project_id, from_symbol, to_symbol, edge_type, created_at
+		 FROM code_graph_edges
+		 WHERE project_id = ?
+		 ORDER BY from_symbol, to_symbol`,
+		projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	edges := make([]models.CodeGraphEdge, 0)
+	for rows.Next() {
+		var e models.CodeGraphEdge
+		if err := rows.Scan(&e.ID, &e.ProjectID, &e.FromSymbol, &e.ToSymbol, &e.EdgeType, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		edges = append(edges, e)
+	}
+	return edges, rows.Err()
+}
+
+func SaveFileTree(projectID, treeJSON string) error {
+	_, err := DB.Exec(`UPDATE projects SET file_tree_json = ? WHERE id = ?`, treeJSON, projectID)
 	return err
 }

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { api, type SkillDTO } from "../services/api";
 
 export type SkillExecutionType = "script" | "prompt_template" | "api_call";
@@ -34,7 +35,9 @@ const dtoToSkill = (dto: SkillDTO): Skill => {
   };
 };
 
-export const useSkillsStore = create<SkillsState>((set) => ({
+export const useSkillsStore = create<SkillsState>()(
+  persist(
+    (set) => ({
   skills: [],
   loading: true,
 
@@ -78,6 +81,14 @@ export const useSkillsStore = create<SkillsState>((set) => ({
       set({ loading: false });
     }
   },
-}));
+}),
+    {
+      name: "ozy-skills",
+      partialize: (state) => ({
+        skills: state.skills,
+      }),
+    },
+  ),
+);
 
 useSkillsStore.getState().loadSkills();

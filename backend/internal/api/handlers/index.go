@@ -73,7 +73,7 @@ func IndexProject(c *gin.Context) {
 		}
 
 		// Skip excluded dirs
-		for _, part := range strings.Split(relPath, string(filepath.Separator)) {
+		for _, part := range strings.Split(relPath, "/") {
 			if excludedDirs[part] {
 				if d.IsDir() {
 					return fs.SkipDir
@@ -209,6 +209,193 @@ func GetProjectGraph(c *gin.Context) {
 		"file":      filePath,
 		"neighbors": neighbors,
 	})
+}
+
+func GetAllProjectGraph(c *gin.Context) {
+	projectID := c.Param("id")
+	edges, err := db.GetAllGraphEdges(projectID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, edges)
+}
+
+type FileUpload struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+func UploadProjectFiles(c *gin.Context) {
+	projectID := c.Param("id")
+	project, err := db.GetProject(projectID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "project not found"})
+		return
+	}
+
+	var files []FileUpload
+	if err := c.ShouldBindJSON(&files); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+
+	if len(files) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no files provided"})
+		return
+	}
+
+	db.ClearGraphEdges(projectID)
+
+	root := &FileTreeNode{Name: project.Name, Type: "folder", Path: "."}
+	importCount := 0
+
+	for _, f := range files {
+		parts := strings.Split(f.Path, "/")
+		current := root
+		for i, part := range parts {
+			if i == len(parts)-1 {
+				current.Children = append(current.Children, &FileTreeNode{
+					Name: part,
+					Type: "file",
+					Path: f.Path,
+				})
+			} else {
+				found := false
+				for _, child := range current.Children {
+					if child.Name == part && child.Type == "folder" {
+						current = child
+						found = true
+						break
+					}
+				}
+				if !found {
+					newDir := &FileTreeNode{Name: part, Type: "folder", Path: strings.Join(parts[:i+1], "/")}
+					current.Children = append(current.Children, newDir)
+					current = newDir
+				}
+			}
+		}
+
+		ext := filepath.Ext(f.Path)
+		if ext == ".go" || ext == ".ts" || ext == ".tsx" || ext == ".js" || ext == ".jsx" || ext == ".py" || ext == ".rs" {
+			imports := extractImportsFromContent(f.Path, ext, f.Content)
+			for _, imp := range imports {
+				edge := &models.CodeGraphEdge{
+					ID:         uuid.NewString(),
+					ProjectID:  projectID,
+					FromSymbol: f.Path,
+					ToSymbol:   imp,
+					EdgeType:   "import",
+					CreatedAt:  time.Now(),
+				}
+				db.InsertGraphEdge(edge)
+				importCount++
+			}
+		}
+	}
+
+	treeJSON, _ := json.Marshal(root)
+	db.SaveFileTree(projectID, string(treeJSON))
+
+	c.JSON(http.StatusOK, gin.H{
+		"files":   len(files),
+		"imports": importCount,
+	})
+}
+
+func extractImportsFromContent(filePath, ext, content string) []string {
+	var imports []string
+	lines := strings.Split(content, "\n")
+	relPath := filePath
+
+	switch ext {
+	case ".go":
+		inImportBlock := false
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "import (") {
+				inImportBlock = true
+				continue
+			}
+			if inImportBlock {
+				if line == ")" {
+					inImportBlock = false
+					continue
+				}
+				if m := goImportRe.FindStringSubmatch(line); len(m) > 1 {
+					if resolved := resolveImportFromContent(m[1], relPath); resolved != "" {
+						imports = append(imports, resolved)
+					}
+				}
+			} else if strings.HasPrefix(line, "import ") {
+				if m := goImportRe.FindStringSubmatch(line); len(m) > 1 {
+					if resolved := resolveImportFromContent(m[1], relPath); resolved != "" {
+						imports = append(imports, resolved)
+					}
+				}
+			}
+		}
+	case ".ts", ".tsx", ".js", ".jsx":
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "import ") && !strings.Contains(line, "require(") {
+				continue
+			}
+			if m := tsImportRe.FindStringSubmatch(line); len(m) > 1 {
+				if resolved := resolveImportFromContent(m[1], relPath); resolved != "" {
+					imports = append(imports, resolved)
+				}
+			}
+		}
+	case ".py":
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "from ") && !strings.HasPrefix(line, "import ") {
+				continue
+			}
+			matches := pyImportRe.FindStringSubmatch(line)
+			if len(matches) > 2 {
+				mod := matches[1]
+				if mod == "" {
+					mod = matches[2]
+				}
+				if resolved := resolveImportFromContent(strings.ReplaceAll(mod, ".", "/"), relPath); resolved != "" {
+					imports = append(imports, resolved)
+				}
+			}
+		}
+	case ".rs":
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "use ") {
+				continue
+			}
+			m := rustImportRe.FindStringSubmatch(line)
+			if len(m) > 1 {
+				mod := strings.TrimSuffix(m[1], "::*")
+				mod = strings.ReplaceAll(mod, "::", "/")
+				if resolved := resolveImportFromContent(mod, relPath); resolved != "" {
+					imports = append(imports, resolved)
+				}
+			}
+		}
+	}
+	return imports
+}
+
+func resolveImportFromContent(importPath, fromFile string) string {
+	importPath = strings.TrimSuffix(importPath, `"`)
+	importPath = strings.TrimSuffix(importPath, `'`)
+	if importPath == "" || strings.Contains(importPath, "://") {
+		return ""
+	}
+	if strings.HasPrefix(importPath, ".") {
+		fromDir := filepath.Dir(fromFile)
+		resolved := filepath.Clean(filepath.Join(fromDir, importPath))
+		return filepath.ToSlash(resolved)
+	}
+	return ""
 }
 
 func extractImports(filePath, ext, projectRoot string) []string {

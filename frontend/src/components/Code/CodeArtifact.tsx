@@ -13,22 +13,60 @@ export default function CodeArtifact({ filename, code }: CodeArtifactProps) {
 
   /* Simple syntax highlighting by keywords — matches the CSS token classes */
   const highlight = (line: string) => {
-    let h = line
-      .replace(
-        /\b(package|import|func|if|else|for|return|nil|true|false|struct|interface|map|chan|go|defer|select|case|switch|type|var|const)\b/g,
-        '<span class="token keyword">$1</span>',
-      )
-      .replace(
-        /\b(func|main|New\w+)\b(?=\s*\()/g,
-        '<span class="token function">$1</span>',
-      )
-      .replace(/"([^"]*)"/g, '<span class="token string">"$1"</span>')
-      .replace(/\/\/.*/g, '<span class="token comment">$&</span>')
-      .replace(
-        /(\s)(:=|==|!=|<=|>=|=|\+|-|\*|\/|&|\||\^|<|>)(\s)/g,
-        '$1<span class="token operator">$2</span>$3',
-      );
-    return h;
+    const tokens: { text: string; className?: string }[] = [];
+    let remaining = line;
+
+    const patterns: [RegExp, string][] = [
+      [/(\/\/.*)/, "token comment"],
+      [/(".*?")/, "token string"],
+      [/\b(package|import|func|if|else|for|return|nil|true|false|struct|interface|map|chan|go|defer|select|case|switch|type|var|const)\b/, "token keyword"],
+      [/\b(func|main|New\w+)\b(?=\s*\()/, "token function"],
+      [/(:=|==|!=|<=|>=|=|\+|-|\*|\/|&|\||\^|<|>)/, "token operator"],
+    ];
+
+    while (remaining.length > 0) {
+      let earliestIdx = remaining.length;
+      let earliestPattern: [RegExp, string] | null = null;
+      let earliestMatch: RegExpExecArray | null = null;
+
+      for (const [re, cls] of patterns) {
+        re.lastIndex = 0;
+        const m = re.exec(remaining);
+        if (m && m.index < earliestIdx) {
+          earliestIdx = m.index;
+          earliestPattern = [re, cls];
+          earliestMatch = m;
+        }
+      }
+
+      if (earliestPattern && earliestMatch) {
+        if (earliestMatch.index > 0) {
+          tokens.push({ text: remaining.slice(0, earliestMatch.index) });
+        }
+        tokens.push({ text: earliestMatch[0], className: earliestPattern[1] });
+        remaining = remaining.slice(earliestMatch.index + earliestMatch[0].length);
+      } else {
+        tokens.push({ text: remaining });
+        remaining = "";
+      }
+    }
+
+    return tokens;
+  };
+
+  const renderLine = (line: string, i: number) => {
+    const tokens = highlight(line);
+    return (
+      <code key={i}>
+        {tokens.map((t, j) =>
+          t.className ? (
+            <span key={j} className={t.className}>{t.text}</span>
+          ) : (
+            <span key={j}>{t.text}</span>
+          ),
+        )}
+      </code>
+    );
   };
 
   return (
@@ -54,9 +92,7 @@ export default function CodeArtifact({ filename, code }: CodeArtifactProps) {
       </div>
       <div className="p-4 overflow-x-auto text-code-sm font-code-sm leading-relaxed text-on-surface">
         <pre>
-          {lines.map((line, i) => (
-            <code key={i} dangerouslySetInnerHTML={{ __html: highlight(line) }} />
-          ))}
+          {lines.map(renderLine)}
         </pre>
       </div>
     </div>

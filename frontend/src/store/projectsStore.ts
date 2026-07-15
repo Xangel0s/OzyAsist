@@ -1,5 +1,7 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { api, type ProjectDTO } from "../services/api";
+import { useChatStore } from "./chatStore";
 
 export interface ProjectFile {
   name: string;
@@ -28,7 +30,7 @@ interface ProjectsState {
   setActiveProject: (id: string | null) => void;
   addProject: (project: Project) => void;
   loadProjects: () => Promise<void>;
-  createProject: (name: string, rootPath?: string, instructionsMd?: string) => Promise<string | null>;
+  createProject: (name: string, rootPath?: string, instructionsMd?: string, permissionLevel?: string) => Promise<string | null>;
   deleteProject: (id: string) => Promise<void>;
   updateProject: (id: string, data: { name?: string; rootPath?: string; instructionsMd?: string }) => Promise<void>;
 }
@@ -43,7 +45,9 @@ const dtoToProject = (dto: ProjectDTO): Project => ({
   createdAt: dto.createdAt,
 });
 
-export const useProjectsStore = create<ProjectsState>((set) => ({
+export const useProjectsStore = create<ProjectsState>()(
+  persist(
+    (set) => ({
   projects: [],
   activeProjectId: null,
   loading: true,
@@ -64,9 +68,9 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     }
   },
 
-  createProject: async (name, rootPath, instructionsMd) => {
+  createProject: async (name, rootPath, instructionsMd, permissionLevel) => {
     try {
-      const dto = await api.projects.create({ name, rootPath, instructionsMd });
+      const dto = await api.projects.create({ name, rootPath, instructionsMd, permissionLevel });
       const project = dtoToProject(dto);
       set((s) => ({ projects: [...s.projects, project] }));
       return project.id;
@@ -83,6 +87,13 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
         projects: s.projects.filter((p) => p.id !== id),
         activeProjectId: s.activeProjectId === id ? null : s.activeProjectId,
       }));
+      // Clean up related chats
+      const { chats, updateChatTitle } = useChatStore.getState();
+      for (const chat of chats) {
+        if (chat.mode === "code" && chat.title.includes("(Proyecto")) {
+          updateChatTitle(chat.id, chat.title.replace(/\(Proyecto[^)]*\)/, ""));
+        }
+      }
     } catch (e) {
       console.error("deleteProject failed:", e);
     }
@@ -98,7 +109,16 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
       console.error("updateProject failed:", e);
     }
   },
-}));
+}),
+    {
+      name: "ozy-projects",
+      partialize: (state) => ({
+        projects: state.projects,
+        activeProjectId: state.activeProjectId,
+      }),
+    },
+  ),
+);
 
 // Init: load projects from backend
 useProjectsStore.getState().loadProjects();

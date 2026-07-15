@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -50,8 +51,13 @@ func UploadFile(c *gin.Context) {
 }
 
 func GetFile(c *gin.Context) {
-	id := c.Param("id")
+	id := filepath.Base(c.Param("id"))
 	path := filepath.Join(uploadDir, id)
+
+	if !strings.HasPrefix(filepath.Clean(path), filepath.Clean(uploadDir)) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "ruta inválida"})
+		return
+	}
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})

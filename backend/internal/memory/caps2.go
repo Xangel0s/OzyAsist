@@ -76,15 +76,19 @@ func (c *Caps2Store) Search(query string, limit int, projectID, userID string) (
 	}
 
 	filter := map[string]interface{}{}
+	var must []map[string]interface{}
 	if projectID != "" {
-		filter["must"] = []map[string]interface{}{
-			{"key": "projectId", "match": map[string]interface{}{"value": projectID}},
-		}
+		must = append(must, map[string]interface{}{
+			"key": "projectId", "match": map[string]interface{}{"value": projectID},
+		})
 	}
 	if userID != "" {
-		filter["must"] = []map[string]interface{}{
-			{"key": "userId", "match": map[string]interface{}{"value": userID}},
-		}
+		must = append(must, map[string]interface{}{
+			"key": "userId", "match": map[string]interface{}{"value": userID},
+		})
+	}
+	if len(must) > 0 {
+		filter["must"] = must
 	}
 
 	results, err := c.qdrant.Search(vector, limit, filter)

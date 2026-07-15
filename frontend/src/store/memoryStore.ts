@@ -72,7 +72,7 @@ export const useMemoryStore = create<MemoryState>()(
           source: "import" as const,
           createdAt: new Date().toISOString(),
         }));
-        set({ entries, rawMd: md });
+        set((s) => ({ entries: [...entries, ...s.entries], rawMd: md }));
 
         try {
           const result = await api.memory.import(md);

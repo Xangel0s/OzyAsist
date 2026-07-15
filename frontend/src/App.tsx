@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useUIStore } from "./store/uiStore";
 import { useAuthStore } from "./store/authStore";
 import { useKeyboard } from "./hooks";
@@ -14,6 +14,7 @@ import OnboardingPage from "./components/Onboarding/OnboardingPage";
 import WelcomeScreen from "./components/Onboarding/WelcomeScreen";
 import SearchModal from "./components/Search/SearchModal";
 import Toast from "./components/Common/Toast";
+import ErrorBoundary from "./components/Common/ErrorBoundary";
 
 const pageMap: Record<string, React.ComponentType> = {
   home: HomePage,
@@ -25,6 +26,27 @@ const pageMap: Record<string, React.ComponentType> = {
   onboarding: OnboardingPage,
 };
 
+function HydrationGate({ children }: { children: React.ReactNode }) {
+  const [hydrated, setHydrated] = useState(() => useAuthStore.persist.hasHydrated());
+
+  useEffect(() => {
+    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+    return unsub;
+  }, []);
+
+  if (!hydrated) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 rounded-2xl flex items-center justify-center overflow-hidden animate-pulse">
+          <img src="/ozybaselogo.png" alt="OzyBase" className="w-full h-full object-contain" />
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 export default function App() {
   const user = useAuthStore((s) => s.user);
   const activeView = useUIStore((s) => s.activeView);
@@ -33,23 +55,34 @@ export default function App() {
 
   useKeyboard("k", toggleSearch, { meta: true });
 
-  if (!user) return <><WelcomeScreen /><Toast /></>;
+  if (!user) {
+    return (
+      <HydrationGate>
+        <WelcomeScreen />
+        <Toast />
+      </HydrationGate>
+    );
+  }
 
   const Page = pageMap[activeView];
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container">
-      <TopAppBar />
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
-        <main className="flex-1 flex flex-col overflow-hidden relative">
-          <div className="flex-1 flex flex-col animate-fadeIn min-h-0">
-            {Page && <Page />}
-          </div>
-        </main>
+    <HydrationGate>
+      <div className="h-screen w-screen overflow-hidden flex flex-col bg-background text-on-surface font-body-md selection:bg-primary-container selection:text-on-primary-container">
+        <TopAppBar />
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar />
+          <main className="flex-1 flex flex-col overflow-hidden relative">
+            <div className="flex-1 flex flex-col animate-fadeIn min-h-0">
+              <ErrorBoundary>
+                {Page && <Page />}
+              </ErrorBoundary>
+            </div>
+          </main>
+        </div>
       </div>
       <SearchModal />
       <Toast />
-    </div>
+    </HydrationGate>
   );
 }

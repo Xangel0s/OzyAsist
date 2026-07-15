@@ -17,19 +17,19 @@ export default function HomePage() {
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center relative bg-surface-deep overflow-y-auto">
-      <div className="w-full max-w-content-max-width px-gutter flex flex-col items-center z-10 -mt-20">
+    <div className="flex-1 flex flex-col items-center justify-center relative bg-[#1a1a1a] overflow-y-auto">
+      <div className="w-full max-w-[800px] px-4 flex flex-col items-center z-10 -mt-20">
         <div className="flex items-center justify-center gap-4 mb-12">
           <div className="w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden">
             <img src="/ozybaselogo.png" alt="OzyBase" className="w-full h-full object-contain" />
           </div>
-          <h1 className="text-display-hero-mobile md:text-display-hero font-display-hero text-on-surface text-center">
+          <h1 className="text-display-hero-mobile md:text-display-hero font-display-hero text-white text-center">
             ¿Qué vamos a construir hoy?
           </h1>
         </div>
 
         <ChatInput onSend={handleSend} />
-        <ActionChips />
+        <ActionChips onSend={handleSend} />
       </div>
 
       <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">

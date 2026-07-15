@@ -22,26 +22,35 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
-	if req.PermissionLevel == "" {
-		req.PermissionLevel = "sandboxed"
-	}
-
-	prov, err := providers.Get("opencode")
-	if err != nil {
-		prov, err = providers.Get("openai")
-		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no provider available"})
-			return
+	// Try to use the chat's provider if available, otherwise pick first available
+	provName := ""
+	if req.ChatID != "" {
+		if chat, err := db.GetChat(req.ChatID); err == nil && chat.Provider != "" {
+			provName = chat.Provider
 		}
+	}
+	if provName == "" {
+		available := providers.Available()
+		if len(available) > 0 {
+			provName = available[0]
+		}
+	}
+	prov, err := providers.Get(provName)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no provider available"})
+		return
 	}
 
 	userID := db.DefaultUserID()
 
-	// Fallback: use project's permission_level if not explicitly overridden
-	if req.ProjectID != "" {
+	// Use project's permission_level as default if request didn't specify one
+	if req.PermissionLevel == "" && req.ProjectID != "" {
 		if project, err := db.GetProject(req.ProjectID); err == nil && project.PermissionLevel != "" {
 			req.PermissionLevel = project.PermissionLevel
 		}
+	}
+	if req.PermissionLevel == "" {
+		req.PermissionLevel = "sandboxed"
 	}
 
 	// Build context from project Caps1 + project instructions
@@ -67,7 +76,12 @@ func CreateTask(c *gin.Context) {
 	// Create plan and execute
 	taskID, results, execErr := agent.CreateAndExecuteTask(prov, req.ProjectID, req.ChatID, userID, req.Goal, req.PermissionLevel, nil)
 	if execErr != nil {
-		// Return partial results
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"taskId":  taskID,
+			"error":   execErr.Error(),
+			"results": results,
+		})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

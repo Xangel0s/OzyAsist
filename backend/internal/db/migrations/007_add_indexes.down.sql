@@ -1,0 +1,9 @@
+DROP INDEX IF EXISTS idx_messages_chat_id_created;
+DROP INDEX IF EXISTS idx_memory_entries_user_created;
+DROP INDEX IF EXISTS idx_skills_user_created;
+DROP INDEX IF EXISTS idx_connectors_user_created;
+DROP INDEX IF EXISTS idx_chats_created;
+DROP INDEX IF EXISTS idx_projects_created;
+DROP INDEX IF EXISTS idx_agent_tasks_chat;
+DROP INDEX IF EXISTS idx_agent_actions_task;
+DROP INDEX IF EXISTS idx_code_graph_edges_project;

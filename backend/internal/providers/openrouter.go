@@ -1,19 +1,22 @@
 package providers
 
-import "context"
-
-type OpenRouterProvider struct{}
-
-func NewOpenRouter(apiKey string) *OpenRouterProvider {
-	return &OpenRouterProvider{}
+type OpenRouterProvider struct {
+	*OpenAIProvider
 }
 
-func (p *OpenRouterProvider) Name() string          { return "openrouter" }
-func (p *OpenRouterProvider) SupportsTools() bool    { return true }
-func (p *OpenRouterProvider) Models() []string       { return []string{"openrouter/auto"} }
+func NewOpenRouter(apiKey string) *OpenRouterProvider {
+	p := NewOpenAI(apiKey)
+	p.cfg.baseURL = "https://openrouter.ai/api/v1"
+	p.cfg.model = "openrouter/auto"
+	return &OpenRouterProvider{p}
+}
 
-func (p *OpenRouterProvider) StreamCompletion(ctx context.Context, messages []Message, opts CompletionOptions) (<-chan StreamChunk, error) {
-	ch := make(chan StreamChunk)
-	close(ch)
-	return ch, nil
+func (p *OpenRouterProvider) Name() string    { return "openrouter" }
+func (p *OpenRouterProvider) Models() []string {
+	return []string{
+		"openrouter/auto",
+		"qwen/qwen-2.5-coder-32b-instruct",
+		"deepseek/deepseek-chat",
+		"google/gemini-2.0-flash-001",
+	}
 }

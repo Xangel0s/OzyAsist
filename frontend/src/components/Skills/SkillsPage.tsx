@@ -4,6 +4,7 @@ import SkillEditor from "./SkillEditor";
 
 export default function SkillsPage() {
   const skills = useSkillsStore((s) => s.skills);
+  const loading = useSkillsStore((s) => s.loading);
   const removeSkill = useSkillsStore((s) => s.removeSkill);
   const [editing, setEditing] = useState<Skill | null>(null);
   const [showEditor, setShowEditor] = useState(false);
@@ -40,6 +41,13 @@ export default function SkillsPage() {
           />
         )}
 
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <span className="material-symbols-outlined text-[24px] animate-spin text-text-muted">
+              progress_activity
+            </span>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {skills.map((skill) => (
             <div
@@ -90,6 +98,7 @@ export default function SkillsPage() {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

@@ -17,8 +17,8 @@ func AnalyzeMemory(c *gin.Context) {
 		return
 	}
 
-	prov, err := providers.Get("opencode")
-	if err != nil {
+	prov := pickFirstProvider()
+	if prov == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "no provider available"})
 		return
 	}

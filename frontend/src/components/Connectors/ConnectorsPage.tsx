@@ -16,6 +16,7 @@ const statusLabels: Record<string, string> = {
 
 export default function ConnectorsPage() {
   const connectors = useConnectorsStore((s) => s.connectors);
+  const loading = useConnectorsStore((s) => s.loading);
   const removeConnector = useConnectorsStore((s) => s.removeConnector);
   const updateConnectorStatus = useConnectorsStore(
     (s) => s.updateConnectorStatus,
@@ -55,6 +56,13 @@ export default function ConnectorsPage() {
           />
         )}
 
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <span className="material-symbols-outlined text-[24px] animate-spin text-text-muted">
+              progress_activity
+            </span>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {connectors.map((connector) => (
             <div
@@ -129,6 +137,7 @@ export default function ConnectorsPage() {
             </div>
           ))}
         </div>
+        )}
       </div>
     </div>
   );

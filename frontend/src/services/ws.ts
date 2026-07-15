@@ -28,12 +28,21 @@ class WsClient {
         resolve();
         return;
       }
+      if (this.ws?.readyState === WebSocket.CONNECTING) {
+        this.ws.onopen = () => resolve();
+        this.ws.onerror = () => reject(new Error("WS connection failed"));
+        return;
+      }
 
       this.shouldReconnect = true;
       this.ws = new WebSocket(WS_URL);
 
       this.ws.onopen = () => resolve();
       this.ws.onclose = () => {
+        if (this.session) {
+          this.session.callbacks.onError("Conexión perdida");
+          this.session = null;
+        }
         if (this.shouldReconnect) {
           this.scheduleReconnect();
         }
@@ -50,7 +59,7 @@ class WsClient {
     });
   }
 
-  private handleMessage(data: any) {
+  private handleMessage(data: { type: string; content?: string; tool_id?: string; tool_name?: string; tool_input?: string; chat_id?: string; message_id?: string; warning?: string }) {
     if (!this.session) return;
 
     switch (data.type) {
@@ -81,6 +90,7 @@ class WsClient {
         if (this.session.callbacks.onConsentRequired) {
           this.session.callbacks.onConsentRequired(data.content ?? "");
         }
+        this.session = null;
         break;
       case "agent_start":
         break;
@@ -110,17 +120,18 @@ class WsClient {
     }
 
     this.session = { chatId, callbacks };
-    const msg: any = { type: "message", chat_id: chatId, content };
+    const msg: { type: string; chat_id: string; content: string; attachments?: { id: string; type: string }[] } = { type: "message", chat_id: chatId, content };
     if (attachments && attachments.length > 0) {
       msg.attachments = attachments;
     }
     this.ws.send(JSON.stringify(msg));
   }
 
-  sendConsentResponse(chatId: string, decision: string, callbacks: StreamCallbacks) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+  sendConsentResponse(chatId: string, decision: string, callbacks: StreamCallbacks): boolean {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
     this.session = { chatId, callbacks };
     this.ws.send(JSON.stringify({ type: "consent_response", chat_id: chatId, content: decision }));
+    return true;
   }
 
   cancelStream(chatId: string) {

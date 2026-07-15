@@ -16,8 +16,9 @@ func validateRootPath(path string) string {
 	if path == "" {
 		return ""
 	}
+	// Allow relative paths (browser mode — user types folder name)
 	if !filepath.IsAbs(path) {
-		return "root_path debe ser una ruta absoluta"
+		return ""
 	}
 	if fi, err := os.Stat(path); err != nil {
 		return "root_path no accesible: " + err.Error()
@@ -66,6 +67,7 @@ func CreateProject(c *gin.Context) {
 		RootPath:        req.RootPath,
 		InstructionsMd:  req.InstructionsMd,
 		PermissionLevel: req.PermissionLevel,
+		AgentConsent:    "ask",
 		CreatedAt:       time.Now(),
 	}
 	if project.PermissionLevel == "" {

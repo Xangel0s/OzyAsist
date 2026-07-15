@@ -26,6 +26,7 @@ func NewRouter() *gin.Engine {
 		// Chat
 		apiGroup.GET("/chats", handlers.ListChats)
 		apiGroup.POST("/chats", handlers.CreateChat)
+		apiGroup.PATCH("/chats/:id", handlers.UpdateChat)
 		apiGroup.GET("/chats/:id", handlers.GetChat)
 		apiGroup.DELETE("/chats/:id", handlers.DeleteChat)
 		apiGroup.POST("/chats/:id/messages", handlers.SendMessage)
@@ -40,6 +41,8 @@ func NewRouter() *gin.Engine {
 		apiGroup.POST("/projects/:id/index", handlers.IndexProject)
 		apiGroup.GET("/projects/:id/tree", handlers.GetProjectTree)
 		apiGroup.GET("/projects/:id/graph/*filepath", handlers.GetProjectGraph)
+		apiGroup.GET("/projects/:id/fullgraph", handlers.GetAllProjectGraph)
+		apiGroup.POST("/projects/:id/upload-files", handlers.UploadProjectFiles)
 
 		// Skills
 		apiGroup.GET("/skills", handlers.ListSkills)

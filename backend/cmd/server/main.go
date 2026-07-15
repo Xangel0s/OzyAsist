@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/ozyassist/backend/internal/api"
+	"github.com/ozyassist/backend/internal/api/ws"
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/providers"
 )
@@ -48,4 +49,5 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Apagando servidor...")
+	ws.ShutdownAll()
 }

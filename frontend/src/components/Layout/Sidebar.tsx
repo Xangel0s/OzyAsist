@@ -12,6 +12,8 @@ const navItems: { view: View; label: string; icon: string }[] = [
   { view: "connectors", label: "Connectors", icon: "power" },
 ];
 
+const ONBOARDING_TOTAL_STEPS = 3;
+
 export default function Sidebar() {
   const activeView = useUIStore((s) => s.activeView);
   const setActiveView = useUIStore((s) => s.setActiveView);
@@ -28,8 +30,24 @@ export default function Sidebar() {
     setActiveView(view);
   };
 
-  const handleNewChat = () => {
-    createChat("chat");
+  const handleNewChat = async () => {
+    if (activeChatId) {
+      const active = chats.find((c) => c.id === activeChatId);
+      if (active && active.messages.length === 0) {
+        setActiveView("chat");
+        return;
+      }
+    }
+    const empty = chats.find((c) => c.messages.length === 0);
+    if (empty) {
+      setActiveChat(empty.id);
+      setActiveView("chat");
+      return;
+    }
+    const chatId = await createChat("chat");
+    if (chatId) {
+      setActiveView("chat");
+    }
   };
 
   return (
@@ -93,7 +111,7 @@ export default function Sidebar() {
           ))}
         </div>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <div className="flex-1 overflow-hidden flex flex-col min-h-0">
           <div className="flex items-center justify-between px-3 mb-2 text-text-muted text-label-caps">
             <span>Recientes</span>
             <button className="hover:text-on-surface transition-colors">
@@ -122,79 +140,54 @@ export default function Sidebar() {
           </div>
         </div>
 
-        {onboardingStep < 3 && (
-          <div className="bg-surface-elevated rounded-xl border border-border-subtle p-4 flex flex-col gap-3">
-            <div className="flex justify-between items-center text-[13px]">
-              <span className="font-medium text-on-surface">
-                Comenzar con Ozy
-              </span>
-              <span className="text-text-muted">{onboardingStep} / 3</span>
+        {onboardingStep < ONBOARDING_TOTAL_STEPS && (
+          <div className="bg-surface-elevated rounded-xl border border-border-subtle p-3 mt-2">
+            <div className="flex items-center justify-between text-[12px] mb-2">
+              <span className="font-medium text-on-surface">Comenzar con Ozy</span>
+              <span className="text-text-muted">{onboardingStep}/{ONBOARDING_TOTAL_STEPS}</span>
             </div>
-            <div className="h-1 w-full bg-surface-variant rounded-full overflow-hidden">
+            <div className="h-1 w-full bg-surface-variant rounded-full overflow-hidden mb-3">
               <div
                 className="h-full bg-primary-container transition-all"
-                style={{ width: `${(onboardingStep / 3) * 100}%` }}
+                style={{ width: `${(onboardingStep / ONBOARDING_TOTAL_STEPS) * 100}%` }}
               />
             </div>
-            <div className="flex flex-col gap-3 mt-1">
+            <div className="flex flex-col gap-1">
               <button
-                className={`flex items-start gap-3 text-left w-full ${
-                  onboardingStep > 0 ? "opacity-50 line-through" : "cursor-pointer hover:opacity-80"
+                className={`flex items-center gap-2 text-left w-full px-2 py-1.5 rounded-lg transition-colors ${
+                  onboardingStep > 0 ? "opacity-50 line-through" : "hover:bg-surface-variant"
                 }`}
                 onClick={() => { setOnboardingStep(0); setActiveView("onboarding"); }}
                 disabled={onboardingStep > 0}
               >
-                <span
-                  className={`material-symbols-outlined text-[18px] shrink-0 ${
-                    onboardingStep > 0 ? "text-primary-container fill" : "text-text-muted"
-                  }`}
-                >
+                <span className={`material-symbols-outlined text-[14px] shrink-0 ${onboardingStep > 0 ? "text-primary-container fill" : "text-text-muted"}`}>
                   {onboardingStep > 0 ? "check_circle" : "radio_button_unchecked"}
                 </span>
-                <span className="text-[13px] leading-tight">
-                  Trae tu memoria de otra IA
-                </span>
+                <span className="text-[12px] text-on-surface">Importar memoria</span>
               </button>
               <button
-                className={`flex items-start gap-3 text-left w-full ${
-                  onboardingStep > 1 ? "opacity-50 line-through" : "cursor-pointer hover:opacity-80"
+                className={`flex items-center gap-2 text-left w-full px-2 py-1.5 rounded-lg transition-colors ${
+                  onboardingStep > 1 ? "opacity-50 line-through" : "hover:bg-surface-variant"
                 }`}
                 onClick={() => { setOnboardingStep(1); setActiveView("onboarding"); }}
                 disabled={onboardingStep > 1}
               >
-                <span
-                  className={`material-symbols-outlined text-[18px] shrink-0 ${
-                    onboardingStep > 1 ? "text-primary-container fill" : "text-text-muted"
-                  }`}
-                >
+                <span className={`material-symbols-outlined text-[14px] shrink-0 ${onboardingStep > 1 ? "text-primary-container fill" : "text-text-muted"}`}>
                   {onboardingStep > 1 ? "check_circle" : "radio_button_unchecked"}
                 </span>
-                <span className="text-[13px] leading-tight">
-                  Recibe feedback de IA
-                </span>
+                <span className="text-[12px] text-on-surface">Feedback IA</span>
               </button>
               <button
-                className={`flex items-start gap-3 text-left w-full ${
-                  onboardingStep > 2 ? "opacity-50 line-through" : "cursor-pointer hover:opacity-80"
+                className={`flex items-center gap-2 text-left w-full px-2 py-1.5 rounded-lg transition-colors ${
+                  onboardingStep > 2 ? "opacity-50 line-through" : "hover:bg-surface-variant"
                 }`}
                 onClick={() => { setOnboardingStep(2); setActiveView("onboarding"); }}
                 disabled={onboardingStep > 2}
               >
-                <span
-                  className={`material-symbols-outlined text-[18px] shrink-0 ${
-                    onboardingStep > 2 ? "text-primary-container fill" : "text-text-muted"
-                  }`}
-                >
+                <span className={`material-symbols-outlined text-[14px] shrink-0 ${onboardingStep > 2 ? "text-primary-container fill" : "text-text-muted"}`}>
                   {onboardingStep > 2 ? "check_circle" : "radio_button_unchecked"}
                 </span>
-                <div className="flex flex-col">
-                  <span className="text-[13px] font-medium text-on-surface leading-tight">
-                    Define tus instrucciones
-                  </span>
-                  <span className="text-[12px] text-text-muted leading-snug mt-1">
-                    Reglas y preferencias que Ozy recordará
-                  </span>
-                </div>
+                <span className="text-[12px] text-on-surface">Instrucciones</span>
               </button>
             </div>
           </div>

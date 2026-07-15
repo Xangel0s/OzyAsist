@@ -1,19 +1,18 @@
 package providers
 
-import "context"
-
-type LMStudioProvider struct{}
-
-func NewLMStudio(baseURL string) *LMStudioProvider {
-	return &LMStudioProvider{}
+type LMStudioProvider struct {
+	*OpenAIProvider
 }
 
-func (p *LMStudioProvider) Name() string          { return "lmstudio" }
-func (p *LMStudioProvider) SupportsTools() bool    { return false }
-func (p *LMStudioProvider) Models() []string       { return []string{"local-model"} }
+func NewLMStudio(baseURL string) *LMStudioProvider {
+	p := NewOpenAI("not-needed")
+	p.cfg.baseURL = baseURL
+	p.cfg.model = "local-model"
+	return &LMStudioProvider{p}
+}
 
-func (p *LMStudioProvider) StreamCompletion(ctx context.Context, messages []Message, opts CompletionOptions) (<-chan StreamChunk, error) {
-	ch := make(chan StreamChunk)
-	close(ch)
-	return ch, nil
+func (p *LMStudioProvider) Name() string       { return "lmstudio" }
+func (p *LMStudioProvider) SupportsTools() bool { return false }
+func (p *LMStudioProvider) Models() []string {
+	return []string{"local-model"}
 }
