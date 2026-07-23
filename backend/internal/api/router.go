@@ -1,6 +1,10 @@
 package api
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/ozyassist/backend/internal/api/handlers"
 	"github.com/ozyassist/backend/internal/api/middleware"
@@ -111,6 +115,28 @@ func NewRouter() *gin.Engine {
 			"providers":   providers.Available(),
 		})
 	})
+
+	// Serve frontend static files if frontend/dist exists
+	distPath := "../frontend/dist"
+	if _, err := os.Stat(distPath); err != nil {
+		cwd, _ := os.Getwd()
+		distPath = filepath.Join(cwd, "frontend", "dist")
+	}
+	if _, err := os.Stat(distPath); err == nil {
+		r.NoRoute(func(c *gin.Context) {
+			p := c.Request.URL.Path
+			if strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/ws") {
+				c.JSON(404, gin.H{"error": "not found"})
+				return
+			}
+			filePath := filepath.Join(distPath, filepath.Clean(p))
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				c.File(filePath)
+				return
+			}
+			c.File(filepath.Join(distPath, "index.html"))
+		})
+	}
 
 	return r
 }

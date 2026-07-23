@@ -6,7 +6,6 @@ import ProjectEditor from "./ProjectEditor";
 
 export default function ProjectsPage() {
   const projects = useProjectsStore((s) => s.projects);
-  const loading = useProjectsStore((s) => s.loading);
   const setActiveProject = useProjectsStore((s) => s.setActiveProject);
   const activeProjectId = useProjectsStore((s) => s.activeProjectId);
   const editingProjectId = useUIStore((s) => s.editingProjectId);
@@ -49,19 +48,37 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#1a1a1a] overflow-y-auto">
-      <div className="max-w-container-max mx-auto w-full px-gutter py-8">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-[20px] font-semibold text-white">
-            Proyectos
-          </h1>
-          <button
-            className="flex items-center gap-2 px-4 py-2 bg-[#c8e64a] text-[#1a1a1a] rounded-xl hover:bg-[#b8d63a] transition-colors text-[13px] font-semibold"
-            onClick={() => setShowEditor(true)}
-          >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            Nuevo proyecto
-          </button>
+    <div className="flex-1 flex flex-col h-full bg-[#1a1a1a] p-8 overflow-y-auto min-h-0 text-white">
+      <div className="max-w-[850px] mx-auto w-full flex flex-col gap-6">
+        {/* Header Title & Action Buttons Bar */}
+        <div className="flex items-center justify-between">
+          <h1 className="text-[26px] font-bold tracking-tight text-white font-sans">Proyectos</h1>
+
+          <div className="flex items-center gap-2">
+            <button
+              className="p-2 bg-white/10 hover:bg-white/15 text-white rounded-lg transition-colors flex items-center justify-center"
+              onClick={() => setSearch(search ? "" : "a")}
+              title="Buscar proyectos"
+            >
+              <span className="material-symbols-outlined text-[18px]">search</span>
+            </button>
+
+            {/* Sort Selector: Ordenar por Última actualización ⌄ */}
+            <div className="relative">
+              <button className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors border border-white/5">
+                <span className="text-white/60">Ordenar por</span>
+                <span className="font-semibold">Última actualización</span>
+                <span className="material-symbols-outlined text-[16px] text-white/60">expand_more</span>
+              </button>
+            </div>
+
+            <button
+              className="px-4 py-1.5 bg-white text-black hover:bg-white/90 text-[13px] font-semibold rounded-lg transition-colors shadow-sm"
+              onClick={() => setShowEditor(true)}
+            >
+              Nuevo proyecto
+            </button>
+          </div>
         </div>
 
         {showEditor && (
@@ -71,69 +88,62 @@ export default function ProjectsPage() {
           />
         )}
 
-        <div className="relative mb-8">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-[20px]">
-            search
-          </span>
-          <input
-            className="w-full bg-[#2a2a2a] border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white placeholder:text-white/25 outline-none focus:border-[#c8e64a]/50 transition-colors text-[14px]"
-            placeholder="Buscar proyectos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading && (
-            Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="bg-[#1e1e1e] rounded-xl border border-white/10 p-6 animate-pulse">
-                <div className="w-10 h-10 rounded-lg bg-white/5 mb-4" />
-                <div className="h-5 w-32 bg-white/5 rounded mb-2" />
-                <div className="h-4 w-48 bg-white/5 rounded mb-4" />
-                <div className="flex gap-4">
-                  <div className="h-3 w-16 bg-white/5 rounded" />
-                  <div className="h-3 w-12 bg-white/5 rounded" />
+        {/* Projects Grid or Centered Empty State */}
+        {filtered.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 pt-4">
+            {filtered.map((project) => (
+              <button
+                key={project.id}
+                className="bg-[#1e1e1e] rounded-2xl border border-white/10 p-6 text-left hover:bg-[#252525] hover:border-white/15 transition-all"
+                onClick={() => setActiveProject(project.id)}
+              >
+                <div className="w-10 h-10 rounded-xl bg-[#d1f107]/15 flex items-center justify-center mb-4">
+                  <span className="material-symbols-outlined text-[#d1f107]">
+                    inventory_2
+                  </span>
                 </div>
-              </div>
-            ))
-          )}
-          {!loading && filtered.map((project) => (
-            <button
-              key={project.id}
-              className="bg-[#1e1e1e] rounded-xl border border-white/10 p-6 text-left hover:bg-[#252525] hover:border-white/15 transition-all"
-              onClick={() => setActiveProject(project.id)}
-            >
-              <div className="w-10 h-10 rounded-lg bg-[#c8e64a]/15 flex items-center justify-center mb-4">
-                <span className="material-symbols-outlined text-[#c8e64a]">
-                  inventory_2
-                </span>
-              </div>
-              <h3 className="text-[15px] font-medium text-white mb-2">
-                {project.name}
-              </h3>
-              <p className="text-white/40 text-[13px] mb-4 line-clamp-2">
-                {project.description}
-              </p>
-              <div className="flex items-center gap-4 text-[11px] font-medium text-white/30 uppercase tracking-wider">
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]">description</span>
-                  {project.files != null ? `${project.files.length} archivos` : "—"}
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]">chat</span>
-                  {project.chatIds != null ? `${project.chatIds.length} chats` : "—"}
-                </span>
-              </div>
-            </button>
-          ))}
-          {!loading && filtered.length === 0 && (
-            <div className="col-span-full text-center text-white/30 text-[14px] py-12">
-              {projects.length === 0
-                ? "No hay proyectos aún. Crea uno para empezar."
-                : "Sin resultados para esta búsqueda."}
+                <h3 className="text-[15px] font-semibold text-white mb-2">
+                  {project.name}
+                </h3>
+                <p className="text-white/40 text-[13px] mb-4 line-clamp-2">
+                  {project.description}
+                </p>
+                <div className="flex items-center gap-4 text-[11px] font-medium text-white/30 uppercase tracking-wider">
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">description</span>
+                    {project.files != null ? `${project.files.length} archivos` : "—"}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">chat</span>
+                    {project.chatIds != null ? `${project.chatIds.length} chats` : "—"}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          /* Centered Empty State Matching Image 3 */
+          <div className="flex flex-col items-center justify-center min-h-[420px] gap-4 text-center max-w-md mx-auto pt-8">
+            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 mb-2">
+              <span className="material-symbols-outlined text-[36px]">grid_view</span>
             </div>
-          )}
-        </div>
+
+            <h2 className="text-[20px] font-semibold text-white">
+              ¿Quieres comenzar un proyecto?
+            </h2>
+
+            <p className="text-white/50 text-[13.5px] leading-relaxed">
+              Sube materiales, establece instrucciones personalizadas y organiza conversaciones en un solo espacio.
+            </p>
+
+            <button
+              className="mt-2 px-5 py-2.5 bg-[#2a2a2a] hover:bg-[#333333] border border-white/10 text-white font-medium text-[13.5px] rounded-xl transition-all shadow-sm"
+              onClick={() => setShowEditor(true)}
+            >
+              Nuevo proyecto
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

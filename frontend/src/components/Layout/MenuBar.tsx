@@ -39,6 +39,7 @@ export default function MenuBar() {
       if (mod && e.key === "f") { e.preventDefault(); setSearchOpen(true); }
       if (mod && e.key === "r") { e.preventDefault(); window.location.reload(); }
       if (mod && e.key === "w") { e.preventDefault(); window.close(); }
+      if (mod && e.key === ",") { e.preventDefault(); useUIStore.getState().openSettings("general"); }
     };
     document.addEventListener("mousedown", clickHandler);
     window.addEventListener("keydown", keyHandler);
@@ -104,7 +105,7 @@ export default function MenuBar() {
       label: "Archivo", icon: "folder",
       items: [
         { label: "Nueva conversación", shortcut: "Ctrl+N", action: () => { createChat("chat"); close(); } },
-        { label: "Configuración...", shortcut: "Ctrl+,", action: () => { close(); } },
+        { label: "Configuración...", shortcut: "Ctrl+,", action: () => { useUIStore.getState().openSettings("general"); close(); } },
         { label: "", action: () => {}, divider: true },
         { label: "Cerrar ventana", shortcut: "Ctrl+W", action: () => { window.close(); close(); } },
         { label: "Salir", action: () => { window.close(); close(); } },

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../../services/api";
+import { useUIStore } from "../../store/uiStore";
 
 interface ModelGroup {
   provider: string;
@@ -48,8 +49,17 @@ export default function ModelSelector({ currentModel, onSelect, onClose }: Model
           </div>
         )}
         {!loading && groups.length === 0 && (
-          <div className="px-3 py-4 text-center text-white/40 text-[13px]">
-            No hay providers disponibles. Configura una API key.
+          <div className="px-3 py-4 text-center text-white/50 text-[13px] flex flex-col gap-2 items-center">
+            <span>No hay proveedores configurados.</span>
+            <button
+              className="px-3 py-1.5 bg-[#c8e64a] text-[#1a1a1a] font-medium rounded-lg text-[12px] hover:bg-[#b8d63a] transition-colors"
+              onClick={() => {
+                useUIStore.getState().openSettings("proveedores");
+                onClose();
+              }}
+            >
+              Configurar Proveedor / API Key
+            </button>
           </div>
         )}
         {groups.map((group) => (

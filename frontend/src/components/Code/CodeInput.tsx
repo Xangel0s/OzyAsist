@@ -18,7 +18,7 @@ export default function CodeInput({ onSend }: CodeInputProps) {
   };
 
   return (
-    <div className="px-4 pb-6 pt-2 bg-gradient-to-t from-[#1a1a1a] via-[#1a1a1a] to-transparent z-10">
+    <div className="px-4 pb-6 pt-2 bg-gradient-to-t from-[#1a1a1a] via-[#1a1a1a] to-transparent z-20 relative">
       <div className="max-w-[800px] mx-auto">
         <ChatInput
           onSend={onSend}

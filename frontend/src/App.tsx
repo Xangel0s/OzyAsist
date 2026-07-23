@@ -16,6 +16,8 @@ import SearchModal from "./components/Search/SearchModal";
 import Toast from "./components/Common/Toast";
 import ErrorBoundary from "./components/Common/ErrorBoundary";
 
+import SettingsModal from "./components/Settings/SettingsModal";
+
 const pageMap: Record<string, React.ComponentType> = {
   home: HomePage,
   code: CodePage,
@@ -82,6 +84,7 @@ export default function App() {
         </div>
       </div>
       <SearchModal />
+      <SettingsModal />
       <Toast />
     </HydrationGate>
   );

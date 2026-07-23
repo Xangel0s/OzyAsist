@@ -3,8 +3,9 @@ import MenuBar from "./MenuBar";
 
 export default function TopAppBar() {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
-  const setActiveView = useUIStore((s) => s.setActiveView);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const coworkMode = useUIStore((s) => s.coworkMode);
+  const toggleCoworkMode = useUIStore((s) => s.toggleCoworkMode);
 
   const goBack = () => window.history.back();
   const goForward = () => window.history.forward();
@@ -49,10 +50,23 @@ export default function TopAppBar() {
           <span className="material-symbols-outlined text-[20px]">arrow_forward</span>
         </button>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
+        <button
+          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium transition-all ${
+            coworkMode
+              ? "bg-[#c8e64a]/20 text-[#c8e64a] border border-[#c8e64a]/40 shadow-sm shadow-[#c8e64a]/20"
+              : "bg-surface-variant text-text-muted hover:text-on-surface"
+          }`}
+          onClick={toggleCoworkMode}
+          title="Modo Cowork (Colaboración interactiva en tiempo real)"
+        >
+          <span className="material-symbols-outlined text-[16px]">groups</span>
+          <span>Cowork</span>
+          {coworkMode && <span className="w-2 h-2 rounded-full bg-[#c8e64a] animate-pulse" />}
+        </button>
         <button
           className="hover:bg-surface-variant transition-colors p-1.5 rounded-lg flex items-center justify-center text-text-muted"
-          onClick={() => setActiveView("onboarding")}
+          onClick={() => useUIStore.getState().openSettings("general")}
           aria-label="Perfil"
         >
           <span className="material-symbols-outlined text-[20px]">face</span>
