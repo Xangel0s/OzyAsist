@@ -17,6 +17,7 @@ import (
 	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/ocr"
 	"github.com/ozyassist/backend/internal/providers"
+	"github.com/ozyassist/backend/internal/skills"
 	"github.com/google/uuid"
 )
 
