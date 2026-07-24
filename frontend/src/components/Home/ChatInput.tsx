@@ -300,26 +300,23 @@ export default function ChatInput({
                         <span>Administrar conectores</span>
                       </button>
                       <div className="h-px bg-white/10 my-1" />
-                      {userConnectors.map((c) => (
-                        <div key={c.id} className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
-                          <div className="flex items-center gap-2.5">
-                            <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
-                            <span className="font-medium text-[13px]">{c.name}</span>
+                      {userConnectors.length > 0 ? (
+                        userConnectors.map((c) => (
+                          <div key={c.id} className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
+                            <div className="flex items-center gap-2.5">
+                              <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
+                              <span className="font-medium text-[13px]">{c.name}</span>
+                            </div>
+                            <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
+                              <span className="w-3.5 h-3.5 bg-white rounded-full" />
+                            </span>
                           </div>
-                          <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
-                            <span className="w-3.5 h-3.5 bg-white rounded-full" />
-                          </span>
+                        ))
+                      ) : (
+                        <div className="px-3.5 py-2 text-[12px] text-white/40 italic">
+                          Sin conectores MCP activos
                         </div>
-                      ))}
-                      <div className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
-                        <div className="flex items-center gap-2.5">
-                          <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
-                          <span className="font-medium text-[13px]">opencode</span>
-                        </div>
-                        <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm">
-                          <span className="w-3.5 h-3.5 bg-white rounded-full" />
-                        </span>
-                      </div>
+                      )}
                       <button
                         className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
                         onClick={() => openSettings("conectores")}
