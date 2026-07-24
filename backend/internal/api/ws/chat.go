@@ -209,6 +209,37 @@ y requiere confirmación explícita. No inventes capacidades que no tienes.
 Responde siempre en español a menos que el usuario te pida otro idioma. Sé conciso
 y directo. Si no sabes algo, dilo sin rodeos.`
 
+	// Check for active skills & MCP connectors
+	userSkills, _ := db.ListSkills(chat.UserID)
+	if len(userSkills) > 0 {
+		var skillLines []string
+		for _, s := range userSkills {
+			skillLines = append(skillLines, fmt.Sprintf("- /%s (%s): %s", s.Name, s.ExecutionType, s.Description))
+		}
+		systemPrompt += fmt.Sprintf("\n\n[Skills Disponibles y Activas]:\n%s", strings.Join(skillLines, "\n"))
+
+		// Check if message executes a slash skill
+		for _, s := range userSkills {
+			if s.Name != "" && (strings.HasPrefix(msg.Content, "/"+s.Name) || (s.TriggerPattern != "" && strings.HasPrefix(msg.Content, s.TriggerPattern))) {
+				inputArg := strings.TrimSpace(strings.TrimPrefix(msg.Content, "/"+s.Name))
+				res, err := skills.NewExecutor().Execute(&s, inputArg)
+				if err == nil && res != nil && res.Output != "" {
+					proc.content = fmt.Sprintf("[Ejecución automática de Skill /%s]:\n%s\n\n---\n\nMensaje:\n%s", s.Name, res.Output, msg.Content)
+				}
+				break
+			}
+		}
+	}
+
+	userConnectors, _ := db.ListConnectors(chat.UserID)
+	if len(userConnectors) > 0 {
+		var connLines []string
+		for _, c := range userConnectors {
+			connLines = append(connLines, fmt.Sprintf("- Conector %s (Tipo: %s, Endpoint: %s)", c.Name, c.Type, c.Endpoint))
+		}
+		systemPrompt += fmt.Sprintf("\n\n[Conectores MCP Activos]:\n%s", strings.Join(connLines, "\n"))
+	}
+
 	if chat.ProjectID != "" {
 		if project, err := db.GetProject(chat.ProjectID); err == nil && project.InstructionsMd != "" {
 			systemPrompt = fmt.Sprintf("[Instrucciones del proyecto \"%s\"]:\n%s\n\n---\n\n%s",

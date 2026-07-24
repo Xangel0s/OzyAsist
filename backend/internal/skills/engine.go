@@ -93,15 +93,24 @@ func normalizeTemplate(text string) string {
 }
 
 func (e *Executor) execPromptTemplate(skill *models.Skill, input string) (*Result, error) {
-	tmpl, err := template.New("skill").Parse(normalizeTemplate(skill.ConfigJSON))
+	configStr := skill.ConfigJSON
+	if configStr == "" {
+		configStr = skill.Description
+	}
+
+	tmpl, err := template.New("skill").Parse(normalizeTemplate(configStr))
 	if err != nil {
-		return &Result{Success: false, Error: fmt.Sprintf("invalid template: %v", err)}, nil
+		output := strings.ReplaceAll(configStr, "{input}", input)
+		output = strings.ReplaceAll(output, "{{.input}}", input)
+		return &Result{Success: true, Output: output}, nil
 	}
 
 	data := map[string]string{"input": input, "name": skill.Name}
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return &Result{Success: false, Error: fmt.Sprintf("template execution: %v", err)}, nil
+		output := strings.ReplaceAll(configStr, "{input}", input)
+		output = strings.ReplaceAll(output, "{{.input}}", input)
+		return &Result{Success: true, Output: output}, nil
 	}
 
 	return &Result{Success: true, Output: buf.String()}, nil
