@@ -1218,11 +1218,13 @@ export default function SettingsModal() {
                         <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
                           <span className="w-4 h-4 bg-white rounded-full" />
                         </span>
-                        <button
-                          className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors relative"
-                          onClick={() => setShowPluginMenu(!showPluginMenu)}
-                        >
-                          <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                        <div className="relative">
+                          <button
+                            className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                            onClick={() => setShowPluginMenu(!showPluginMenu)}
+                          >
+                            <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                          </button>
                           {showPluginMenu && (
                             <div className="absolute right-0 top-full mt-1 w-48 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 text-[13px] text-white font-normal">
                               <button
@@ -1242,7 +1244,7 @@ export default function SettingsModal() {
                               </button>
                             </div>
                           )}
-                        </button>
+                        </div>
                       </div>
                     </div>
 
