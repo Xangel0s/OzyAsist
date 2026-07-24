@@ -149,6 +149,7 @@ export default function SettingsModal() {
         openai_key: openaiKey,
         openrouter_key: openrouterKey,
         anthropic_key: anthropicKey,
+        deepseek_key: deepseekKey,
       }).catch(() => {});
 
       await useChatStore.getState().loadProviders();
@@ -169,6 +170,7 @@ export default function SettingsModal() {
         openai_key: openaiKey,
         openrouter_key: openrouterKey,
         anthropic_key: anthropicKey,
+        deepseek_key: deepseekKey,
       }).catch(() => {});
 
       // Consultar modelos disponibles para verificar la clave
@@ -1234,8 +1236,14 @@ export default function SettingsModal() {
 
       {/* MODAL 1: Agregar conector personalizado */}
       {showCustomConnectorModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative">
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          onClick={() => setShowCustomConnectorModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-[18px] font-semibold">Agregar conector personalizado</h3>
               <button
@@ -1343,8 +1351,14 @@ export default function SettingsModal() {
 
       {/* MODAL 2: Subir habilidad */}
       {showUploadSkillModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative">
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          onClick={() => setShowUploadSkillModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-[18px] font-semibold">Subir habilidad</h3>
               <button
@@ -1449,8 +1463,14 @@ export default function SettingsModal() {
 
       {/* MODAL 3: Escribe las instrucciones de la habilidad */}
       {showWriteSkillModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative">
+        <div
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          onClick={() => setShowWriteSkillModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h3 className="text-[18px] font-semibold">Escribir instrucciones de la habilidad (SKILL.md)</h3>
               <button
@@ -1515,8 +1535,14 @@ export default function SettingsModal() {
 
       {/* MODAL 4: Directorio Marketplace */}
       {showMarketplaceModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md z-[10000] flex items-center justify-center p-6">
-          <div className="w-full max-w-4xl h-[85vh] bg-[#222222] border border-white/10 rounded-3xl flex overflow-hidden shadow-2xl text-white animate-fadeIn relative">
+        <div
+          className="fixed inset-0 bg-black/75 backdrop-blur-md z-[10000] flex items-center justify-center p-6"
+          onClick={() => setShowMarketplaceModal(false)}
+        >
+          <div
+            className="w-full max-w-4xl h-[85vh] bg-[#222222] border border-white/10 rounded-3xl flex overflow-hidden shadow-2xl text-white animate-fadeIn relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Left Sidebar */}
             <div className="w-56 bg-[#1a1a1a] border-r border-white/10 p-5 flex flex-col gap-6">
               <h2 className="text-[20px] font-sans font-bold text-white">Directorio</h2>
