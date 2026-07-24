@@ -173,13 +173,11 @@ func handleChatMessageNormal(client *Client, msg clientMessage, chat *models.Cha
 		available := providers.Available()
 		if len(available) > 0 {
 			providerName = available[0]
-		} else {
-			providerName = "openrouter"
 		}
 	}
 	provider, err := providers.Get(providerName)
 	if err != nil {
-		writeJSON(client, serverMessage{Type: "error", Content: "provider no disponible: " + err.Error()})
+		writeJSON(client, serverMessage{Type: "error", Content: "No hay ningún proveedor LLM configurado. Por favor ingresa tu API Key en Personalizar -> Proveedores LLM."})
 		return
 	}
 

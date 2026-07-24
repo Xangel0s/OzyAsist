@@ -4,26 +4,43 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ozyassist/backend/internal/providers"
 )
 
 func GetSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
-		"providers": gin.H{
-			"anthropic": gin.H{"api_key": "", "enabled": false},
-			"openai":    gin.H{"api_key": "", "enabled": false},
-			"openrouter": gin.H{"api_key": "", "enabled": false},
-			"lmstudio":  gin.H{"base_url": "http://localhost:1234", "enabled": false},
-		},
-		"embeddings": gin.H{
-			"provider": "lmstudio",
-			"model":    "nomic-embed-text-v1.5",
-		},
-		"qdrant": gin.H{
-			"url": "http://localhost:6333",
-		},
+		"providers": providers.ListAvailable(),
 	})
 }
 
 func UpdateSettings(c *gin.Context) {
-	c.JSON(http.StatusNotImplemented, gin.H{"error": "not implemented yet"})
+	var req struct {
+		OpencodeKey  string `json:"opencode_key"`
+		OpenAIKey    string `json:"openai_key"`
+		OpenRouterKey string `json:"openrouter_key"`
+		AnthropicKey string `json:"anthropic_key"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "body inválido"})
+		return
+	}
+
+	if req.OpencodeKey != "" {
+		providers.RegisterProviderKey("opencode", req.OpencodeKey)
+	}
+	if req.OpenAIKey != "" {
+		providers.RegisterProviderKey("openai", req.OpenAIKey)
+	}
+	if req.OpenRouterKey != "" {
+		providers.RegisterProviderKey("openrouter", req.OpenRouterKey)
+	}
+	if req.AnthropicKey != "" {
+		providers.RegisterProviderKey("anthropic", req.AnthropicKey)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "actualizado",
+		"providers": providers.ListAvailable(),
+	})
 }

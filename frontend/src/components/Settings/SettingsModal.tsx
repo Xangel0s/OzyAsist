@@ -68,6 +68,7 @@ export default function SettingsModal() {
   const [agentConsentMode, setAgentConsentMode] = useState<"ask" | "always">("ask");
 
   // LLM Providers with localStorage persistence
+  const [opencodeKey, setOpencodeKey] = useState(() => localStorage.getItem("opencode_key") || "");
   const [openrouterKey, setOpenrouterKey] = useState(() => localStorage.getItem("openrouter_key") || "");
   const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem("openai_key") || "");
   const [anthropicKey, setAnthropicKey] = useState(() => localStorage.getItem("anthropic_key") || "");
@@ -125,11 +126,23 @@ export default function SettingsModal() {
 
   const handleSaveProviders = async () => {
     try {
+      localStorage.setItem("opencode_key", opencodeKey);
       localStorage.setItem("openrouter_key", openrouterKey);
       localStorage.setItem("openai_key", openaiKey);
       localStorage.setItem("anthropic_key", anthropicKey);
       localStorage.setItem("deepseek_key", deepseekKey);
       localStorage.setItem("ollama_url", ollamaUrl);
+
+      const { api } = await import("../../services/api");
+      await api.settings.update({
+        opencode_key: opencodeKey,
+        openai_key: openaiKey,
+        openrouter_key: openrouterKey,
+        anthropic_key: anthropicKey,
+      }).catch(() => {});
+
+      await useChatStore.getState().loadProviders();
+
       toast("Claves API y proveedores guardados correctamente", "check_circle");
     } catch {
       toast("Error actualizando proveedores", "error");
@@ -560,6 +573,17 @@ export default function SettingsModal() {
             {/* 6. PROVEEDORES LLM */}
             {settingsCategory === "proveedores" && (
               <div className="flex flex-col gap-5 max-w-xl">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-medium text-white text-[13px]">OpenCode API Key</label>
+                  <input
+                    type="password"
+                    className="bg-[#242424] border border-white/10 rounded-xl px-4 py-2 text-white placeholder:text-white/20 outline-none focus:border-white/20 font-mono text-[13px]"
+                    placeholder="sk-..."
+                    value={opencodeKey}
+                    onChange={(e) => setOpencodeKey(e.target.value)}
+                  />
+                </div>
+
                 <div className="flex flex-col gap-1.5">
                   <label className="font-medium text-white text-[13px]">OpenRouter API Key</label>
                   <input

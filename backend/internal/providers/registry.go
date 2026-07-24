@@ -59,6 +59,22 @@ func ListAvailable() []ProviderInfo {
 	return result
 }
 
+func RegisterProviderKey(name, key string) {
+	if key == "" {
+		return
+	}
+	switch name {
+	case "opencode":
+		Register("opencode", NewOpenCode(key))
+	case "openai":
+		Register("openai", NewOpenAI(key))
+	case "openrouter":
+		Register("openrouter", NewOpenRouter(key))
+	case "anthropic":
+		Register("anthropic", NewAnthropic(key))
+	}
+}
+
 func InitProviders() {
 	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
 		Register("openai", NewOpenAI(key))
