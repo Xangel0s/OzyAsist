@@ -44,8 +44,14 @@ export default function ChatInput({
   const addMenuRef = useRef<HTMLDivElement>(null);
   const defaultModel = useChatStore((s) => s.defaultModel);
   const userSkills = useSkillsStore((s) => s.skills);
+  const disabledSkillsMap = useSkillsStore((s) => s.disabledSkillsMap);
   const userConnectors = useConnectorsStore((s) => s.connectors);
-  const allSkillsList = Array.from(new Set([...userSkills.map((s) => s.name), "mcp-builder", "morning", "skill-creator", "web-artifacts-builder"]));
+
+  const isSkillEnabled = (name: string) => disabledSkillsMap[name] !== true;
+
+  const allSkillsList = Array.from(
+    new Set([...userSkills.map((s) => s.name), "mcp-builder", "morning", "skill-creator", "web-artifacts-builder"])
+  ).filter(isSkillEnabled);
 
   useOnClickOutside(selectorRef, () => setShowModelSelector(false));
   useOnClickOutside(addMenuRef, () => {
@@ -127,10 +133,16 @@ export default function ChatInput({
     Design: ["ui-mockup", "color-palette", "font-pairing", "svg-generator"],
   };
 
-  // Build combined map of all plugins and their sub-skills
-  const dynamicPluginProfilesMap: Record<string, string[]> = { ...defaultPluginProfilesMap };
+  // Build combined map of all plugins and their sub-skills, filtering disabled ones
+  const dynamicPluginProfilesMap: Record<string, string[]> = {};
+  Object.entries(defaultPluginProfilesMap).forEach(([cat, list]) => {
+    const activeList = list.filter(isSkillEnabled);
+    if (activeList.length > 0) dynamicPluginProfilesMap[cat] = activeList;
+  });
   userSkills.forEach((s) => {
-    dynamicPluginProfilesMap[s.name] = [s.name];
+    if (isSkillEnabled(s.name)) {
+      dynamicPluginProfilesMap[s.name] = [s.name];
+    }
   });
 
   const allPluginCategories = Object.keys(dynamicPluginProfilesMap);

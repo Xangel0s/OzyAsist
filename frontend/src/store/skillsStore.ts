@@ -16,10 +16,12 @@ export interface Skill {
 interface SkillsState {
   skills: Skill[];
   loading: boolean;
+  disabledSkillsMap: Record<string, boolean>; // name -> true if disabled
   addSkill: (skill: Skill) => Promise<string | null>;
   removeSkill: (id: string) => Promise<void>;
   updateSkill: (id: string, skill: Partial<Skill>) => void;
   loadSkills: () => Promise<void>;
+  toggleSkillEnabled: (name: string) => void;
 }
 
 const dtoToSkill = (dto: SkillDTO): Skill => {
@@ -38,63 +40,72 @@ const dtoToSkill = (dto: SkillDTO): Skill => {
 export const useSkillsStore = create<SkillsState>()(
   persist(
     (set) => ({
-  skills: [],
-  loading: true,
+      skills: [],
+      loading: true,
+      disabledSkillsMap: {},
 
-  addSkill: async (skill) => {
-    try {
-      // Check if a skill with the same name already exists to prevent duplicate entries
-      const currentSkills = useSkillsStore.getState().skills;
-      const existing = currentSkills.find((s) => s.name.toLowerCase() === skill.name.toLowerCase());
-      if (existing) {
-        await api.skills.delete(existing.id).catch(() => {});
-      }
+      toggleSkillEnabled: (name) =>
+        set((s) => ({
+          disabledSkillsMap: {
+            ...s.disabledSkillsMap,
+            [name]: !s.disabledSkillsMap[name],
+          },
+        })),
 
-      const dto = await api.skills.create({
-        name: skill.name,
-        description: skill.description,
-        triggerPattern: skill.triggerPattern,
-        executionType: skill.executionType,
-        config: JSON.stringify(skill.config),
-      });
-      const mapped = dtoToSkill(dto);
-      set((s) => ({
-        skills: [...s.skills.filter((sk) => sk.name.toLowerCase() !== skill.name.toLowerCase()), mapped],
-      }));
-      return mapped.id;
-    } catch {
-      return null;
-    }
-  },
+      addSkill: async (skill) => {
+        try {
+          const currentSkills = useSkillsStore.getState().skills;
+          const existing = currentSkills.find((s) => s.name.toLowerCase() === skill.name.toLowerCase());
+          if (existing) {
+            await api.skills.delete(existing.id).catch(() => {});
+          }
 
-  removeSkill: async (id) => {
-    try {
-      await api.skills.delete(id);
-      set((s) => ({ skills: s.skills.filter((sk) => sk.id !== id) }));
-    } catch {
-      // ignore
-    }
-  },
+          const dto = await api.skills.create({
+            name: skill.name,
+            description: skill.description,
+            triggerPattern: skill.triggerPattern,
+            executionType: skill.executionType,
+            config: JSON.stringify(skill.config),
+          });
+          const mapped = dtoToSkill(dto);
+          set((s) => ({
+            skills: [...s.skills.filter((sk) => sk.name.toLowerCase() !== skill.name.toLowerCase()), mapped],
+          }));
+          return mapped.id;
+        } catch {
+          return null;
+        }
+      },
 
-  updateSkill: (id, updated) =>
-    set((s) => ({
-      skills: s.skills.map((sk) => (sk.id === id ? { ...sk, ...updated } : sk)),
-    })),
+      removeSkill: async (id) => {
+        try {
+          await api.skills.delete(id);
+          set((s) => ({ skills: s.skills.filter((sk) => sk.id !== id) }));
+        } catch {
+          // ignore
+        }
+      },
 
-  loadSkills: async () => {
-    set({ loading: true });
-    try {
-      const dtos = await api.skills.list();
-      set({ skills: dtos.map(dtoToSkill), loading: false });
-    } catch {
-      set({ loading: false });
-    }
-  },
-}),
+      updateSkill: (id, updated) =>
+        set((s) => ({
+          skills: s.skills.map((sk) => (sk.id === id ? { ...sk, ...updated } : sk)),
+        })),
+
+      loadSkills: async () => {
+        set({ loading: true });
+        try {
+          const dtos = await api.skills.list();
+          set({ skills: dtos.map(dtoToSkill), loading: false });
+        } catch {
+          set({ loading: false });
+        }
+      },
+    }),
     {
       name: "ozy-skills",
       partialize: (state) => ({
         skills: state.skills,
+        disabledSkillsMap: state.disabledSkillsMap,
       }),
     },
   ),

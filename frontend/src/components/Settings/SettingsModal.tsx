@@ -131,13 +131,14 @@ export default function SettingsModal() {
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [connectorsRoleFilter, setConnectorsRoleFilter] = useState("Software Engineer");
 
-  // Active / Inactive toggle states
-  const [enabledSkillsMap, setEnabledSkillsMap] = useState<Record<string, boolean>>({});
+  // Active / Inactive toggle states connected to global skillsStore
+  const disabledSkillsMap = useSkillsStore((s) => s.disabledSkillsMap);
+  const toggleStoreSkill = useSkillsStore((s) => s.toggleSkillEnabled);
 
-  const isSkillEnabled = (name: string) => enabledSkillsMap[name] !== false;
+  const isSkillEnabled = (name: string) => disabledSkillsMap[name] !== true;
   const toggleSkillEnabled = (name: string) => {
-    const nextState = !isSkillEnabled(name);
-    setEnabledSkillsMap((prev) => ({ ...prev, [name]: nextState }));
+    toggleStoreSkill(name);
+    const nextState = disabledSkillsMap[name] === true;
     toast(`Habilidad /${name} ${nextState ? "activada" : "desactivada"}`, "info");
   };
 
