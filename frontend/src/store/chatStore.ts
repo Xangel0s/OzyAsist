@@ -402,6 +402,20 @@ export const useChatStore = create<ChatState>()(
 
   loadProviders: async () => {
     try {
+      const opencodeKey = localStorage.getItem("opencode_key") || "";
+      const openaiKey = localStorage.getItem("openai_key") || "";
+      const openrouterKey = localStorage.getItem("openrouter_key") || "";
+      const anthropicKey = localStorage.getItem("anthropic_key") || "";
+
+      if (opencodeKey || openaiKey || openrouterKey || anthropicKey) {
+        await api.settings.update({
+          opencode_key: opencodeKey,
+          openai_key: openaiKey,
+          openrouter_key: openrouterKey,
+          anthropic_key: anthropicKey,
+        }).catch(() => {});
+      }
+
       const providers = await api.models.list();
       if (providers.length > 0) {
         const first = providers[0];
