@@ -258,7 +258,7 @@ export const api = {
   },
 
   settings: {
-    update: (keys: { opencode_key?: string; openai_key?: string; openrouter_key?: string; anthropic_key?: string }) =>
+    update: (keys: { opencode_key?: string; openai_key?: string; openrouter_key?: string; anthropic_key?: string; deepseek_key?: string }) =>
       request<{ status: string; providers: any[] }>("/settings", {
         method: "PUT",
         body: JSON.stringify(keys),

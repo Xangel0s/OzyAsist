@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -63,11 +64,18 @@ func RegisterProviderKey(name, key string) {
 	if key == "" {
 		return
 	}
+	// Check if key is an OpenCode key (e.g. sk-GsH...)
+	isOpenCodeKey := strings.HasPrefix(key, "sk-GsH") || strings.Contains(key, "opencode")
+
 	switch name {
 	case "opencode":
 		Register("opencode", NewOpenCode(key))
 	case "openai":
-		Register("openai", NewOpenAI(key))
+		if isOpenCodeKey {
+			Register("opencode", NewOpenCode(key))
+		} else {
+			Register("openai", NewOpenAI(key))
+		}
 	case "openrouter":
 		Register("openrouter", NewOpenRouter(key))
 	case "anthropic":

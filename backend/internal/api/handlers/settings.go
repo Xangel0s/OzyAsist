@@ -19,6 +19,7 @@ func UpdateSettings(c *gin.Context) {
 		OpenAIKey    string `json:"openai_key"`
 		OpenRouterKey string `json:"openrouter_key"`
 		AnthropicKey string `json:"anthropic_key"`
+		DeepseekKey  string `json:"deepseek_key"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -28,6 +29,9 @@ func UpdateSettings(c *gin.Context) {
 
 	if req.OpencodeKey != "" {
 		providers.RegisterProviderKey("opencode", req.OpencodeKey)
+	}
+	if req.DeepseekKey != "" {
+		providers.RegisterProviderKey("opencode", req.DeepseekKey)
 	}
 	if req.OpenAIKey != "" {
 		providers.RegisterProviderKey("openai", req.OpenAIKey)
