@@ -737,7 +737,7 @@ export default function SettingsModal() {
             )}
 
             {/* 8. HABILIDADES */}
-            {settingsCategory === "skills" && (
+            {(settingsCategory === "habilidades" || settingsCategory === "skills") && (
               <div className="flex flex-col gap-5 w-full">
                 {selectedSkillDetail ? (
                   <div className="flex flex-col gap-5">
