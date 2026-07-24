@@ -43,6 +43,13 @@ export const useSkillsStore = create<SkillsState>()(
 
   addSkill: async (skill) => {
     try {
+      // Check if a skill with the same name already exists to prevent duplicate entries
+      const currentSkills = useSkillsStore.getState().skills;
+      const existing = currentSkills.find((s) => s.name.toLowerCase() === skill.name.toLowerCase());
+      if (existing) {
+        await api.skills.delete(existing.id).catch(() => {});
+      }
+
       const dto = await api.skills.create({
         name: skill.name,
         description: skill.description,
@@ -51,7 +58,9 @@ export const useSkillsStore = create<SkillsState>()(
         config: JSON.stringify(skill.config),
       });
       const mapped = dtoToSkill(dto);
-      set((s) => ({ skills: [...s.skills, mapped] }));
+      set((s) => ({
+        skills: [...s.skills.filter((sk) => sk.name.toLowerCase() !== skill.name.toLowerCase()), mapped],
+      }));
       return mapped.id;
     } catch {
       return null;

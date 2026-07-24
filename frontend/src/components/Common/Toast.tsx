@@ -11,12 +11,13 @@ export default function Toast() {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="pointer-events-auto bg-[#252525] border border-white/20 rounded-xl px-5 py-3 shadow-2xl shadow-black/80 flex items-center gap-3 animate-slideUp cursor-pointer backdrop-blur-md"
+          className="pointer-events-auto bg-[#1c1c1c] border border-white/20 rounded-2xl px-5 py-3 shadow-2xl shadow-black flex items-center gap-3 animate-slideUp cursor-pointer backdrop-blur-md"
           onClick={() => dismiss(t.id)}
         >
-          <span className="material-symbols-outlined text-[18px] text-[#c8e64a]">
-            {t.icon || "check_circle"}
-          </span>
+          <div className="flex items-center gap-1.5 bg-[#d1f107]/15 border border-[#d1f107]/30 text-[#d1f107] text-[11px] font-bold px-2.5 py-1 rounded-lg tracking-wider">
+            <span className="material-symbols-outlined text-[14px]">check_circle</span>
+            <span>ÉXITO</span>
+          </div>
           <span className="text-[13px] font-medium text-white">{t.message}</span>
         </div>
       ))}

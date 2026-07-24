@@ -1187,171 +1187,198 @@ export default function SettingsModal() {
             {/* 10. PLUGINS */}
             {settingsCategory === "plugins" && (
               <div className="flex flex-col gap-5 w-full">
-                {selectedPluginDetail ? (
-                  <div className="flex flex-col gap-5">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                      <button
-                        className="flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white transition-colors"
-                        onClick={() => setSelectedPluginDetail(null)}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-                        <span>Plugins</span>
-                      </button>
-                      <button
-                        className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setSelectedPluginDetail(null)}
-                      >
-                        <span className="material-symbols-outlined text-[20px]">close</span>
-                      </button>
-                    </div>
+                {selectedPluginDetail ? (() => {
+                  const customPluginObj = skills.find((s) => s.name === selectedPluginDetail);
+                  const isCustomPlugin = !!customPluginObj;
+                  const pluginAuthor = isCustomPlugin ? "Usuario" : "Anthropic";
+                  const pluginSource = isCustomPlugin ? "Local / Personalizado" : "Marketplace (Anthropic y socios)";
+                  const pluginVersion = isCustomPlugin ? (customPluginObj.config?.version || "1.0.0") : "1.3.0";
+                  const pluginDesc = isCustomPlugin
+                    ? (customPluginObj.description || "Skill básico para validar sintaxis y estilo de código.")
+                    : "Manage tasks, plan your day, and build up memory of important context about your work. Syncs with your calendar, email, and chat to keep everything organized and on track.";
 
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-[24px] font-semibold text-white tracking-tight">{selectedPluginDetail}</h2>
+                  return (
+                    <div className="flex flex-col gap-5">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                        <button
+                          className="flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white transition-colors"
+                          onClick={() => setSelectedPluginDetail(null)}
+                        >
+                          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                          <span>Plugins</span>
+                        </button>
+                        <button
+                          className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                          onClick={() => setSelectedPluginDetail(null)}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">close</span>
+                        </button>
+                      </div>
 
-                      <div className="flex items-center gap-3">
-                        <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
-                          Actualizar
-                        </button>
-                        <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
-                          Personalizar
-                        </button>
-                        <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
-                          <span className="w-4 h-4 bg-white rounded-full" />
-                        </span>
-                        <div className="relative">
-                          <button
-                            className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
-                            onClick={() => setShowPluginMenu(!showPluginMenu)}
-                          >
-                            <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                      <div className="flex items-center justify-between">
+                        <h2 className="text-[24px] font-semibold text-white tracking-tight">{selectedPluginDetail}</h2>
+
+                        <div className="flex items-center gap-3">
+                          <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
+                            Actualizar
                           </button>
-                          {showPluginMenu && (
-                            <div className="absolute right-0 top-full mt-1 w-48 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 text-[13px] text-white font-normal">
-                              <button
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowPluginMenu(false);
-                                  setSettingsOpen(false);
-                                  useChatStore.getState().sendMessage(
-                                    useChatStore.getState().activeChatId || "new",
-                                    `Let's test the skills in plugin ${selectedPluginDetail}`
-                                  );
-                                }}
-                              >
-                                <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble_outline</span>
-                                <span>Probar en chat</span>
+                          <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
+                            Personalizar
+                          </button>
+                          <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
+                            <span className="w-4 h-4 bg-white rounded-full" />
+                          </span>
+                          <div className="relative">
+                            <button
+                              className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                              onClick={() => setShowPluginMenu(!showPluginMenu)}
+                            >
+                              <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                            </button>
+                            {showPluginMenu && (
+                              <div className="absolute right-0 top-full mt-1 w-48 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 text-[13px] text-white font-normal">
+                                <button
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowPluginMenu(false);
+                                    setSettingsOpen(false);
+                                    useChatStore.getState().sendMessage(
+                                      useChatStore.getState().activeChatId || "new",
+                                      `Let's test the skills in plugin ${selectedPluginDetail}`
+                                    );
+                                  }}
+                                >
+                                  <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble_outline</span>
+                                  <span>Probar en chat</span>
+                                </button>
+                                {isCustomPlugin && (
+                                  <button
+                                    className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-red-400"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setShowPluginMenu(false);
+                                      await removeSkill(customPluginObj.id);
+                                      toast(`Plugin ${customPluginObj.name} desinstalado`, "success");
+                                      setSelectedPluginDetail(null);
+                                    }}
+                                  >
+                                    <span className="material-symbols-outlined text-[18px]">delete</span>
+                                    <span>Desinstalar</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-4 py-2 border-y border-white/10 text-[13px]">
+                        <div>
+                          <div className="text-white/40 text-[12px]">Fuente</div>
+                          <div className="text-white font-medium">{pluginSource}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-[12px]">Versión</div>
+                          <div className="text-white font-medium">{pluginVersion}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-[12px]">Autor</div>
+                          <div className="text-white font-medium">{pluginAuthor}</div>
+                        </div>
+                        <div>
+                          <div className="text-white/40 text-[12px]">Última actualización</div>
+                          <div className="text-white font-medium">Hoy</div>
+                        </div>
+                      </div>
+
+                      <div className="text-[13px] text-white/70 leading-relaxed">
+                        {pluginDesc}
+                      </div>
+
+                      <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+                        <button
+                          className={`px-4 py-1.5 rounded-lg font-medium text-[13px] transition-all ${
+                            pluginDetailTab === "habilidades" ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
+                          }`}
+                          onClick={() => setPluginDetailTab("habilidades")}
+                        >
+                          Habilidades
+                        </button>
+                        <button
+                          className={`px-4 py-1.5 rounded-lg font-medium text-[13px] transition-all ${
+                            pluginDetailTab === "conectores" ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
+                          }`}
+                          onClick={() => setPluginDetailTab("conectores")}
+                        >
+                          Conectores
+                        </button>
+                      </div>
+
+                      {pluginDetailTab === "habilidades" ? (
+                        <div className="flex flex-col gap-3">
+                          <div className="text-[12px] text-white/40">
+                            Invoca escribiendo / en el chat, o deja que Ozy los use automáticamente para tareas relevantes.
+                          </div>
+                          {(isCustomPlugin
+                            ? [{ name: "/" + customPluginObj.name, desc: customPluginObj.description || "Habilidad personalizada instalada." }]
+                            : [
+                                { name: "/memory-management", desc: "Two-tier memory system that makes Ozy a true workplace collaborator." },
+                                { name: "/start", desc: "Initialize the productivity system and open the dashboard." },
+                                { name: "/task-management", desc: "Simple task management using a shared TASKS.md file." },
+                                { name: "/update", desc: "Sync tasks and refresh memory from your current activity." },
+                              ]
+                          ).map((item) => (
+                            <div key={item.name} className="flex flex-col gap-0.5 py-1.5 border-b border-white/5">
+                              <div className="font-mono text-[13px] font-semibold text-white">{item.name}</div>
+                              <div className="text-[12px] text-white/50">{item.desc}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          <div className="text-[12px] text-white/40">
+                            Herramientas y fuentes de datos a las que se conecta este plugin. Conecta cada una para que Ozy pueda usarlas.
+                          </div>
+                          {["Slack", "Notion", "Asana", "Linear", "Atlassian Rovo", "monday.com", "ClickUp", "Google Calendar", "Gmail"].map((c) => (
+                            <div key={c} className="flex items-center justify-between py-2 border-b border-white/5">
+                              <div className="flex items-center gap-2.5 font-medium text-[13px] text-white">
+                                <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
+                                <span>{c}</span>
+                              </div>
+                              <button className="px-3.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[12px] font-medium rounded-lg transition-colors">
+                                Instalado
                               </button>
                             </div>
-                          )}
+                          ))}
                         </div>
-                      </div>
-                    </div>
+                      )}
 
-                    <div className="grid grid-cols-4 gap-4 py-2 border-y border-white/10 text-[13px]">
-                      <div>
-                        <div className="text-white/40 text-[12px]">Fuente</div>
-                        <div className="text-white font-medium">Marketplace (<span className="text-[#3b82f6]">Anthropic y socios</span>)</div>
-                      </div>
-                      <div>
-                        <div className="text-white/40 text-[12px]">Versión</div>
-                        <div className="text-white font-medium">1.3.0</div>
-                      </div>
-                      <div>
-                        <div className="text-white/40 text-[12px]">Autor</div>
-                        <div className="text-white font-medium">Anthropic</div>
-                      </div>
-                      <div>
-                        <div className="text-white/40 text-[12px]">Última actualización</div>
-                        <div className="text-white font-medium">hace 21 horas</div>
-                      </div>
-                    </div>
-
-                    <div className="text-[13px] text-white/70 leading-relaxed">
-                      Manage tasks, plan your day, and build up memory of important context about your work. Syncs with your calendar, email, and chat to keep everything organized and on track.
-                    </div>
-
-                    <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-                      <button
-                        className={`px-4 py-1.5 rounded-lg font-medium text-[13px] transition-all ${
-                          pluginDetailTab === "habilidades" ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
-                        }`}
-                        onClick={() => setPluginDetailTab("habilidades")}
-                      >
-                        Habilidades
-                      </button>
-                      <button
-                        className={`px-4 py-1.5 rounded-lg font-medium text-[13px] transition-all ${
-                          pluginDetailTab === "conectores" ? "bg-white/15 text-white" : "text-white/50 hover:text-white"
-                        }`}
-                        onClick={() => setPluginDetailTab("conectores")}
-                      >
-                        Conectores
-                      </button>
-                    </div>
-
-                    {pluginDetailTab === "habilidades" ? (
-                      <div className="flex flex-col gap-3">
-                        <div className="text-[12px] text-white/40">
-                          Invoca escribiendo / en el chat, o deja que Ozy los use automáticamente para tareas relevantes.
-                        </div>
+                      <div className="flex flex-col gap-2.5 pt-3">
+                        <div className="text-[13px] font-semibold text-white">Intenta preguntar...</div>
                         {[
-                          ...skills.map((s) => ({ name: "/" + s.name, desc: s.description || "Habilidad personalizada instalada." })),
-                          { name: "/memory-management", desc: "Two-tier memory system that makes Ozy a true workplace collaborator." },
-                          { name: "/start", desc: "Initialize the productivity system and open the dashboard." },
-                          { name: "/task-management", desc: "Simple task management using a shared TASKS.md file." },
-                          { name: "/update", desc: "Sync tasks and refresh memory from your current activity." },
-                        ].map((item) => (
-                          <div key={item.name} className="flex flex-col gap-0.5 py-1.5 border-b border-white/5">
-                            <div className="font-mono text-[13px] font-semibold text-white">{item.name}</div>
-                            <div className="text-[12px] text-white/50">{item.desc}</div>
-                          </div>
+                          `Ejecuta la habilidad /${selectedPluginDetail} para procesar código`,
+                          "Set up my task and memory system",
+                          "Catch me up and triage stale tasks",
+                        ].map((prompt) => (
+                          <button
+                            key={prompt}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-[#222222] border border-white/10 hover:border-white/20 rounded-xl text-left text-[13px] text-white/80 hover:text-white transition-all group"
+                            onClick={() => {
+                              setSettingsOpen(false);
+                              useChatStore.getState().sendMessage(useChatStore.getState().activeChatId || "new", prompt);
+                            }}
+                          >
+                            <span>{prompt}</span>
+                            <span className="material-symbols-outlined text-[16px] text-white/40 group-hover:text-white transition-colors">
+                              arrow_forward
+                            </span>
+                          </button>
                         ))}
                       </div>
-                    ) : (
-                      <div className="flex flex-col gap-3">
-                        <div className="text-[12px] text-white/40">
-                          Herramientas y fuentes de datos a las que se conecta este plugin. Conecta cada una para que Ozy pueda usarlas.
-                        </div>
-                        {["Slack", "Notion", "Asana", "Linear", "Atlassian Rovo", "monday.com", "ClickUp", "Google Calendar", "Gmail"].map((c) => (
-                          <div key={c} className="flex items-center justify-between py-2 border-b border-white/5">
-                            <div className="flex items-center gap-2.5 font-medium text-[13px] text-white">
-                              <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
-                              <span>{c}</span>
-                            </div>
-                            <button className="px-3.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[12px] font-medium rounded-lg transition-colors">
-                              Instalar
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-2.5 pt-3">
-                      <div className="text-[13px] font-semibold text-white">Intenta preguntar...</div>
-                      {[
-                        `Ejecuta la habilidad ${skills[0]?.name ? "/" + skills[0].name : "/verificador-codigo"} para validar sintaxis de código`,
-                        "Set up my task and memory system",
-                        "Catch me up and triage stale tasks",
-                        "What's on my plate today?",
-                      ].map((prompt) => (
-                        <button
-                          key={prompt}
-                          className="w-full flex items-center justify-between px-4 py-3 bg-[#222222] border border-white/10 hover:border-white/20 rounded-xl text-left text-[13px] text-white/80 hover:text-white transition-all group"
-                          onClick={() => {
-                            setSettingsOpen(false);
-                            useChatStore.getState().sendMessage(useChatStore.getState().activeChatId || "new", prompt);
-                          }}
-                        >
-                          <span>{prompt}</span>
-                          <span className="material-symbols-outlined text-[16px] text-white/40 group-hover:text-white transition-colors">
-                            arrow_forward
-                          </span>
-                        </button>
-                      ))}
                     </div>
-                  </div>
-                ) : (
+                  );
+                })() : (
                   <div className="flex flex-col gap-5">
                     <div className="flex items-center justify-between">
                       <h2 className="text-[20px] font-semibold text-white">Plugins</h2>
@@ -1420,14 +1447,15 @@ export default function SettingsModal() {
                       <div className="grid grid-cols-12 px-4 py-2.5 border-b border-white/10 text-[12px] font-medium text-white/40">
                         <div className="col-span-5">Plugin</div>
                         <div className="col-span-4">Autor</div>
-                        <div className="col-span-3">Habilidades</div>
+                        <div className="col-span-2">Habilidades</div>
+                        <div className="col-span-1 text-right">Acción</div>
                       </div>
                       {[
-                        ...skills.map((s) => ({ name: s.name, author: "Usuario", count: 1 })),
-                        { name: "Productivity", author: "Anthropic", count: 12 },
-                        { name: "Engineering", author: "Anthropic", count: 10 },
-                        { name: "Sales", author: "Anthropic", count: 9 },
-                        { name: "Design", author: "Anthropic", count: 7 },
+                        ...skills.map((s) => ({ id: s.id, name: s.name, author: "Usuario", count: 1, custom: true })),
+                        { id: "p1", name: "Productivity", author: "Anthropic", count: 12, custom: false },
+                        { id: "p2", name: "Engineering", author: "Anthropic", count: 10, custom: false },
+                        { id: "p3", name: "Sales", author: "Anthropic", count: 9, custom: false },
+                        { id: "p4", name: "Design", author: "Anthropic", count: 7, custom: false },
                       ].map((pl) => (
                         <div
                           key={pl.name}
@@ -1439,7 +1467,21 @@ export default function SettingsModal() {
                             <span>{pl.name}</span>
                           </div>
                           <div className="col-span-4 text-white/60">{pl.author}</div>
-                          <div className="col-span-3 text-white/40">{pl.count} habilidades</div>
+                          <div className="col-span-2 text-white/40">{pl.count} habilidades</div>
+                          <div className="col-span-1 flex justify-end">
+                            {pl.custom && (
+                              <button
+                                className="p-1 text-white/40 hover:text-red-400 transition-colors"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await removeSkill(pl.id);
+                                  toast(`Plugin ${pl.name} desinstalado`, "success");
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -1602,18 +1644,27 @@ export default function SettingsModal() {
                   if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
                   const descMatch = text.match(/description:\s*([^\n\r]+)/i);
                   if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
+                  const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
+                  let version = "1.0.0";
+                  if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
 
+                  const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
                   const id = await addSkill({
                     id: "",
                     name: skillName,
                     description: description,
                     triggerPattern: "/" + skillName,
                     executionType: "prompt_template",
-                    config: { template: text },
+                    config: { template: text, version, author: "Usuario" },
                   });
 
                   if (id) {
-                    toast(`Habilidad /${skillName} subida e instalada exitosamente`, "success");
+                    toast(
+                      exists
+                        ? `Habilidad /${skillName} actualizada exitosamente`
+                        : `Habilidad /${skillName} subida e instalada exitosamente`,
+                      "success"
+                    );
                     setShowUploadSkillModal(false);
                   } else {
                     toast("Error guardando la habilidad", "error");
@@ -1640,18 +1691,27 @@ export default function SettingsModal() {
                   if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
                   const descMatch = text.match(/description:\s*([^\n\r]+)/i);
                   if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
+                  const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
+                  let version = "1.0.0";
+                  if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
 
+                  const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
                   const id = await addSkill({
                     id: "",
                     name: skillName,
                     description: description,
                     triggerPattern: "/" + skillName,
                     executionType: "prompt_template",
-                    config: { template: text },
+                    config: { template: text, version, author: "Usuario" },
                   });
 
                   if (id) {
-                    toast(`Habilidad /${skillName} subida e instalada exitosamente`, "success");
+                    toast(
+                      exists
+                        ? `Habilidad /${skillName} actualizada exitosamente`
+                        : `Habilidad /${skillName} subida e instalada exitosamente`,
+                      "success"
+                    );
                     setShowUploadSkillModal(false);
                   } else {
                     toast("Error guardando la habilidad", "error");
