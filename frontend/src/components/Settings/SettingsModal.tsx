@@ -851,12 +851,6 @@ export default function SettingsModal() {
                         <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                         <span>Habilidades</span>
                       </button>
-                      <button
-                        className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                        onClick={() => setSelectedSkillDetail(null)}
-                      >
-                        <span className="material-symbols-outlined text-[20px]">close</span>
-                      </button>
                     </div>
 
                     {/* Title and Controls */}
@@ -1094,7 +1088,7 @@ export default function SettingsModal() {
                           name: "mcp-builder",
                           description: "Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools.",
                           date: "22/7/26",
-                          author: "Anthropic",
+                          author: "Ozy Inc",
                           custom: false,
                           template: `# mcp-builder\n\nGuide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services.\n\n## Core Documentation\n- MCP Protocol: Start with sitemap\n- Best practices: Server and tool naming conventions`,
                         },
@@ -1103,7 +1097,7 @@ export default function SettingsModal() {
                           name: "morning",
                           description: "Automated morning briefing skill that compiles key updates, calendar events, and pending tasks.",
                           date: "22/7/26",
-                          author: "Anthropic",
+                          author: "Ozy Inc",
                           custom: false,
                           template: `# morning\n\nAutomated morning briefing skill that compiles key updates, calendar events, and pending tasks.`,
                         },
@@ -1112,7 +1106,7 @@ export default function SettingsModal() {
                           name: "skill-creator",
                           description: "Distills completed user workflows into reusable agent skills.",
                           date: "22/7/26",
-                          author: "Anthropic",
+                          author: "Ozy Inc",
                           custom: false,
                           template: `# skill-creator\n\nDistills completed user workflows into reusable agent skills.`,
                         },
@@ -1121,7 +1115,7 @@ export default function SettingsModal() {
                           name: "web-artifacts-builder",
                           description: "Builds responsive web application components and preview artifacts.",
                           date: "22/7/26",
-                          author: "Anthropic",
+                          author: "Ozy Inc",
                           custom: false,
                           template: `# web-artifacts-builder\n\nBuilds responsive web application components and preview artifacts.`,
                         },
@@ -1348,8 +1342,8 @@ export default function SettingsModal() {
                 {selectedPluginDetail ? (() => {
                   const customPluginObj = skills.find((s) => s.name === selectedPluginDetail);
                   const isCustomPlugin = !!customPluginObj;
-                  const pluginAuthor = isCustomPlugin ? "Usuario" : "Anthropic";
-                  const pluginSource = isCustomPlugin ? "Local / Personalizado" : "Marketplace (Anthropic y socios)";
+                  const pluginAuthor = isCustomPlugin ? "Usuario" : "Ozy Inc";
+                  const pluginSource = isCustomPlugin ? "Local / Personalizado" : "Marketplace (Ozy Inc y socios)";
                   const pluginVersion = isCustomPlugin ? (customPluginObj.config?.version || "1.0.0") : "1.3.0";
                   const pluginDesc = isCustomPlugin
                     ? (customPluginObj.description || "Skill básico para validar sintaxis y estilo de código.")
@@ -1364,12 +1358,6 @@ export default function SettingsModal() {
                         >
                           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
                           <span>Plugins</span>
-                        </button>
-                        <button
-                          className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                          onClick={() => setSelectedPluginDetail(null)}
-                        >
-                          <span className="material-symbols-outlined text-[20px]">close</span>
                         </button>
                       </div>
 
@@ -1637,10 +1625,10 @@ export default function SettingsModal() {
                       </div>
                       {[
                         ...skills.map((s) => ({ id: s.id, name: s.name, author: "Usuario", count: 1, custom: true })),
-                        { id: "p1", name: "Productivity", author: "Anthropic", count: 12, custom: false },
-                        { id: "p2", name: "Engineering", author: "Anthropic", count: 10, custom: false },
-                        { id: "p3", name: "Sales", author: "Anthropic", count: 9, custom: false },
-                        { id: "p4", name: "Design", author: "Anthropic", count: 7, custom: false },
+                        { id: "p1", name: "Productivity", author: "Ozy Inc", count: 12, custom: false },
+                        { id: "p2", name: "Engineering", author: "Ozy Inc", count: 10, custom: false },
+                        { id: "p3", name: "Sales", author: "Ozy Inc", count: 9, custom: false },
+                        { id: "p4", name: "Design", author: "Ozy Inc", count: 7, custom: false },
                       ].map((pl) => (
                         <div
                           key={pl.name}
