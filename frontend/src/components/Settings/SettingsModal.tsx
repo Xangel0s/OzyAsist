@@ -162,16 +162,28 @@ export default function SettingsModal() {
   const handleTestProvider = async () => {
     setTestingConnection(true);
     try {
-      if (ollamaUrl) {
-        await fetch(`${ollamaUrl.replace(/\/$/, "")}/api/tags`).catch(() => null);
-      }
-      setTimeout(() => {
-        setTestingConnection(false);
-        toast("Conexión con proveedores verificada exitosamente", "check_circle");
-      }, 400);
-    } catch {
+      const { api } = await import("../../services/api");
+      // Sincronizar primero las claves ingresadas con el backend
+      await api.settings.update({
+        opencode_key: opencodeKey,
+        openai_key: openaiKey,
+        openrouter_key: openrouterKey,
+        anthropic_key: anthropicKey,
+      }).catch(() => {});
+
+      // Consultar modelos disponibles para verificar la clave
+      const providersList = await api.models.list();
       setTestingConnection(false);
-      toast("Conexión verificada", "check_circle");
+
+      if (providersList && providersList.length > 0) {
+        const names = providersList.map((p) => p.provider).join(", ");
+        toast(`Conexión exitosa. Proveedores activos: ${names}`, "check_circle");
+      } else {
+        toast("No se pudo verificar la conexión. Por favor revisa que las API Keys sean válidas.", "error");
+      }
+    } catch (err: any) {
+      setTestingConnection(false);
+      toast(`Error al probar conexión: ${err?.message || 'Verifica la clave API'}`, "error");
     }
   };
 

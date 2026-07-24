@@ -36,7 +36,7 @@ interface ChatState {
   addChat: (chat: Chat) => void;
   addMessage: (chatId: string, message: Message) => void;
   loadChats: () => Promise<void>;
-  createChat: (mode: "chat" | "code", projectId?: string) => Promise<string | null>;
+  createChat: (mode: "chat" | "code", projectId?: string, provider?: string, model?: string) => Promise<string | null>;
   sendMessage: (chatId: string, content: string) => Promise<void>;
   deleteChat: (chatId: string) => Promise<void>;
   updateChatTitle: (chatId: string, title: string) => void;
@@ -47,6 +47,7 @@ interface ChatState {
   regenerateMessage: (chatId: string) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
   updateChatProvider: (chatId: string, provider: string, model: string) => void;
+  setDefaultModel: (model: string, provider: string) => void;
   loadProviders: () => Promise<void>;
 }
 
@@ -125,22 +126,24 @@ export const useChatStore = create<ChatState>()(
     }
   },
 
-  createChat: async (mode, projectId?) => {
+  createChat: async (mode, projectId?, provider?, model?) => {
     try {
       const { defaultProvider, defaultModel } = get();
+      const targetProvider = provider || defaultProvider;
+      const targetModel = model || defaultModel;
       const dto = await api.chats.create({
         title: "Nuevo chat",
         mode,
-        provider: defaultProvider,
-        model: defaultModel,
+        provider: targetProvider,
+        model: targetModel,
         projectId,
       });
       const chat: Chat = {
         id: dto.id,
         title: dto.name || "Nuevo chat",
         mode: mode,
-        provider: dto.provider || get().defaultProvider,
-        model: dto.model || get().defaultModel,
+        provider: dto.provider || targetProvider,
+        model: dto.model || targetModel,
         messages: [],
         createdAt: dto.createdAt,
         _messagesLoaded: true,
@@ -393,6 +396,9 @@ export const useChatStore = create<ChatState>()(
         c.id === chatId ? { ...c, provider, model } : c,
       ),
     })),
+
+  setDefaultModel: (model, provider) =>
+    set({ defaultModel: model, defaultProvider: provider }),
 
   loadProviders: async () => {
     try {

@@ -74,9 +74,17 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	}
 
 	if resp.StatusCode != 200 {
+		errBody, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		close(ch)
-		return nil, fmt.Errorf("OpenAI API status %d", resp.StatusCode)
+		errStr := strings.TrimSpace(string(errBody))
+		if len(errStr) > 200 {
+			errStr = errStr[:200] + "..."
+		}
+		if errStr != "" {
+			return nil, fmt.Errorf("API %s (status %d): %s", p.Name(), resp.StatusCode, errStr)
+		}
+		return nil, fmt.Errorf("API %s status %d", p.Name(), resp.StatusCode)
 	}
 
 	go p.readStream(ctx, ch, resp.Body)
