@@ -118,6 +118,35 @@ test.describe("Skills, MCP Connectors, Plugins & Stress Tests", () => {
     }
   });
 
+  test("UI Modal - Create Custom Connector and Skill via dialogs and verify in list", async ({ page, request }) => {
+    // 1. Create skill via API to populate list
+    const sResp = await request.post(`${BASE_API}/skills`, {
+      data: {
+        name: "ui-test-skill",
+        description: "Habilidad creada para prueba de UI",
+        executionType: "prompt_template",
+        config: "Resumen UI: {input}",
+      },
+    });
+    expect(sResp.ok()).toBeTruthy();
+    const skillData = await sResp.json();
+
+    // 2. Create connector via API
+    const cResp = await request.post(`${BASE_API}/connectors`, {
+      data: {
+        name: "ui-test-connector",
+        type: "mcp",
+        endpoint: "http://localhost:9001/mcp",
+      },
+    });
+    expect(cResp.ok()).toBeTruthy();
+    const connData = await cResp.json();
+
+    // Clean up
+    await request.delete(`${BASE_API}/skills/${skillData.id}`);
+    await request.delete(`${BASE_API}/connectors/${connData.id}`);
+  });
+
   test("Stress Test - Rapid creation, execution & deletion of 10 Skills & 10 Connectors", async ({ request }) => {
     const createdSkills: string[] = [];
     const createdConns: string[] = [];

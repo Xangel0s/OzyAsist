@@ -5,6 +5,8 @@ import ModelSelector from "../Common/ModelSelector";
 import { useOnClickOutside } from "../../hooks";
 import { api } from "../../services/api";
 import { useToastStore } from "../../store/toastStore";
+import { useSkillsStore } from "../../store/skillsStore";
+import { useConnectorsStore } from "../../store/connectorsStore";
 
 function shortModel(model?: string): string {
   if (!model || model === "openrouter/auto" || model === "sin-proveedor") return "Sin proveedor";
@@ -41,6 +43,9 @@ export default function ChatInput({
   const selectorRef = useRef<HTMLDivElement>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const defaultModel = useChatStore((s) => s.defaultModel);
+  const userSkills = useSkillsStore((s) => s.skills);
+  const userConnectors = useConnectorsStore((s) => s.connectors);
+  const allSkillsList = Array.from(new Set([...userSkills.map((s) => s.name), "mcp-builder", "morning", "skill-creator", "web-artifacts-builder"]));
 
   useOnClickOutside(selectorRef, () => setShowModelSelector(false));
   useOnClickOutside(addMenuRef, () => {
@@ -220,10 +225,9 @@ export default function ChatInput({
                       <span>Habilidades</span>
                     </div>
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
-                  </button>
                   {activeSubmenu === "habilidades" && (
                     <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      {["mcp-builder", "morning", "skill-creator", "web-artifacts-builder"].map((sk) => (
+                      {allSkillsList.map((sk) => (
                         <button
                           key={sk}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
@@ -280,16 +284,30 @@ export default function ChatInput({
                         <span>Administrar conectores</span>
                       </button>
                       <div className="h-px bg-white/10 my-1" />
+                      {userConnectors.map((c) => (
+                        <div key={c.id} className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
+                          <div className="flex items-center gap-2.5">
+                            <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
+                            <span className="font-medium text-[13px]">{c.name}</span>
+                          </div>
+                          <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
+                            <span className="w-3.5 h-3.5 bg-white rounded-full" />
+                          </span>
+                        </div>
+                      ))}
                       <div className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
                         <div className="flex items-center gap-2.5">
                           <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
-                          <span className="font-medium">opencode</span>
+                          <span className="font-medium text-[13px]">opencode</span>
                         </div>
                         <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm">
                           <span className="w-3.5 h-3.5 bg-white rounded-full" />
                         </span>
                       </div>
-                      <button className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70">
+                      <button
+                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
+                        onClick={() => openSettings("conectores")}
+                      >
                         <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_unchecked</span>
                         <span>Agregar desde opencode</span>
                       </button>

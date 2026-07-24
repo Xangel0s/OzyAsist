@@ -3,6 +3,8 @@ import { useUIStore } from "../../store/uiStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { useToastStore } from "../../store/toastStore";
+import { useSkillsStore } from "../../store/skillsStore";
+import { useConnectorsStore } from "../../store/connectorsStore";
 
 interface CategoryGroup {
   title: string;
@@ -75,6 +77,14 @@ export default function SettingsModal() {
   const [deepseekKey, setDeepseekKey] = useState(() => localStorage.getItem("deepseek_key") || "");
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem("ollama_url") || "http://localhost:11434");
   const [testingConnection, setTestingConnection] = useState(false);
+  const skills = useSkillsStore((s) => s.skills);
+  const addSkill = useSkillsStore((s) => s.addSkill);
+  const removeSkill = useSkillsStore((s) => s.removeSkill);
+  const connectors = useConnectorsStore((s) => s.connectors);
+  const addConnector = useConnectorsStore((s) => s.addConnector);
+  const removeConnector = useConnectorsStore((s) => s.removeConnector);
+  const uploadFileInputRef = useRef<HTMLInputElement>(null);
+
   const [skillTab, setSkillTab] = useState("Todo");
   const [connectorTab, setConnectorTab] = useState("Todo");
   const [showAddSkillDropdown, setShowAddSkillDropdown] = useState(false);
@@ -783,22 +793,35 @@ export default function SettingsModal() {
                     <div className="col-span-3">Autor</div>
                   </div>
                   {[
-                    { name: "mcp-builder", date: "22/7/26", author: "Anthropic" },
-                    { name: "morning", date: "22/7/26", author: "Anthropic" },
-                    { name: "skill-creator", date: "22/7/26", author: "Anthropic" },
-                    { name: "web-artifacts-builder", date: "22/7/26", author: "Anthropic" },
-                    { name: "schedule", date: "—", author: "Anthropic" },
-                    { name: "setup-cowork", date: "—", author: "Anthropic" },
-                    { name: "context", date: "—", author: "Anthropic" },
-                    { name: "design", date: "—", author: "Anthropic" },
+                    ...skills.map((s) => ({ id: s.id, name: s.name, date: "Hoy", author: "Usuario", custom: true })),
+                    { id: "b1", name: "mcp-builder", date: "22/7/26", author: "Anthropic", custom: false },
+                    { id: "b2", name: "morning", date: "22/7/26", author: "Anthropic", custom: false },
+                    { id: "b3", name: "skill-creator", date: "22/7/26", author: "Anthropic", custom: false },
+                    { id: "b4", name: "web-artifacts-builder", date: "22/7/26", author: "Anthropic", custom: false },
                   ].map((sk) => (
                     <div
                       key={sk.name}
                       className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]"
                     >
-                      <div className="col-span-6 font-mono font-medium text-white">{sk.name}</div>
+                      <div className="col-span-5 font-mono font-medium text-white flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px] text-white/40">settings_suggest</span>
+                        <span>{sk.name}</span>
+                      </div>
                       <div className="col-span-3 text-white/40">{sk.date}</div>
                       <div className="col-span-3 text-white/70">{sk.author}</div>
+                      <div className="col-span-1 flex justify-end">
+                        {sk.custom && (
+                          <button
+                            className="p-1 text-white/40 hover:text-red-400 transition-colors"
+                            onClick={async () => {
+                              await removeSkill(sk.id);
+                              toast(`Habilidad /${sk.name} eliminada`, "success");
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -904,6 +927,33 @@ export default function SettingsModal() {
                     <div className="col-span-4">Tipo</div>
                     <div className="col-span-3">Estado</div>
                   </div>
+                  {connectors.map((c) => (
+                    <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
+                      <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
+                        <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
+                        <span>{c.name}</span>
+                      </div>
+                      <div className="col-span-4 flex items-center gap-2">
+                        <span className="text-white/70">{c.type}</span>
+                        <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] text-white/50 font-mono">{c.endpoint || "MCP Server"}</span>
+                      </div>
+                      <div className="col-span-3 flex items-center justify-between text-[#3b82f6]">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[18px]">check</span>
+                          <span className="text-[12px] text-white/60">Conectado</span>
+                        </span>
+                        <button
+                          className="p-1 text-white/40 hover:text-red-400 transition-colors"
+                          onClick={async () => {
+                            await removeConnector(c.id);
+                            toast(`Conector ${c.name} eliminado`, "success");
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                   <div className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
                     <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
                       <span className="material-symbols-outlined text-[18px] text-white/40">radio_button_checked</span>
@@ -1249,9 +1299,27 @@ export default function SettingsModal() {
               </button>
               <button
                 className="px-5 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors"
-                onClick={() => {
-                  useToastStore.getState().show(`Conector MCP ${connName || 'personalizado'} guardado`, "success");
-                  setShowCustomConnectorModal(false);
+                onClick={async () => {
+                  const nameToSave = connName.trim() || "mcp-connector-" + Date.now().toString().slice(-4);
+                  const endpointToSave = connUrl.trim() || "http://localhost:9000/mcp";
+                  const id = await addConnector({
+                    id: "",
+                    name: nameToSave,
+                    type: "mcp",
+                    endpoint: endpointToSave,
+                    authConfig: { clientId: connOauthId, secret: connOauthSecret },
+                    status: "connected",
+                  });
+                  if (id) {
+                    toast(`Conector MCP "${nameToSave}" agregado exitosamente`, "success");
+                    setConnName("");
+                    setConnUrl("");
+                    setConnOauthId("");
+                    setConnOauthSecret("");
+                    setShowCustomConnectorModal(false);
+                  } else {
+                    toast("Error al agregar el conector", "error");
+                  }
                 }}
               >
                 Agregar
@@ -1275,11 +1343,79 @@ export default function SettingsModal() {
               </button>
             </div>
 
+            <input
+              type="file"
+              ref={uploadFileInputRef}
+              accept=".md,.json,.zip,.txt"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
+                  let description = "Habilidad importada desde " + file.name;
+                  const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
+                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
+                  const descMatch = text.match(/description:\s*([^\n\r]+)/i);
+                  if (descMatch) description = descMatch[1].trim();
+
+                  const id = await addSkill({
+                    id: "",
+                    name: skillName,
+                    description: description,
+                    triggerPattern: "/" + skillName,
+                    executionType: "prompt_template",
+                    config: { template: text },
+                  });
+
+                  if (id) {
+                    toast(`Habilidad /${skillName} subida e instalada exitosamente`, "success");
+                    setShowUploadSkillModal(false);
+                  } else {
+                    toast("Error guardando la habilidad", "error");
+                  }
+                } catch {
+                  toast("Error leyendo el archivo de la habilidad", "error");
+                }
+              }}
+            />
+
             <div
               className="border-2 border-dashed border-white/15 hover:border-white/30 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer bg-[#1c1c1c] transition-all group"
-              onClick={() => {
-                useToastStore.getState().show("Habilidad subida e instalada exitosamente", "success");
-                setShowUploadSkillModal(false);
+              onClick={() => uploadFileInputRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={async (e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (!file) return;
+                try {
+                  const text = await file.text();
+                  let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
+                  let description = "Habilidad arrastrada desde " + file.name;
+                  const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
+                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
+                  const descMatch = text.match(/description:\s*([^\n\r]+)/i);
+                  if (descMatch) description = descMatch[1].trim();
+
+                  const id = await addSkill({
+                    id: "",
+                    name: skillName,
+                    description: description,
+                    triggerPattern: "/" + skillName,
+                    executionType: "prompt_template",
+                    config: { template: text },
+                  });
+
+                  if (id) {
+                    toast(`Habilidad /${skillName} subida e instalada exitosamente`, "success");
+                    setShowUploadSkillModal(false);
+                  } else {
+                    toast("Error guardando la habilidad", "error");
+                  }
+                } catch {
+                  toast("Error leyendo el archivo arrastrado", "error");
+                }
               }}
             >
               <span className="material-symbols-outlined text-[40px] text-white/30 group-hover:text-white/60 transition-colors">
@@ -1328,9 +1464,34 @@ export default function SettingsModal() {
               </button>
               <button
                 className="px-5 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors"
-                onClick={() => {
-                  useToastStore.getState().show("Habilidad guardada e instalada", "success");
-                  setShowWriteSkillModal(false);
+                onClick={async () => {
+                  if (!customSkillCode.trim()) {
+                    toast("Ingresa las instrucciones de la habilidad", "error");
+                    return;
+                  }
+                  let skillName = "custom-skill-" + Date.now().toString().slice(-4);
+                  let description = "Habilidad personalizada redactada en editor";
+                  const nameMatch = customSkillCode.match(/name:\s*([^\n\r]+)/i);
+                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
+                  const descMatch = customSkillCode.match(/description:\s*([^\n\r]+)/i);
+                  if (descMatch) description = descMatch[1].trim();
+
+                  const id = await addSkill({
+                    id: "",
+                    name: skillName,
+                    description: description,
+                    triggerPattern: "/" + skillName,
+                    executionType: "prompt_template",
+                    config: { template: customSkillCode },
+                  });
+
+                  if (id) {
+                    toast(`Habilidad /${skillName} guardada e instalada`, "success");
+                    setCustomSkillCode("");
+                    setShowWriteSkillModal(false);
+                  } else {
+                    toast("Error guardando la habilidad", "error");
+                  }
                 }}
               >
                 Guardar e Instalar
