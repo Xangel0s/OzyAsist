@@ -97,6 +97,20 @@ export default function SettingsModal() {
   const [showWriteSkillModal, setShowWriteSkillModal] = useState(false);
   const [showMarketplaceModal, setShowMarketplaceModal] = useState(false);
 
+  // Skill Detail view state
+  const [selectedSkillDetail, setSelectedSkillDetail] = useState<{
+    id: string;
+    name: string;
+    description: string;
+    author: string;
+    date: string;
+    custom: boolean;
+    template: string;
+  } | null>(null);
+  const [skillViewMode, setSkillViewMode] = useState<"preview" | "code">("preview");
+  const [showSkillMenu, setShowSkillMenu] = useState(false);
+  const [showPluginMenu, setShowPluginMenu] = useState(false);
+
   // Plugin Detail view state
   const [selectedPluginDetail, setSelectedPluginDetail] = useState<string | null>(null);
   const [pluginDetailTab, setPluginDetailTab] = useState<"habilidades" | "conectores">("habilidades");
@@ -723,122 +737,295 @@ export default function SettingsModal() {
             )}
 
             {/* 8. HABILIDADES */}
-            {settingsCategory === "habilidades" && (
+            {settingsCategory === "skills" && (
               <div className="flex flex-col gap-5 w-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 bg-[#242424] p-1 rounded-xl text-[12px] text-white/50 border border-white/5">
-                    {["Todo", "Personal", "Organización"].map((tab) => (
+                {selectedSkillDetail ? (
+                  <div className="flex flex-col gap-5">
+                    {/* Top Nav */}
+                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
                       <button
-                        key={tab}
-                        className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                          skillTab === tab ? "bg-white/15 text-white shadow-sm" : "hover:text-white"
-                        }`}
-                        onClick={() => setSkillTab(tab)}
+                        className="flex items-center gap-1.5 text-[13px] text-white/60 hover:text-white transition-colors"
+                        onClick={() => setSelectedSkillDetail(null)}
                       >
-                        {tab}
+                        <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+                        <span>Habilidades</span>
                       </button>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                      onClick={() => setShowMarketplaceModal(true)}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">search</span>
-                      <span>Examinar</span>
-                    </button>
-
-                    <div className="relative">
                       <button
-                        className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                        onClick={() => setShowAddSkillDropdown(!showAddSkillDropdown)}
+                        className="p-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors"
+                        onClick={() => setSelectedSkillDetail(null)}
                       >
-                        <span>Agregar</span>
-                        <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                        <span className="material-symbols-outlined text-[20px]">close</span>
                       </button>
-
-                      {showAddSkillDropdown && (
-                        <div className="absolute right-0 top-full mt-1.5 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 text-[13px] text-white">
-                          <button
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setShowAddSkillDropdown(false);
-                              setSettingsOpen(false);
-                              useChatStore.getState().sendMessage(
-                                useChatStore.getState().activeChatId || "new",
-                                "Let's create a skill together using your skill-creator skill. First ask me what the skill should do."
-                              );
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble</span>
-                            <span>Cree con Ozy</span>
-                          </button>
-                          <button
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setShowAddSkillDropdown(false);
-                              setShowWriteSkillModal(true);
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[18px] text-white/60">edit_note</span>
-                            <span>Escribe las instrucciones de la habilidad</span>
-                          </button>
-                          <button
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setShowAddSkillDropdown(false);
-                              setShowUploadSkillModal(true);
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[18px] text-white/60">upload</span>
-                            <span>Subir una habilidad</span>
-                          </button>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                </div>
 
-                <div className="border border-white/10 rounded-xl overflow-hidden bg-[#222222]">
-                  <div className="grid grid-cols-12 px-4 py-2.5 border-b border-white/10 text-[12px] font-medium text-white/40">
-                    <div className="col-span-6">Habilidad</div>
-                    <div className="col-span-3">Última actualización</div>
-                    <div className="col-span-3">Autor</div>
-                  </div>
-                  {[
-                    ...skills.map((s) => ({ id: s.id, name: s.name, date: "Hoy", author: "Usuario", custom: true })),
-                    { id: "b1", name: "mcp-builder", date: "22/7/26", author: "Anthropic", custom: false },
-                    { id: "b2", name: "morning", date: "22/7/26", author: "Anthropic", custom: false },
-                    { id: "b3", name: "skill-creator", date: "22/7/26", author: "Anthropic", custom: false },
-                    { id: "b4", name: "web-artifacts-builder", date: "22/7/26", author: "Anthropic", custom: false },
-                  ].map((sk) => (
-                    <div
-                      key={sk.name}
-                      className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]"
-                    >
-                      <div className="col-span-5 font-mono font-medium text-white flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[16px] text-white/40">settings_suggest</span>
-                        <span>{sk.name}</span>
+                    {/* Title and Controls */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-[24px] font-semibold text-white tracking-tight">{selectedSkillDetail.name}</h2>
+                        <span className="material-symbols-outlined text-[18px] text-white/40 cursor-pointer hover:text-white/80" title="Información de la habilidad">info</span>
                       </div>
-                      <div className="col-span-3 text-white/40">{sk.date}</div>
-                      <div className="col-span-3 text-white/70">{sk.author}</div>
-                      <div className="col-span-1 flex justify-end">
-                        {sk.custom && (
-                          <button
-                            className="p-1 text-white/40 hover:text-red-400 transition-colors"
-                            onClick={async () => {
-                              await removeSkill(sk.id);
-                              toast(`Habilidad /${sk.name} eliminada`, "success");
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
+
+                      <div className="flex items-center gap-3 relative">
+                        <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
+                          <span className="w-4 h-4 bg-white rounded-full" />
+                        </span>
+                        <button
+                          className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                          onClick={() => setShowSkillMenu(!showSkillMenu)}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                        </button>
+
+                        {showSkillMenu && (
+                          <div className="absolute right-0 top-full mt-1 w-48 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 text-[13px] text-white">
+                            <button
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                              onClick={() => {
+                                setShowSkillMenu(false);
+                                setSettingsOpen(false);
+                                useChatStore.getState().sendMessage(
+                                  useChatStore.getState().activeChatId || "new",
+                                  `/${selectedSkillDetail.name}`
+                                );
+                              }}
+                            >
+                              <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble_outline</span>
+                              <span>Probar en chat</span>
+                            </button>
+                            {selectedSkillDetail.custom && (
+                              <button
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-red-400"
+                                onClick={async () => {
+                                  setShowSkillMenu(false);
+                                  await removeSkill(selectedSkillDetail.id);
+                                  toast(`Habilidad /${selectedSkillDetail.name} desinstalada`, "success");
+                                  setSelectedSkillDetail(null);
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px]">delete</span>
+                                <span>Desinstalar</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="text-[12px] text-white/50">
+                      por <span className="text-white/80 font-medium">{selectedSkillDetail.author}</span>
+                    </div>
+
+                    <div className="text-[13px] text-white/70 leading-relaxed">
+                      {selectedSkillDetail.description} <span className="text-[#3b82f6] cursor-pointer hover:underline font-medium">Ver más</span>
+                    </div>
+
+                    {/* Main Code / File Container */}
+                    <div className="border border-white/10 rounded-2xl bg-[#1c1c1c] overflow-hidden flex flex-col">
+                      {/* Container Header */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-[#222222]">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-lg text-[13px] font-medium text-white cursor-pointer hover:bg-white/15">
+                            <span>SKILL.md</span>
+                            <span className="material-symbols-outlined text-[16px] text-white/60">expand_more</span>
+                          </div>
+                          <span className="text-[12px] text-white/40">1 archivo</span>
+                        </div>
+
+                        <div className="flex items-center gap-1 bg-[#1a1a1a] p-1 rounded-xl border border-white/10 text-[12px]">
+                          <button
+                            className={`p-1.5 rounded-lg transition-all ${
+                              skillViewMode === "preview" ? "bg-white/20 text-white" : "text-white/40 hover:text-white"
+                            }`}
+                            onClick={() => setSkillViewMode("preview")}
+                            title="Vista Previa"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">visibility</span>
+                          </button>
+                          <button
+                            className={`p-1.5 rounded-lg transition-all ${
+                              skillViewMode === "code" ? "bg-white/20 text-white" : "text-white/40 hover:text-white"
+                            }`}
+                            onClick={() => setSkillViewMode("code")}
+                            title="Ver Código Raw"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">code</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Container Content */}
+                      <div className="p-5 max-h-96 overflow-y-auto">
+                        {skillViewMode === "preview" ? (
+                          <div className="prose prose-invert max-w-none text-[13px] text-white/80 leading-relaxed font-sans whitespace-pre-wrap">
+                            {selectedSkillDetail.template || `# ${selectedSkillDetail.name}\n${selectedSkillDetail.description}`}
+                          </div>
+                        ) : (
+                          <pre className="font-mono text-[12px] text-lime-400 bg-[#121212] p-4 rounded-xl overflow-x-auto whitespace-pre-wrap">
+                            {selectedSkillDetail.template || `name: ${selectedSkillDetail.name}\ndescription: ${selectedSkillDetail.description}`}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 bg-[#242424] p-1 rounded-xl text-[12px] text-white/50 border border-white/5">
+                        {["Todo", "Personalizadas", "De Ozy"].map((tab) => (
+                          <button
+                            key={tab}
+                            className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                              skillTab === tab ? "bg-white/15 text-white shadow-sm" : "hover:text-white"
+                            }`}
+                            onClick={() => setSkillTab(tab)}
+                          >
+                            {tab}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
+                          onClick={() => setShowMarketplaceModal(true)}
+                        >
+                          <span className="material-symbols-outlined text-[16px]">search</span>
+                        </button>
+
+                        <div className="relative">
+                          <button
+                            className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
+                            onClick={() => setShowAddSkillDropdown(!showAddSkillDropdown)}
+                          >
+                            <span>Agregar</span>
+                            <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                          </button>
+
+                          {showAddSkillDropdown && (
+                            <div className="absolute right-0 top-full mt-1.5 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 text-[13px] text-white">
+                              <button
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                onClick={() => {
+                                  setShowAddSkillDropdown(false);
+                                  setSettingsOpen(false);
+                                  useChatStore.getState().sendMessage(
+                                    useChatStore.getState().activeChatId || "new",
+                                    "Let's create a skill together using your skill-creator skill. First ask me what the skill should do."
+                                  );
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble</span>
+                                <span>Cree con Ozy</span>
+                              </button>
+                              <button
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                onClick={() => {
+                                  setShowAddSkillDropdown(false);
+                                  setShowWriteSkillModal(true);
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px] text-white/60">edit_note</span>
+                                <span>Escribe las instrucciones de la habilidad</span>
+                              </button>
+                              <button
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                onClick={() => {
+                                  setShowAddSkillDropdown(false);
+                                  setShowUploadSkillModal(true);
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px] text-white/60">upload</span>
+                                <span>Subir una habilidad</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border border-white/10 rounded-xl overflow-hidden bg-[#222222]">
+                      <div className="grid grid-cols-12 px-4 py-2.5 border-b border-white/10 text-[12px] font-medium text-white/40">
+                        <div className="col-span-6">Habilidad</div>
+                        <div className="col-span-3">Última actualización</div>
+                        <div className="col-span-3">Autor</div>
+                      </div>
+                      {[
+                        ...skills.map((s) => ({
+                          id: s.id,
+                          name: s.name,
+                          description: s.description || "Habilidad personalizada cargada por el usuario.",
+                          date: "Hoy",
+                          author: "Usuario",
+                          custom: true,
+                          template: s.config?.template || s.description,
+                        })),
+                        {
+                          id: "b1",
+                          name: "mcp-builder",
+                          description: "Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools.",
+                          date: "22/7/26",
+                          author: "Anthropic",
+                          custom: false,
+                          template: `# mcp-builder\n\nGuide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services.\n\n## Core Documentation\n- MCP Protocol: Start with sitemap\n- Best practices: Server and tool naming conventions`,
+                        },
+                        {
+                          id: "b2",
+                          name: "morning",
+                          description: "Automated morning briefing skill that compiles key updates, calendar events, and pending tasks.",
+                          date: "22/7/26",
+                          author: "Anthropic",
+                          custom: false,
+                          template: `# morning\n\nAutomated morning briefing skill that compiles key updates, calendar events, and pending tasks.`,
+                        },
+                        {
+                          id: "b3",
+                          name: "skill-creator",
+                          description: "Distills completed user workflows into reusable agent skills.",
+                          date: "22/7/26",
+                          author: "Anthropic",
+                          custom: false,
+                          template: `# skill-creator\n\nDistills completed user workflows into reusable agent skills.`,
+                        },
+                        {
+                          id: "b4",
+                          name: "web-artifacts-builder",
+                          description: "Builds responsive web application components and preview artifacts.",
+                          date: "22/7/26",
+                          author: "Anthropic",
+                          custom: false,
+                          template: `# web-artifacts-builder\n\nBuilds responsive web application components and preview artifacts.`,
+                        },
+                      ].map((sk) => (
+                        <div
+                          key={sk.name}
+                          className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px] cursor-pointer"
+                          onClick={() => setSelectedSkillDetail(sk)}
+                        >
+                          <div className="col-span-5 font-mono font-medium text-white flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[16px] text-white/40">settings_suggest</span>
+                            <span>{sk.name}</span>
+                          </div>
+                          <div className="col-span-3 text-white/40">{sk.date}</div>
+                          <div className="col-span-3 text-white/70">{sk.author}</div>
+                          <div className="col-span-1 flex justify-end">
+                            {sk.custom && (
+                              <button
+                                className="p-1 text-white/40 hover:text-red-400 transition-colors"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await removeSkill(sk.id);
+                                  toast(`Habilidad /${sk.name} eliminada`, "success");
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[16px]">delete</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -1031,8 +1218,30 @@ export default function SettingsModal() {
                         <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
                           <span className="w-4 h-4 bg-white rounded-full" />
                         </span>
-                        <button className="p-1 text-white/40 hover:text-white">
+                        <button
+                          className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors relative"
+                          onClick={() => setShowPluginMenu(!showPluginMenu)}
+                        >
                           <span className="material-symbols-outlined text-[20px]">more_vert</span>
+                          {showPluginMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-48 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1.5 z-50 text-[13px] text-white font-normal">
+                              <button
+                                className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowPluginMenu(false);
+                                  setSettingsOpen(false);
+                                  useChatStore.getState().sendMessage(
+                                    useChatStore.getState().activeChatId || "new",
+                                    `Let's test the skills in plugin ${selectedPluginDetail}`
+                                  );
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[18px] text-white/60">chat_bubble_outline</span>
+                                <span>Probar en chat</span>
+                              </button>
+                            </div>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1085,14 +1294,15 @@ export default function SettingsModal() {
                           Invoca escribiendo / en el chat, o deja que Ozy los use automáticamente para tareas relevantes.
                         </div>
                         {[
+                          ...skills.map((s) => ({ name: "/" + s.name, desc: s.description || "Habilidad personalizada instalada." })),
                           { name: "/memory-management", desc: "Two-tier memory system that makes Ozy a true workplace collaborator." },
                           { name: "/start", desc: "Initialize the productivity system and open the dashboard." },
                           { name: "/task-management", desc: "Simple task management using a shared TASKS.md file." },
                           { name: "/update", desc: "Sync tasks and refresh memory from your current activity." },
                         ].map((item) => (
-                          <div key={item.name} className="flex flex-col gap-0.5 py-1">
+                          <div key={item.name} className="flex flex-col gap-0.5 py-1.5 border-b border-white/5">
                             <div className="font-mono text-[13px] font-semibold text-white">{item.name}</div>
-                            <div className="text-[12px] text-white/40">{item.desc}</div>
+                            <div className="text-[12px] text-white/50">{item.desc}</div>
                           </div>
                         ))}
                       </div>
@@ -1118,6 +1328,7 @@ export default function SettingsModal() {
                     <div className="flex flex-col gap-2.5 pt-3">
                       <div className="text-[13px] font-semibold text-white">Intenta preguntar...</div>
                       {[
+                        `Ejecuta la habilidad ${skills[0]?.name ? "/" + skills[0].name : "/verificador-codigo"} para validar sintaxis de código`,
                         "Set up my task and memory system",
                         "Catch me up and triage stale tasks",
                         "What's on my plate today?",
@@ -1210,6 +1421,7 @@ export default function SettingsModal() {
                         <div className="col-span-3">Habilidades</div>
                       </div>
                       {[
+                        ...skills.map((s) => ({ name: s.name, author: "Usuario", count: 1 })),
                         { name: "Productivity", author: "Anthropic", count: 12 },
                         { name: "Engineering", author: "Anthropic", count: 10 },
                         { name: "Sales", author: "Anthropic", count: 9 },
@@ -1220,9 +1432,12 @@ export default function SettingsModal() {
                           className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px] cursor-pointer"
                           onClick={() => setSelectedPluginDetail(pl.name)}
                         >
-                          <div className="col-span-5 font-medium text-white">{pl.name}</div>
+                          <div className="col-span-5 font-medium text-white flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[16px] text-white/40">extension</span>
+                            <span>{pl.name}</span>
+                          </div>
                           <div className="col-span-4 text-white/60">{pl.author}</div>
-                          <div className="col-span-3 text-white/40">{pl.count}</div>
+                          <div className="col-span-3 text-white/40">{pl.count} habilidades</div>
                         </div>
                       ))}
                     </div>
@@ -1372,7 +1587,7 @@ export default function SettingsModal() {
             <input
               type="file"
               ref={uploadFileInputRef}
-              accept=".md,.json,.zip,.txt"
+              accept=".yaml,.yml,.md,.json,.zip,.txt"
               className="hidden"
               onChange={async (e) => {
                 const file = e.target.files?.[0];
@@ -1382,9 +1597,9 @@ export default function SettingsModal() {
                   let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
                   let description = "Habilidad importada desde " + file.name;
                   const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
+                  if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
                   const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-                  if (descMatch) description = descMatch[1].trim();
+                  if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
 
                   const id = await addSkill({
                     id: "",
@@ -1420,9 +1635,9 @@ export default function SettingsModal() {
                   let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
                   let description = "Habilidad arrastrada desde " + file.name;
                   const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
+                  if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
                   const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-                  if (descMatch) description = descMatch[1].trim();
+                  if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
 
                   const id = await addSkill({
                     id: "",

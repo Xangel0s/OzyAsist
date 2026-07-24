@@ -225,6 +225,7 @@ export default function ChatInput({
                       <span>Habilidades</span>
                     </div>
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
+                  </button>
                   {activeSubmenu === "habilidades" && (
                     <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
                       {allSkillsList.map((sk) => (
