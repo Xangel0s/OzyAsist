@@ -126,6 +126,10 @@ export default function SettingsModal() {
   const [connOauthSecret, setConnOauthSecret] = useState("");
   const [showAdvancedConn, setShowAdvancedConn] = useState(false);
 
+  // Connector Role Dropdown state
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [connectorsRoleFilter, setConnectorsRoleFilter] = useState("Software Engineer");
+
   // Inline Skill Editor state
   const [customSkillCode, setCustomSkillCode] = useState(`name: mi-habilidad\ndescription: Descripción de la habilidad personalizada\n---\n# Instrucciones de la habilidad\n- Paso 1...`);
 
@@ -770,6 +774,29 @@ export default function SettingsModal() {
                       </div>
 
                       <div className="flex items-center gap-3 relative">
+                        <button
+                          className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
+                          onClick={() => {
+                            toast(`Buscando actualizaciones para /${selectedSkillDetail.name}...`, "info");
+                            setTimeout(() => {
+                              toast(`/${selectedSkillDetail.name} ya está en la versión más reciente.`, "success");
+                            }, 800);
+                          }}
+                        >
+                          Actualizar
+                        </button>
+                        <button
+                          className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
+                          onClick={() => {
+                            setCustomSkillCode(
+                              selectedSkillDetail.template ||
+                              `name: ${selectedSkillDetail.name}\ndescription: ${selectedSkillDetail.description}\n---\n# Instrucciones`
+                            );
+                            setShowWriteSkillModal(true);
+                          }}
+                        >
+                          Personalizar
+                        </button>
                         <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
                           <span className="w-4 h-4 bg-white rounded-full" />
                         </span>
@@ -1097,12 +1124,51 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="flex flex-col gap-2">
-                  <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5 relative select-none">
                     <span>POPULAR PARA</span>
-                    <button className="text-white hover:underline flex items-center gap-0.5">
-                      <span>Software Engineer</span>
+                    <button
+                      className="text-white hover:underline flex items-center gap-0.5 font-bold"
+                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
+                    >
+                      <span>{connectorsRoleFilter}</span>
                       <span className="material-symbols-outlined text-[14px]">expand_more</span>
                     </button>
+
+                    {showRoleDropdown && (
+                      <div className="absolute left-24 top-full mt-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-2 z-50 text-[13px] text-white">
+                        <div className="px-3.5 py-1 text-[11px] font-semibold text-white/40 uppercase">Mostrar conectores para</div>
+                        {[
+                          "Sales",
+                          "Marketing",
+                          "Finance",
+                          "Product Management",
+                          "Engineering",
+                          "Software Engineer",
+                          "Design",
+                          "Data Science",
+                          "Legal",
+                          "Human Resources",
+                          "Operations",
+                        ].map((role) => (
+                          <button
+                            key={role}
+                            className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                            onClick={() => {
+                              setConnectorsRoleFilter(role);
+                              setShowRoleDropdown(false);
+                            }}
+                          >
+                            <span>{role}</span>
+                            {connectorsRoleFilter === role && (
+                              <div className="flex items-center gap-1 text-[#3b82f6]">
+                                <span className="material-symbols-outlined text-[16px]">check</span>
+                                <span className="text-[11px] text-white/40">Tu rol</span>
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-3 gap-3">
@@ -1223,10 +1289,31 @@ export default function SettingsModal() {
                         <h2 className="text-[24px] font-semibold text-white tracking-tight">{selectedPluginDetail}</h2>
 
                         <div className="flex items-center gap-3">
-                          <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
+                          <button
+                            className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
+                            onClick={() => {
+                              toast(`Buscando actualizaciones para el plugin ${selectedPluginDetail}...`, "info");
+                              setTimeout(() => {
+                                toast(`Plugin ${selectedPluginDetail} está actualizado.`, "success");
+                              }, 800);
+                            }}
+                          >
                             Actualizar
                           </button>
-                          <button className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors">
+                          <button
+                            className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
+                            onClick={() => {
+                              if (customPluginObj) {
+                                setCustomSkillCode(
+                                  customPluginObj.config?.template ||
+                                  `name: ${customPluginObj.name}\ndescription: ${customPluginObj.description}\n---\n# Instrucciones`
+                                );
+                              } else {
+                                setCustomSkillCode(`name: ${selectedPluginDetail}\ndescription: Plugin personalizado\n---\n# Instrucciones`);
+                              }
+                              setShowWriteSkillModal(true);
+                            }}
+                          >
                             Personalizar
                           </button>
                           <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
