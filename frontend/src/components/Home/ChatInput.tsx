@@ -120,6 +120,21 @@ export default function ChatInput({
     "pipeline-review",
   ];
 
+  const defaultPluginProfilesMap: Record<string, string[]> = {
+    Productivity: ["calendar-manager", "email-triage", "note-organizer", "task-sync"],
+    Engineering: ["code-verifier", "git-assistant", "docker-helper", "api-tester"],
+    Sales: salesProfileSkills,
+    Design: ["ui-mockup", "color-palette", "font-pairing", "svg-generator"],
+  };
+
+  // Build combined map of all plugins and their sub-skills
+  const dynamicPluginProfilesMap: Record<string, string[]> = { ...defaultPluginProfilesMap };
+  userSkills.forEach((s) => {
+    dynamicPluginProfilesMap[s.name] = [s.name];
+  });
+
+  const allPluginCategories = Object.keys(dynamicPluginProfilesMap);
+
   return (
     <div
       className={`w-full bg-[#1e1e1e] rounded-2xl border border-white/10 flex flex-col shadow-lg shadow-black/30 focus-within:border-white/15 transition-colors relative z-20 ${
@@ -334,26 +349,26 @@ export default function ChatInput({
                   </button>
                   {activeSubmenu === "plugins" && (
                     <div className="absolute left-full top-0 ml-1 w-56 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      {["Productivity", "Engineering", "Sales", "Design"].map((cat) => (
+                      {allPluginCategories.map((cat) => (
                         <div
                           key={cat}
                           className="relative"
                           onMouseEnter={() => setActivePluginProfile(cat)}
                         >
                           <button className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left">
-                            <span>{cat}</span>
+                            <span className="truncate">{cat}</span>
                             <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
                           </button>
-                          {activePluginProfile === cat && cat === "Sales" && (
-                            <div className="absolute left-full top-0 ml-1 w-60 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 max-h-72 overflow-y-auto">
-                              {salesProfileSkills.map((sk) => (
+                          {activePluginProfile === cat && dynamicPluginProfilesMap[cat] && (
+                            <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 max-h-72 overflow-y-auto">
+                              {dynamicPluginProfilesMap[cat].map((sk) => (
                                 <button
                                   key={sk}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-1.5 hover:bg-white/10 transition-colors text-left"
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
                                   onClick={() => handleSelectSkill(sk)}
                                 >
-                                  <span className="material-symbols-outlined text-[14px] text-white/40">settings_suggest</span>
-                                  <span className="font-mono text-[11px] truncate">{sk}</span>
+                                  <span className="material-symbols-outlined text-[16px] text-white/40">article</span>
+                                  <span className="font-mono text-[12px] text-white truncate">{sk}</span>
                                 </button>
                               ))}
                             </div>
