@@ -7,7 +7,7 @@ import { api } from "../../services/api";
 import { useToastStore } from "../../store/toastStore";
 
 function shortModel(model?: string): string {
-  if (!model || model === "openrouter/auto") return "Sin proveedor";
+  if (!model || model === "openrouter/auto" || model === "sin-proveedor") return "Sin proveedor";
   const name = model.split("/").pop() ?? model;
   return name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -51,14 +51,13 @@ func CreateChat(c *gin.Context) {
 				}
 			}
 		} else {
-			provider = "openrouter"
+			provider = ""
+			model = ""
 		}
 	}
-	if model == "" {
+	if model == "" && provider != "" {
 		if p, err := providers.Get(provider); err == nil && len(p.Models()) > 0 {
 			model = p.Models()[0]
-		} else {
-			model = "openrouter/auto"
 		}
 	}
 

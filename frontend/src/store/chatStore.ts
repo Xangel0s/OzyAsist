@@ -57,8 +57,8 @@ export const useChatStore = create<ChatState>()(
   activeChatId: null,
   isResponding: false,
   consentPending: null,
-  defaultProvider: "openrouter",
-  defaultModel: "openrouter/auto",
+  defaultProvider: "",
+  defaultModel: "",
 
   setActiveChat: (id) => {
     if (get().isResponding) {
@@ -399,11 +399,13 @@ export const useChatStore = create<ChatState>()(
       const providers = await api.models.list();
       if (providers.length > 0) {
         const first = providers[0];
-        const modelId = first.models[0] || "openrouter/auto";
+        const modelId = first.models[0] || "";
         set({ defaultProvider: first.provider, defaultModel: modelId });
+      } else {
+        set({ defaultProvider: "", defaultModel: "" });
       }
     } catch {
-      // keep defaults
+      set({ defaultProvider: "", defaultModel: "" });
     }
   },
 

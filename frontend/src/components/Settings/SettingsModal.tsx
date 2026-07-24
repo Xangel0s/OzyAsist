@@ -52,7 +52,8 @@ export default function SettingsModal() {
   const [callName, setCallName] = useState("peter");
   const [profession, setProfession] = useState("Software Engineer");
   const [instructions, setInstructions] = useState("");
-  const [theme, setTheme] = useState<"system" | "light" | "dark">("dark");
+  const theme = useUIStore((s) => s.theme);
+  const setTheme = useUIStore((s) => s.setTheme);
 
   // Desktop Toggles
   const [autoStart, setAutoStart] = useState(true);

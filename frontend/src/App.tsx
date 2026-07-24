@@ -52,10 +52,34 @@ function HydrationGate({ children }: { children: React.ReactNode }) {
 export default function App() {
   const user = useAuthStore((s) => s.user);
   const activeView = useUIStore((s) => s.activeView);
+  const theme = useUIStore((s) => s.theme);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const toggleSearch = useCallback(() => setSearchOpen(true), [setSearchOpen]);
 
   useKeyboard("k", toggleSearch, { meta: true });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const applyTheme = (isDark: boolean) => {
+      if (isDark) {
+        root.classList.add("dark");
+        root.classList.remove("light");
+      } else {
+        root.classList.add("light");
+        root.classList.remove("dark");
+      }
+    };
+
+    if (theme === "system") {
+      const media = window.matchMedia("(prefers-color-scheme: dark)");
+      applyTheme(media.matches);
+      const listener = (e: MediaQueryListEvent) => applyTheme(e.matches);
+      media.addEventListener("change", listener);
+      return () => media.removeEventListener("change", listener);
+    } else {
+      applyTheme(theme === "dark");
+    }
+  }, [theme]);
 
   if (!user) {
     return (

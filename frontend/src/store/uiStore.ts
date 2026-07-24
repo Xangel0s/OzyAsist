@@ -11,6 +11,8 @@ export type View =
   | "onboarding"
   | "search";
 
+export type Theme = "system" | "light" | "dark";
+
 interface UIState {
   activeView: View;
   sidebarOpen: boolean;
@@ -20,6 +22,7 @@ interface UIState {
   settingsCategory: string;
   onboardingStep: number;
   editingProjectId: string | null;
+  theme: Theme;
   setActiveView: (view: View) => void;
   toggleSidebar: () => void;
   toggleCoworkMode: () => void;
@@ -30,6 +33,7 @@ interface UIState {
   openSettings: (cat?: string) => void;
   setOnboardingStep: (step: number) => void;
   setEditingProjectId: (id: string | null) => void;
+  setTheme: (theme: Theme) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -43,6 +47,7 @@ export const useUIStore = create<UIState>()(
       settingsCategory: "general",
       onboardingStep: 0,
       editingProjectId: null,
+      theme: "dark",
       setActiveView: (view) => set({ activeView: view }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       toggleCoworkMode: () => set((s) => ({ coworkMode: !s.coworkMode })),
@@ -53,6 +58,7 @@ export const useUIStore = create<UIState>()(
       openSettings: (cat = "general") => set({ settingsOpen: true, settingsCategory: cat }),
       setOnboardingStep: (step) => set({ onboardingStep: step }),
       setEditingProjectId: (id) => set({ editingProjectId: id }),
+      setTheme: (theme) => set({ theme }),
     }),
     { name: "ozy-ui", partialize: (state) => ({
       activeView: state.activeView,
@@ -61,6 +67,7 @@ export const useUIStore = create<UIState>()(
       settingsCategory: state.settingsCategory,
       onboardingStep: state.onboardingStep,
       editingProjectId: state.editingProjectId,
+      theme: state.theme,
     })},
   ),
 );
