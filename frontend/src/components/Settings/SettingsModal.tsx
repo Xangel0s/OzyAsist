@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import JSZip from "jszip";
 import { useUIStore } from "../../store/uiStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
@@ -129,6 +130,97 @@ export default function SettingsModal() {
   // Connector Role Dropdown state
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [connectorsRoleFilter, setConnectorsRoleFilter] = useState("Software Engineer");
+
+  // Active / Inactive toggle states
+  const [enabledSkillsMap, setEnabledSkillsMap] = useState<Record<string, boolean>>({});
+
+  const isSkillEnabled = (name: string) => enabledSkillsMap[name] !== false;
+  const toggleSkillEnabled = (name: string) => {
+    const nextState = !isSkillEnabled(name);
+    setEnabledSkillsMap((prev) => ({ ...prev, [name]: nextState }));
+    toast(`Habilidad /${name} ${nextState ? "activada" : "desactivada"}`, "info");
+  };
+
+  const processUploadedSkillFile = async (file: File) => {
+    try {
+      let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
+      let description = "Habilidad importada desde " + file.name;
+      let version = "1.0.0";
+      let author = "Usuario";
+      let text = "";
+
+      if (file.name.endsWith(".zip")) {
+        const zip = await JSZip.loadAsync(file);
+        author = "Paquete ZIP (Claude Desktop)";
+        const pluginJsonFile = zip.file("plugin.json") || Object.values(zip.files).find((f) => f.name.endsWith("plugin.json"));
+        const skillMdFile = zip.file("SKILL.md") || Object.values(zip.files).find((f) => f.name.endsWith("SKILL.md"));
+        const yamlFile = Object.values(zip.files).find((f) => f.name.endsWith(".yaml") || f.name.endsWith(".yml"));
+
+        if (pluginJsonFile) {
+          const jsonText = await pluginJsonFile.async("text");
+          try {
+            const parsed = JSON.parse(jsonText);
+            if (parsed.name) skillName = parsed.name.toLowerCase().replace(/\s+/g, "-");
+            if (parsed.description) description = parsed.description;
+            if (parsed.version) version = parsed.version;
+            if (parsed.author) author = parsed.author;
+            text = jsonText;
+          } catch { /* ignore */ }
+        } else if (skillMdFile) {
+          text = await skillMdFile.async("text");
+          const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
+          if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
+          const descMatch = text.match(/description:\s*([^\n\r]+)/i);
+          if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
+        } else if (yamlFile) {
+          text = await yamlFile.async("text");
+          const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
+          if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
+          const descMatch = text.match(/description:\s*([^\n\r]+)/i);
+          if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
+          const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
+          if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
+        } else {
+          const textFiles = Object.values(zip.files).filter((f) => !f.dir);
+          for (const tf of textFiles) {
+            text += `\n--- ${tf.name} ---\n` + (await tf.async("text"));
+          }
+        }
+      } else {
+        text = await file.text();
+        const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
+        if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
+        const descMatch = text.match(/description:\s*([^\n\r]+)/i);
+        if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
+        const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
+        if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
+      }
+
+      const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
+      const id = await addSkill({
+        id: "",
+        name: skillName,
+        description: description,
+        triggerPattern: "/" + skillName,
+        executionType: "prompt_template",
+        config: { template: text, version, author },
+      });
+
+      if (id) {
+        toast(
+          exists
+            ? `Habilidad/Plugin /${skillName} actualizado exitosamente`
+            : `Habilidad/Plugin /${skillName} instalado exitosamente`,
+          "success"
+        );
+        setShowUploadSkillModal(false);
+      } else {
+        toast("Error guardando la habilidad", "error");
+      }
+    } catch {
+      toast("Error procesando el paquete de la habilidad", "error");
+    }
+  };
 
   // Inline Skill Editor state
   const [customSkillCode, setCustomSkillCode] = useState(`name: mi-habilidad\ndescription: Descripción de la habilidad personalizada\n---\n# Instrucciones de la habilidad\n- Paso 1...`);
@@ -797,9 +889,15 @@ export default function SettingsModal() {
                         >
                           Personalizar
                         </button>
-                        <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
-                          <span className="w-4 h-4 bg-white rounded-full" />
-                        </span>
+                        <button
+                          className={`w-10 h-5 rounded-full flex items-center px-0.5 shadow-sm transition-all cursor-pointer ${
+                            isSkillEnabled(selectedSkillDetail.name) ? "bg-[#3b82f6] justify-end" : "bg-white/20 justify-start"
+                          }`}
+                          onClick={() => toggleSkillEnabled(selectedSkillDetail.name)}
+                          title={isSkillEnabled(selectedSkillDetail.name) ? "Desactivar" : "Activar"}
+                        >
+                          <span className="w-4 h-4 bg-white rounded-full transition-transform" />
+                        </button>
                         <button
                           className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                           onClick={() => setShowSkillMenu(!showSkillMenu)}
@@ -1198,58 +1296,47 @@ export default function SettingsModal() {
                     <div className="col-span-4">Tipo</div>
                     <div className="col-span-3">Estado</div>
                   </div>
-                  {connectors.map((c) => (
-                    <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
-                      <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
-                        <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
-                        <span>{c.name}</span>
-                      </div>
-                      <div className="col-span-4 flex items-center gap-2">
-                        <span className="text-white/70">{c.type}</span>
-                        <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] text-white/50 font-mono">{c.endpoint || "MCP Server"}</span>
-                      </div>
-                      <div className="col-span-3 flex items-center justify-between text-[#3b82f6]">
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[18px]">check</span>
-                          <span className="text-[12px] text-white/60">Conectado</span>
-                        </span>
-                        <button
-                          className="p-1 text-white/40 hover:text-red-400 transition-colors"
-                          onClick={async () => {
-                            await removeConnector(c.id);
-                            toast(`Conector ${c.name} eliminado`, "success");
-                          }}
-                        >
-                          <span className="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
-                    <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
-                      <span className="material-symbols-outlined text-[18px] text-white/40">radio_button_checked</span>
-                      <span>opencode</span>
-                    </div>
-                    <div className="col-span-4 flex items-center gap-2">
-                      <span className="text-white/70">Escritorio</span>
-                      <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] text-white/50 font-mono">Dev local</span>
-                    </div>
-                    <div className="col-span-3 text-[#3b82f6]">
-                      <span className="material-symbols-outlined text-[18px]">check</span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
-                    <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
-                      <span className="material-symbols-outlined text-[18px] text-white/40">code</span>
-                      <span>Integración de GitHub</span>
-                    </div>
-                    <div className="col-span-4 text-white/70">Web</div>
-                    <div className="col-span-3">
-                      <button className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-[12px] font-medium rounded-lg transition-colors">
-                        Conectar
+                  {connectors.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
+                      <span className="material-symbols-outlined text-[32px] text-white/30">power_off</span>
+                      <div className="text-[14px] text-white/70 font-medium">No hay conectores MCP configurados aún</div>
+                      <div className="text-[12px] text-white/40 max-w-sm">Conecta tus herramientas locales (STDIO) o servidores remotos (HTTP/SSE) para usarlos desde Ozy.</div>
+                      <button
+                        className="px-4 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors mt-2"
+                        onClick={() => setShowCustomConnectorModal(true)}
+                      >
+                        Agregar conector personalizado
                       </button>
                     </div>
-                  </div>
+                  ) : (
+                    connectors.map((c) => (
+                      <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
+                        <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
+                          <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
+                          <span>{c.name}</span>
+                        </div>
+                        <div className="col-span-4 flex items-center gap-2">
+                          <span className="text-white/70">{c.type}</span>
+                          <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] text-white/50 font-mono">{c.endpoint || "MCP Server"}</span>
+                        </div>
+                        <div className="col-span-3 flex items-center justify-between text-[#3b82f6]">
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[18px]">check</span>
+                            <span className="text-[12px] text-white/60">Conectado</span>
+                          </span>
+                          <button
+                            className="p-1 text-white/40 hover:text-red-400 transition-colors"
+                            onClick={async () => {
+                              await removeConnector(c.id);
+                              toast(`Conector ${c.name} eliminado`, "success");
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -1316,9 +1403,15 @@ export default function SettingsModal() {
                           >
                             Personalizar
                           </button>
-                          <span className="w-10 h-5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
-                            <span className="w-4 h-4 bg-white rounded-full" />
-                          </span>
+                          <button
+                            className={`w-10 h-5 rounded-full flex items-center px-0.5 shadow-sm transition-all cursor-pointer ${
+                              isSkillEnabled(selectedPluginDetail) ? "bg-[#3b82f6] justify-end" : "bg-white/20 justify-start"
+                            }`}
+                            onClick={() => toggleSkillEnabled(selectedPluginDetail)}
+                            title={isSkillEnabled(selectedPluginDetail) ? "Desactivar" : "Activar"}
+                          >
+                            <span className="w-4 h-4 bg-white rounded-full transition-transform" />
+                          </button>
                           <div className="relative">
                             <button
                               className="p-1 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
@@ -1773,7 +1866,7 @@ export default function SettingsModal() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-[18px] font-semibold">Subir habilidad</h3>
+              <h3 className="text-[18px] font-semibold">Subir habilidad o plugin (.zip, .yaml, .md)</h3>
               <button
                 className="p-1 text-white/40 hover:text-white rounded-lg transition-colors"
                 onClick={() => setShowUploadSkillModal(false)}
@@ -1785,47 +1878,11 @@ export default function SettingsModal() {
             <input
               type="file"
               ref={uploadFileInputRef}
-              accept=".yaml,.yml,.md,.json,.zip,.txt"
+              accept=".yaml,.yml,.md,.json,.zip,.txt,.skill"
               className="hidden"
-              onChange={async (e) => {
+              onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (!file) return;
-                try {
-                  const text = await file.text();
-                  let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
-                  let description = "Habilidad importada desde " + file.name;
-                  const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-                  if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
-                  const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-                  if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
-                  const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
-                  let version = "1.0.0";
-                  if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
-
-                  const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
-                  const id = await addSkill({
-                    id: "",
-                    name: skillName,
-                    description: description,
-                    triggerPattern: "/" + skillName,
-                    executionType: "prompt_template",
-                    config: { template: text, version, author: "Usuario" },
-                  });
-
-                  if (id) {
-                    toast(
-                      exists
-                        ? `Habilidad /${skillName} actualizada exitosamente`
-                        : `Habilidad /${skillName} subida e instalada exitosamente`,
-                      "success"
-                    );
-                    setShowUploadSkillModal(false);
-                  } else {
-                    toast("Error guardando la habilidad", "error");
-                  }
-                } catch {
-                  toast("Error leyendo el archivo de la habilidad", "error");
-                }
+                if (file) processUploadedSkillFile(file);
               }}
             />
 
@@ -1833,61 +1890,20 @@ export default function SettingsModal() {
               className="border-2 border-dashed border-white/15 hover:border-white/30 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer bg-[#1c1c1c] transition-all group"
               onClick={() => uploadFileInputRef.current?.click()}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={async (e) => {
+              onDrop={(e) => {
                 e.preventDefault();
                 const file = e.dataTransfer.files?.[0];
-                if (!file) return;
-                try {
-                  const text = await file.text();
-                  let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
-                  let description = "Habilidad arrastrada desde " + file.name;
-                  const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-                  if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
-                  const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-                  if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
-                  const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
-                  let version = "1.0.0";
-                  if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
-
-                  const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
-                  const id = await addSkill({
-                    id: "",
-                    name: skillName,
-                    description: description,
-                    triggerPattern: "/" + skillName,
-                    executionType: "prompt_template",
-                    config: { template: text, version, author: "Usuario" },
-                  });
-
-                  if (id) {
-                    toast(
-                      exists
-                        ? `Habilidad /${skillName} actualizada exitosamente`
-                        : `Habilidad /${skillName} subida e instalada exitosamente`,
-                      "success"
-                    );
-                    setShowUploadSkillModal(false);
-                  } else {
-                    toast("Error guardando la habilidad", "error");
-                  }
-                } catch {
-                  toast("Error leyendo el archivo arrastrado", "error");
-                }
+                if (file) processUploadedSkillFile(file);
               }}
             >
               <span className="material-symbols-outlined text-[40px] text-white/30 group-hover:text-white/60 transition-colors">
                 folder_zip
               </span>
               <span className="text-[13px] text-white/60 group-hover:text-white transition-colors">
-                Arrastra y suelta o haz clic para cargar
+                Arrastra y suelta o haz clic para cargar (.zip, .yaml, .md)
               </span>
             </div>
 
-            <div className="text-[12px] text-white/40 flex flex-col gap-1">
-              <span className="font-semibold text-white/60">Requisitos del archivo</span>
-              <span>• El archivo .md debe contener el nombre y la descripción de la habilidad formateados en YAML</span>
-              <span>• El archivo .zip o .skill debe incluir un archivo SKILL.md</span>
-            </div>
           </div>
         </div>
       )}
