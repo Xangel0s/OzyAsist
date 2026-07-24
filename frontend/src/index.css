@@ -156,63 +156,88 @@
 
 /* Light Mode Styles */
 html.light,
-html.light body {
+html.light body,
+html.light #root {
   background-color: #f4f5f7 !important;
   color: #111827 !important;
+  color-scheme: light;
 }
 
-html.light .bg-\[\#1a1a1a\],
-html.light .bg-\[\#161616\],
-html.light .bg-\[\#1e1e1e\],
-html.light .bg-\[\#131313\] {
+/* Primary surface backgrounds (modals, main areas, sidebars) */
+html.light [class*="bg-[#1a1a1a]"],
+html.light [class*="bg-[#161616]"],
+html.light [class*="bg-[#1e1e1e]"],
+html.light [class*="bg-[#131313]"],
+html.light [class*="bg-[#201f1f]"],
+html.light [class*="bg-[#141414]"],
+html.light .bg-background,
+html.light .bg-surface,
+html.light .bg-surface-dim,
+html.light .bg-surface-container {
   background-color: #ffffff !important;
   color: #111827 !important;
 }
 
-html.light .bg-\[\#242424\],
-html.light .bg-\[\#262626\],
-html.light .bg-\[\#2a2a2a\] {
+/* Secondary surface backgrounds (inputs, search, cards, dropdowns) */
+html.light [class*="bg-[#242424]"],
+html.light [class*="bg-[#262626]"],
+html.light [class*="bg-[#2a2a2a]"],
+html.light [class*="bg-[#1c1b1b]"],
+html.light [class*="bg-[#222222]"],
+html.light .bg-surface-container-low,
+html.light .bg-surface-container-high,
+html.light .bg-surface-elevated {
   background-color: #f3f4f6 !important;
   color: #1f2937 !important;
 }
 
-html.light .border-white\/10,
-html.light .border-white\/5,
-html.light .border-white\/15,
-html.light .border-white\/20 {
-  border-color: rgba(0, 0, 0, 0.1) !important;
-}
-
-html.light .text-white {
+/* Text color overrides */
+html.light [class*="text-white"],
+html.light .text-on-surface {
   color: #111827 !important;
 }
 
-html.light .text-white\/90 {
+html.light [class*="text-white/90"] {
   color: #1f2937 !important;
 }
 
-html.light .text-white\/70,
-html.light .text-white\/60,
-html.light .text-white\/50,
-html.light .text-white\/40,
-html.light .text-white\/30 {
+html.light [class*="text-white/80"],
+html.light [class*="text-white/70"],
+html.light [class*="text-white/60"],
+html.light [class*="text-white/50"],
+html.light [class*="text-white/40"],
+html.light [class*="text-white/30"] {
   color: #6b7280 !important;
 }
 
-html.light .hover\:bg-white\/5:hover,
-html.light .hover\:bg-white\/10:hover,
-html.light .hover\:bg-white\/15:hover {
+/* Borders */
+html.light [class*="border-white/10"],
+html.light [class*="border-white/5"],
+html.light [class*="border-white/15"],
+html.light [class*="border-white/20"],
+html.light [class*="border-white/30"] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Hover effects */
+html.light [class*="hover:bg-white/5"]:hover,
+html.light [class*="hover:bg-white/10"]:hover,
+html.light [class*="hover:bg-white/15"]:hover {
   background-color: rgba(0, 0, 0, 0.06) !important;
 }
 
+/* Inputs, Textareas, Selects */
 html.light input,
 html.light textarea,
 html.light select {
+  background-color: #f3f4f6 !important;
   color: #111827 !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
 }
 
 html.light input::placeholder,
 html.light textarea::placeholder {
   color: #9ca3af !important;
 }
+
 
