@@ -22,23 +22,48 @@ class WsClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private shouldReconnect = false;
 
+  private statusListeners: Array<(connected: boolean) => void> = [];
+
+  subscribeStatus(listener: (connected: boolean) => void): () => void {
+    this.statusListeners.push(listener);
+    listener(this.isConnected());
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifyStatus(connected: boolean) {
+    this.statusListeners.forEach((l) => l(connected));
+  }
+
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.ws?.readyState === WebSocket.OPEN) {
+        this.notifyStatus(true);
         resolve();
         return;
       }
       if (this.ws?.readyState === WebSocket.CONNECTING) {
-        this.ws.onopen = () => resolve();
-        this.ws.onerror = () => reject(new Error("WS connection failed"));
+        this.ws.onopen = () => {
+          this.notifyStatus(true);
+          resolve();
+        };
+        this.ws.onerror = () => {
+          this.notifyStatus(false);
+          reject(new Error("WS connection failed"));
+        };
         return;
       }
 
       this.shouldReconnect = true;
       this.ws = new WebSocket(WS_URL);
 
-      this.ws.onopen = () => resolve();
+      this.ws.onopen = () => {
+        this.notifyStatus(true);
+        resolve();
+      };
       this.ws.onclose = () => {
+        this.notifyStatus(false);
         if (this.session) {
           this.session.callbacks.onError("Conexión perdida");
           this.session = null;
@@ -47,7 +72,10 @@ class WsClient {
           this.scheduleReconnect();
         }
       };
-      this.ws.onerror = () => reject(new Error("WS connection failed"));
+      this.ws.onerror = () => {
+        this.notifyStatus(false);
+        reject(new Error("WS connection failed"));
+      };
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);

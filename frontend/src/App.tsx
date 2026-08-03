@@ -7,6 +7,7 @@ import Sidebar from "./components/Layout/Sidebar";
 import HomePage from "./components/Home/HomePage";
 import CodePage from "./components/Code/CodePage";
 import ChatPage from "./components/Chat/ChatPage";
+import ChatsTasksPage from "./components/Chat/ChatsTasksPage";
 import ProjectsPage from "./components/ProjectPanel/ProjectsPage";
 import SkillsPage from "./components/Skills/SkillsPage";
 import ConnectorsPage from "./components/Connectors/ConnectorsPage";
@@ -22,6 +23,7 @@ const pageMap: Record<string, React.ComponentType> = {
   home: HomePage,
   code: CodePage,
   chat: ChatPage,
+  chats: ChatsTasksPage,
   projects: ProjectsPage,
   skills: SkillsPage,
   connectors: ConnectorsPage,

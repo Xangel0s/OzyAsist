@@ -5,6 +5,7 @@ export type View =
   | "home"
   | "code"
   | "chat"
+  | "chats"
   | "projects"
   | "skills"
   | "connectors"

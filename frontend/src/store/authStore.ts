@@ -5,6 +5,7 @@ import { api } from "../services/api";
 export interface User {
   id: string;
   name: string;
+  email?: string;
   initials: string;
   role: string;
   plan: "free" | "pro";

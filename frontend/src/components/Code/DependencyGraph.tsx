@@ -59,14 +59,15 @@ function buildGraph(edges: GraphEdge[]) {
         isEntry: data.importedBy.size === 0 && data.imports.size > 0,
       },
       style: {
-        background: "#2a2a2a",
-        border: "1px solid rgba(200,230,74,0.3)",
+        background: "#222222",
+        border: "1px solid rgba(209,241,7,0.35)",
         borderRadius: "8px",
         padding: "10px 14px",
         fontSize: "12px",
-        color: "#fff",
+        color: "#ffffff",
         width: 180,
         fontWeight: 500,
+        boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
       },
     });
   });
@@ -78,10 +79,10 @@ function buildGraph(edges: GraphEdge[]) {
       source: edge.from_symbol,
       target: edge.to_symbol,
       animated: edge.edge_type === "import",
-      style: { stroke: "rgba(200,230,74,0.4)", strokeWidth: 2 },
+      style: { stroke: "rgba(209,241,7,0.5)", strokeWidth: 2 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: "rgba(200,230,74,0.5)",
+        color: "rgba(209,241,7,0.6)",
         width: 16,
         height: 16,
       },
@@ -112,7 +113,7 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
   );
 
   return (
-    <div className="w-full h-full bg-[#1a1a1a] rounded-xl overflow-hidden">
+    <div className="w-full h-full bg-[#181818] rounded-xl overflow-hidden relative">
       <ReactFlow
         nodes={nodes}
         edges={edgeState}
@@ -122,18 +123,18 @@ export default function DependencyGraph({ edges, onNodeClick }: DependencyGraphP
         fitView
         fitViewOptions={{ padding: 0.2 }}
         defaultEdgeOptions={{
-          style: { stroke: "rgba(200,230,74,0.4)", strokeWidth: 2 },
+          style: { stroke: "rgba(209,241,7,0.5)", strokeWidth: 2 },
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background color="rgba(200,230,74,0.03)" gap={20} />
+        <Background color="rgba(209,241,7,0.06)" gap={20} />
         <Controls
-          style={{ background: "#1e1e1e", borderColor: "rgba(255,255,255,0.1)" }}
+          style={{ background: "#222222", borderColor: "rgba(255,255,255,0.1)", borderRadius: "8px" }}
         />
         <MiniMap
-          nodeColor="#2a2a2a"
-          maskColor="rgba(0,0,0,0.5)"
-          style={{ background: "#1a1a1a", border: "1px solid rgba(255,255,255,0.1)" }}
+          nodeColor="#d1f107"
+          maskColor="rgba(0,0,0,0.6)"
+          style={{ background: "#141414", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px" }}
         />
       </ReactFlow>
     </div>

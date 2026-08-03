@@ -7,9 +7,10 @@ export function useKeyboard(
 ) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const mod =
-        (!modifiers?.meta || e.metaKey) && (!modifiers?.ctrl || e.ctrlKey);
-      if (mod && e.key.toLowerCase() === key.toLowerCase()) {
+      const requiresMod = modifiers?.meta || modifiers?.ctrl;
+      const hasMod = e.metaKey || e.ctrlKey;
+      const modMatch = requiresMod ? hasMod : true;
+      if (modMatch && e.key.toLowerCase() === key.toLowerCase()) {
         e.preventDefault();
         handler();
       }

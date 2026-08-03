@@ -46,8 +46,10 @@ interface ChatState {
   dismissConsent: () => void;
   regenerateMessage: (chatId: string) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
+  clearChatMessages: (chatId: string) => void;
   updateChatProvider: (chatId: string, provider: string, model: string) => void;
   setDefaultModel: (model: string, provider: string) => void;
+  cancelResponse: () => void;
   loadProviders: () => Promise<void>;
 }
 
@@ -127,10 +129,11 @@ export const useChatStore = create<ChatState>()(
   },
 
   createChat: async (mode, projectId?, provider?, model?) => {
+    const { defaultProvider, defaultModel } = get();
+    const targetProvider = provider || defaultProvider;
+    const targetModel = model || defaultModel;
+
     try {
-      const { defaultProvider, defaultModel } = get();
-      const targetProvider = provider || defaultProvider;
-      const targetModel = model || defaultModel;
       const dto = await api.chats.create({
         title: "Nuevo chat",
         mode,
@@ -141,6 +144,7 @@ export const useChatStore = create<ChatState>()(
       const chat: Chat = {
         id: dto.id,
         title: dto.name || "Nuevo chat",
+        projectId: projectId || dto.projectId,
         mode: mode,
         provider: dto.provider || targetProvider,
         model: dto.model || targetModel,
@@ -151,19 +155,33 @@ export const useChatStore = create<ChatState>()(
       set((s) => ({ chats: [chat, ...s.chats], activeChatId: chat.id }));
       return chat.id;
     } catch {
-      return null;
+      // Local fallback for offline mode
+      const localId = "local-" + Date.now();
+      const chat: Chat = {
+        id: localId,
+        title: "Nuevo chat",
+        projectId: projectId,
+        mode: mode,
+        provider: targetProvider,
+        model: targetModel,
+        messages: [],
+        createdAt: new Date().toISOString(),
+        _messagesLoaded: true,
+      };
+      set((s) => ({ chats: [chat, ...s.chats], activeChatId: localId }));
+      return localId;
     }
   },
 
   deleteChat: async (chatId) => {
+    set((s) => ({
+      chats: s.chats.filter((c) => c.id !== chatId),
+      activeChatId: s.activeChatId === chatId ? null : s.activeChatId,
+    }));
     try {
       await api.chats.delete(chatId);
-      set((s) => ({
-        chats: s.chats.filter((c) => c.id !== chatId),
-        activeChatId: s.activeChatId === chatId ? null : s.activeChatId,
-      }));
     } catch {
-      // ignore
+      // Backend error or offline — local state updated optimistically
     }
   },
 
@@ -390,6 +408,16 @@ export const useChatStore = create<ChatState>()(
     set({ consentPending: null, isResponding: false });
   },
 
+  cancelResponse: () => {
+    const { activeChatId, consentPending } = get();
+    const targetChatId = consentPending?.chatId || activeChatId;
+    if (targetChatId) {
+      wsClient.cancelStream(targetChatId);
+    }
+    set({ isResponding: false, consentPending: null });
+    useToastStore.getState().show("Respuesta cancelada", "info");
+  },
+
   updateChatProvider: (chatId, provider, model) =>
     set((s) => ({
       chats: s.chats.map((c) =>
@@ -446,6 +474,12 @@ export const useChatStore = create<ChatState>()(
       }));
     } catch {
     }
+  },
+
+  clearChatMessages: (chatId: string) => {
+    set((s) => ({
+      chats: s.chats.map((c) => (c.id === chatId ? { ...c, messages: [] } : c)),
+    }));
   },
 }),
     {

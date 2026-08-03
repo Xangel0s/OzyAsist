@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
-import JSZip from "jszip";
 import { useUIStore } from "../../store/uiStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { useToastStore } from "../../store/toastStore";
 import { useSkillsStore } from "../../store/skillsStore";
 import { useConnectorsStore } from "../../store/connectorsStore";
+import AddConnectorModal from "./modals/AddConnectorModal";
+import UploadSkillModal from "./modals/UploadSkillModal";
+import WriteSkillModal from "./modals/WriteSkillModal";
+import MarketplaceModal from "./modals/MarketplaceModal";
 
 interface CategoryGroup {
   title: string;
@@ -79,12 +82,9 @@ export default function SettingsModal() {
   const [ollamaUrl, setOllamaUrl] = useState(() => localStorage.getItem("ollama_url") || "http://localhost:11434");
   const [testingConnection, setTestingConnection] = useState(false);
   const skills = useSkillsStore((s) => s.skills);
-  const addSkill = useSkillsStore((s) => s.addSkill);
   const removeSkill = useSkillsStore((s) => s.removeSkill);
   const connectors = useConnectorsStore((s) => s.connectors);
-  const addConnector = useConnectorsStore((s) => s.addConnector);
   const removeConnector = useConnectorsStore((s) => s.removeConnector);
-  const uploadFileInputRef = useRef<HTMLInputElement>(null);
 
   const [skillTab, setSkillTab] = useState("Todo");
   const [connectorTab, setConnectorTab] = useState("Todo");
@@ -97,6 +97,7 @@ export default function SettingsModal() {
   const [showUploadSkillModal, setShowUploadSkillModal] = useState(false);
   const [showWriteSkillModal, setShowWriteSkillModal] = useState(false);
   const [showMarketplaceModal, setShowMarketplaceModal] = useState(false);
+  const [editingSkillCode, setEditingSkillCode] = useState("");
 
   // Skill Detail view state
   const [selectedSkillDetail, setSelectedSkillDetail] = useState<{
@@ -116,17 +117,6 @@ export default function SettingsModal() {
   const [selectedPluginDetail, setSelectedPluginDetail] = useState<string | null>(null);
   const [pluginDetailTab, setPluginDetailTab] = useState<"habilidades" | "conectores">("habilidades");
 
-  // Custom Connector form states
-  const [connName, setConnName] = useState("");
-  const [connTransport, setConnTransport] = useState<"http" | "stdio">("http");
-  const [connUrl, setConnUrl] = useState("");
-  const [connCmd, setConnCmd] = useState("");
-  const [connArgs, setConnArgs] = useState("");
-  const [connEnv, setConnEnv] = useState("");
-  const [connOauthId, setConnOauthId] = useState("");
-  const [connOauthSecret, setConnOauthSecret] = useState("");
-  const [showAdvancedConn, setShowAdvancedConn] = useState(false);
-
   // Connector Role Dropdown state
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
   const [connectorsRoleFilter, setConnectorsRoleFilter] = useState("Software Engineer");
@@ -141,90 +131,6 @@ export default function SettingsModal() {
     const nextState = disabledSkillsMap[name] === true;
     toast(`Habilidad /${name} ${nextState ? "activada" : "desactivada"}`, "info");
   };
-
-  const processUploadedSkillFile = async (file: File) => {
-    try {
-      let skillName = file.name.replace(/\.[^/.]+$/, "").toLowerCase().replace(/\s+/g, "-");
-      let description = "Habilidad importada desde " + file.name;
-      let version = "1.0.0";
-      let author = "Usuario";
-      let text = "";
-
-      if (file.name.endsWith(".zip")) {
-        const zip = await JSZip.loadAsync(file);
-        author = "Paquete ZIP (Claude Desktop)";
-        const pluginJsonFile = zip.file("plugin.json") || Object.values(zip.files).find((f) => f.name.endsWith("plugin.json"));
-        const skillMdFile = zip.file("SKILL.md") || Object.values(zip.files).find((f) => f.name.endsWith("SKILL.md"));
-        const yamlFile = Object.values(zip.files).find((f) => f.name.endsWith(".yaml") || f.name.endsWith(".yml"));
-
-        if (pluginJsonFile) {
-          const jsonText = await pluginJsonFile.async("text");
-          try {
-            const parsed = JSON.parse(jsonText);
-            if (parsed.name) skillName = parsed.name.toLowerCase().replace(/\s+/g, "-");
-            if (parsed.description) description = parsed.description;
-            if (parsed.version) version = parsed.version;
-            if (parsed.author) author = parsed.author;
-            text = jsonText;
-          } catch { /* ignore */ }
-        } else if (skillMdFile) {
-          text = await skillMdFile.async("text");
-          const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-          if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
-          const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-          if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
-        } else if (yamlFile) {
-          text = await yamlFile.async("text");
-          const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-          if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
-          const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-          if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
-          const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
-          if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
-        } else {
-          const textFiles = Object.values(zip.files).filter((f) => !f.dir);
-          for (const tf of textFiles) {
-            text += `\n--- ${tf.name} ---\n` + (await tf.async("text"));
-          }
-        }
-      } else {
-        text = await file.text();
-        const nameMatch = text.match(/name:\s*([^\n\r]+)/i);
-        if (nameMatch) skillName = nameMatch[1].trim().replace(/^['"]|['"]$/g, "").toLowerCase().replace(/\s+/g, "-");
-        const descMatch = text.match(/description:\s*([^\n\r]+)/i);
-        if (descMatch) description = descMatch[1].trim().replace(/^['"]|['"]$/g, "");
-        const versionMatch = text.match(/version:\s*([^\n\r]+)/i);
-        if (versionMatch) version = versionMatch[1].trim().replace(/^['"]|['"]$/g, "");
-      }
-
-      const exists = skills.some((s) => s.name.toLowerCase() === skillName.toLowerCase());
-      const id = await addSkill({
-        id: "",
-        name: skillName,
-        description: description,
-        triggerPattern: "/" + skillName,
-        executionType: "prompt_template",
-        config: { template: text, version, author },
-      });
-
-      if (id) {
-        toast(
-          exists
-            ? `Habilidad/Plugin /${skillName} actualizado exitosamente`
-            : `Habilidad/Plugin /${skillName} instalado exitosamente`,
-          "success"
-        );
-        setShowUploadSkillModal(false);
-      } else {
-        toast("Error guardando la habilidad", "error");
-      }
-    } catch {
-      toast("Error procesando el paquete de la habilidad", "error");
-    }
-  };
-
-  // Inline Skill Editor state
-  const [customSkillCode, setCustomSkillCode] = useState(`name: mi-habilidad\ndescription: Descripción de la habilidad personalizada\n---\n# Instrucciones de la habilidad\n- Paso 1...`);
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -315,12 +221,12 @@ export default function SettingsModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fadeIn"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 transition-opacity"
       onClick={() => setSettingsOpen(false)}
     >
       <div
         ref={modalRef}
-        className="w-full max-w-4xl h-[640px] bg-[#1e1e1e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex text-white text-[14px]"
+        className="w-full max-w-4xl h-[640px] bg-[#1e1e1e] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex text-white text-[14px] transform-gpu"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Left Sidebar Category Navigation */}
@@ -875,7 +781,7 @@ export default function SettingsModal() {
                         <button
                           className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
                           onClick={() => {
-                            setCustomSkillCode(
+                            setEditingSkillCode(
                               selectedSkillDetail.template ||
                               `name: ${selectedSkillDetail.name}\ndescription: ${selectedSkillDetail.description}\n---\n# Instrucciones`
                             );
@@ -1380,12 +1286,12 @@ export default function SettingsModal() {
                             className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium rounded-lg transition-colors"
                             onClick={() => {
                               if (customPluginObj) {
-                                setCustomSkillCode(
+                                setEditingSkillCode(
                                   customPluginObj.config?.template ||
                                   `name: ${customPluginObj.name}\ndescription: ${customPluginObj.description}\n---\n# Instrucciones`
                                 );
                               } else {
-                                setCustomSkillCode(`name: ${selectedPluginDetail}\ndescription: Plugin personalizado\n---\n# Instrucciones`);
+                                setEditingSkillCode(`name: ${selectedPluginDetail}\ndescription: Plugin personalizado\n---\n# Instrucciones`);
                               }
                               setShowWriteSkillModal(true);
                             }}
@@ -1666,396 +1572,23 @@ export default function SettingsModal() {
         </div>
       </div>
 
-      {/* MODAL 1: Agregar conector personalizado */}
-      {showCustomConnectorModal && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
-          onClick={() => setShowCustomConnectorModal(false)}
-        >
-          <div
-            className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-[18px] font-semibold">Agregar conector personalizado</h3>
-              <button
-                className="p-1 text-white/40 hover:text-white rounded-lg transition-colors"
-                onClick={() => setShowCustomConnectorModal(false)}
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <div className="text-[13px] text-white/60 leading-relaxed">
-              Conecta Ozy a tus datos y herramientas mediante servidores MCP remotos (HTTP/SSE) o comandos locales (STDIO).
-            </div>
-
-            {/* Transport Mode Switcher */}
-            <div className="flex items-center gap-2 bg-[#1c1c1c] p-1 rounded-xl border border-white/10 text-[13px]">
-              <button
-                className={`flex-1 py-1.5 rounded-lg font-medium transition-all ${
-                  connTransport === "http" ? "bg-white/15 text-white shadow-sm" : "text-white/50 hover:text-white"
-                }`}
-                onClick={() => setConnTransport("http")}
-              >
-                HTTP / SSE
-              </button>
-              <button
-                className={`flex-1 py-1.5 rounded-lg font-medium transition-all ${
-                  connTransport === "stdio" ? "bg-white/15 text-white shadow-sm" : "text-white/50 hover:text-white"
-                }`}
-                onClick={() => setConnTransport("stdio")}
-              >
-                STDIO (Comando Local)
-              </button>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder="Nombre del conector (ej. sqlite-mcp)"
-                value={connName}
-                onChange={(e) => setConnName(e.target.value)}
-                className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30 transition-all"
-              />
-
-              {connTransport === "http" ? (
-                <input
-                  type="text"
-                  placeholder="URL del servidor MCP remoto (ej. http://localhost:8000/sse)"
-                  value={connUrl}
-                  onChange={(e) => setConnUrl(e.target.value)}
-                  className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30 transition-all font-mono"
-                />
-              ) : (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Comando ejecutable (ej. npx, python, node, uvx)"
-                    value={connCmd}
-                    onChange={(e) => setConnCmd(e.target.value)}
-                    className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30 transition-all font-mono"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Argumentos (ej. -y @modelcontextprotocol/server-sqlite C:/db.sqlite)"
-                    value={connArgs}
-                    onChange={(e) => setConnArgs(e.target.value)}
-                    className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2.5 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30 transition-all font-mono"
-                  />
-                </>
-              )}
-
-              {/* Collapsible Advanced Config */}
-              <div className="flex flex-col gap-2 pt-1">
-                <button
-                  className="flex items-center gap-1 text-[13px] font-medium text-white/70 hover:text-white"
-                  onClick={() => setShowAdvancedConn(!showAdvancedConn)}
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {showAdvancedConn ? "expand_less" : "expand_more"}
-                  </span>
-                  <span>Configuración avanzada</span>
-                </button>
-                {showAdvancedConn && (
-                  <div className="flex flex-col gap-2.5 pl-2 pt-1">
-                    {connTransport === "http" ? (
-                      <>
-                        <input
-                          type="text"
-                          placeholder="OAuth Client ID (opcional)"
-                          value={connOauthId}
-                          onChange={(e) => setConnOauthId(e.target.value)}
-                          className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30"
-                        />
-                        <input
-                          type="password"
-                          placeholder="Secreto del cliente OAuth (opcional)"
-                          value={connOauthSecret}
-                          onChange={(e) => setConnOauthSecret(e.target.value)}
-                          className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30"
-                        />
-                      </>
-                    ) : (
-                      <input
-                        type="text"
-                        placeholder="Variables de entorno (ej. API_KEY=secret DB_PATH=/var/db)"
-                        value={connEnv}
-                        onChange={(e) => setConnEnv(e.target.value)}
-                        className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl px-4 py-2 text-[13px] text-white placeholder:text-white/30 outline-none focus:border-white/30 font-mono"
-                      />
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="text-[11px] text-white/40 leading-relaxed pt-1">
-              Solo usa conectores de desarrolladores en los que confíes. Ozy no controla qué herramientas ponen a disposición los desarrolladores.
-            </div>
-
-            <div className="flex justify-end gap-2.5 pt-2">
-              <button
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-xl transition-colors"
-                onClick={() => setShowCustomConnectorModal(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                className="px-5 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors"
-                onClick={async () => {
-                  const nameToSave = connName.trim() || "mcp-connector-" + Date.now().toString().slice(-4);
-                  let endpointToSave = "";
-                  if (connTransport === "stdio") {
-                    const cmdStr = connCmd.trim() || "npx";
-                    const argsStr = connArgs.trim();
-                    endpointToSave = argsStr ? `${cmdStr} ${argsStr}` : cmdStr;
-                  } else {
-                    endpointToSave = connUrl.trim() || "http://localhost:9000/mcp";
-                  }
-
-                  const id = await addConnector({
-                    id: "",
-                    name: nameToSave,
-                    type: "mcp",
-                    endpoint: endpointToSave,
-                    authConfig: { clientId: connOauthId, secret: connOauthSecret, env: connEnv },
-                    status: "connected",
-                  });
-                  if (id) {
-                    toast(`Conector MCP "${nameToSave}" (${connTransport.toUpperCase()}) agregado exitosamente`, "success");
-                    setConnName("");
-                    setConnUrl("");
-                    setConnCmd("");
-                    setConnArgs("");
-                    setConnEnv("");
-                    setConnOauthId("");
-                    setConnOauthSecret("");
-                    setShowCustomConnectorModal(false);
-                  } else {
-                    toast("Error al agregar el conector", "error");
-                  }
-                }}
-              >
-                Agregar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: Subir habilidad */}
-      {showUploadSkillModal && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
-          onClick={() => setShowUploadSkillModal(false)}
-        >
-          <div
-            className="w-full max-w-lg bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-[18px] font-semibold">Subir habilidad o plugin (.zip, .yaml, .md)</h3>
-              <button
-                className="p-1 text-white/40 hover:text-white rounded-lg transition-colors"
-                onClick={() => setShowUploadSkillModal(false)}
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <input
-              type="file"
-              ref={uploadFileInputRef}
-              accept=".yaml,.yml,.md,.json,.zip,.txt,.skill"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) processUploadedSkillFile(file);
-              }}
-            />
-
-            <div
-              className="border-2 border-dashed border-white/15 hover:border-white/30 rounded-2xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer bg-[#1c1c1c] transition-all group"
-              onClick={() => uploadFileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                const file = e.dataTransfer.files?.[0];
-                if (file) processUploadedSkillFile(file);
-              }}
-            >
-              <span className="material-symbols-outlined text-[40px] text-white/30 group-hover:text-white/60 transition-colors">
-                folder_zip
-              </span>
-              <span className="text-[13px] text-white/60 group-hover:text-white transition-colors">
-                Arrastra y suelta o haz clic para cargar (.zip, .yaml, .md)
-              </span>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: Escribe las instrucciones de la habilidad */}
-      {showWriteSkillModal && (
-        <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
-          onClick={() => setShowWriteSkillModal(false)}
-        >
-          <div
-            className="w-full max-w-2xl bg-[#242424] border border-white/10 rounded-2xl p-6 flex flex-col gap-4 shadow-2xl text-white animate-fadeIn relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-[18px] font-semibold">Escribir instrucciones de la habilidad (SKILL.md)</h3>
-              <button
-                className="p-1 text-white/40 hover:text-white rounded-lg transition-colors"
-                onClick={() => setShowWriteSkillModal(false)}
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <textarea
-              className="w-full bg-[#1c1c1c] border border-white/10 rounded-xl p-4 text-[13px] font-mono text-white placeholder:text-white/30 outline-none focus:border-white/30 h-64 resize-none"
-              value={customSkillCode}
-              onChange={(e) => setCustomSkillCode(e.target.value)}
-            />
-
-            <div className="flex justify-end gap-2.5">
-              <button
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-xl transition-colors"
-                onClick={() => setShowWriteSkillModal(false)}
-              >
-                Cancelar
-              </button>
-              <button
-                className="px-5 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors"
-                onClick={async () => {
-                  if (!customSkillCode.trim()) {
-                    toast("Ingresa las instrucciones de la habilidad", "error");
-                    return;
-                  }
-                  let skillName = "custom-skill-" + Date.now().toString().slice(-4);
-                  let description = "Habilidad personalizada redactada en editor";
-                  const nameMatch = customSkillCode.match(/name:\s*([^\n\r]+)/i);
-                  if (nameMatch) skillName = nameMatch[1].trim().toLowerCase().replace(/\s+/g, "-");
-                  const descMatch = customSkillCode.match(/description:\s*([^\n\r]+)/i);
-                  if (descMatch) description = descMatch[1].trim();
-
-                  const id = await addSkill({
-                    id: "",
-                    name: skillName,
-                    description: description,
-                    triggerPattern: "/" + skillName,
-                    executionType: "prompt_template",
-                    config: { template: customSkillCode },
-                  });
-
-                  if (id) {
-                    toast(`Habilidad /${skillName} guardada e instalada`, "success");
-                    setCustomSkillCode("");
-                    setShowWriteSkillModal(false);
-                  } else {
-                    toast("Error guardando la habilidad", "error");
-                  }
-                }}
-              >
-                Guardar e Instalar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 4: Directorio Marketplace */}
-      {showMarketplaceModal && (
-        <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-md z-[10000] flex items-center justify-center p-6"
-          onClick={() => setShowMarketplaceModal(false)}
-        >
-          <div
-            className="w-full max-w-4xl h-[85vh] bg-[#222222] border border-white/10 rounded-3xl flex overflow-hidden shadow-2xl text-white animate-fadeIn relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Left Sidebar */}
-            <div className="w-56 bg-[#1a1a1a] border-r border-white/10 p-5 flex flex-col gap-6">
-              <h2 className="text-[20px] font-sans font-bold text-white">Directorio</h2>
-
-              <div className="flex flex-col gap-1 text-[13px]">
-                <button className="flex items-center gap-2.5 px-3 py-2 text-white/50 hover:text-white rounded-xl hover:bg-white/5 transition-colors text-left font-medium">
-                  <span className="material-symbols-outlined text-[18px]">handyman</span>
-                  <span>Habilidades</span>
-                </button>
-                <button className="flex items-center gap-2.5 px-3 py-2 bg-white/10 text-white rounded-xl font-medium text-left">
-                  <span className="material-symbols-outlined text-[18px]">power</span>
-                  <span>Conectores</span>
-                </button>
-                <button className="flex items-center gap-2.5 px-3 py-2 text-white/50 hover:text-white rounded-xl hover:bg-white/5 transition-colors text-left font-medium">
-                  <span className="material-symbols-outlined text-[18px]">extension</span>
-                  <span>Plugins</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Right Main Grid */}
-            <div className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <div className="relative flex-1 max-w-md">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-white/40">
-                    search
-                  </span>
-                  <input
-                    type="text"
-                    placeholder="Buscar conectores..."
-                    className="w-full bg-[#1a1a1a] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-[13px] text-white placeholder:text-white/40 outline-none focus:border-white/30"
-                  />
-                </div>
-
-                <button
-                  className="p-1 text-white/40 hover:text-white rounded-lg transition-colors"
-                  onClick={() => setShowMarketplaceModal(false)}
-                >
-                  <span className="material-symbols-outlined text-[20px]">close</span>
-                </button>
-              </div>
-
-              {/* Grid of MCP Cards */}
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { name: "OilPriceAPI", desc: "Real-time oil, gas & commodity prices. 26 tools." },
-                  { name: "Saga — Project Tracker", desc: "A Jira-like project tracker MCP server for AI agents." },
-                  { name: "Website Auditor", desc: "AI visibility + site audits for websites." },
-                  { name: "OpenReplay MCP", desc: "View OpenReplay sessions, charts and replays." },
-                  { name: "Redacta", desc: "Pseudonymise patient identifiers and PII in text." },
-                  { name: "Ultipa", desc: "Manage Ultipa Cloud instances and run GQL graph queries." },
-                  { name: "Perseus Vault", desc: "Persistent, deterministic memory for AI agents." },
-                  { name: "Kiteworks MCP Server", desc: "Securely connect AI assistants to Kiteworks." },
-                  { name: "Baremetrics", desc: "Read-only access to Baremetrics SaaS analytics." },
-                  { name: "Celayix", desc: "Query Celayix workforce management data." },
-                ].map((card) => (
-                  <div key={card.name} className="bg-[#1a1a1a] border border-white/10 hover:border-white/20 rounded-2xl p-4 flex flex-col justify-between gap-3 transition-all">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="font-semibold text-[14px] text-white">{card.name}</div>
-                      <button
-                        className="p-1 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
-                        onClick={() => {
-                          useToastStore.getState().show(`Conector ${card.name} instalado`, "success");
-                          setShowMarketplaceModal(false);
-                        }}
-                      >
-                        <span className="material-symbols-outlined text-[18px]">add</span>
-                      </button>
-                    </div>
-                    <div className="text-[12px] text-white/50 leading-snug line-clamp-2">{card.desc}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddConnectorModal
+        isOpen={showCustomConnectorModal}
+        onClose={() => setShowCustomConnectorModal(false)}
+      />
+      <UploadSkillModal
+        isOpen={showUploadSkillModal}
+        onClose={() => setShowUploadSkillModal(false)}
+      />
+      <WriteSkillModal
+        isOpen={showWriteSkillModal}
+        onClose={() => setShowWriteSkillModal(false)}
+        initialCode={editingSkillCode}
+      />
+      <MarketplaceModal
+        isOpen={showMarketplaceModal}
+        onClose={() => setShowMarketplaceModal(false)}
+      />
     </div>
   );
 }

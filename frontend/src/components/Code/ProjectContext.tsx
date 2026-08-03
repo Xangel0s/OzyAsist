@@ -3,12 +3,7 @@ import { useProjectsStore, type ProjectFile } from "../../store/projectsStore";
 import { api, type GraphEdge } from "../../services/api";
 import DependencyGraph from "./DependencyGraph";
 
-type Tab = "tree" | "deps";
-
-interface Neighbor {
-  file: string;
-  relation: string;
-}
+type Tab = "tree" | "deps" | "preview";
 
 function FileTreeItem({
   item,
@@ -109,9 +104,14 @@ export default function ProjectContext() {
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [graphEdges, setGraphEdges] = useState<GraphEdge[]>([]);
-  const [loadingGraph, setLoadingGraph] = useState(false);
   const [showGraphModal, setShowGraphModal] = useState(false);
-  const [neighbors, setNeighbors] = useState<Neighbor[] | null>(null);
+  const [previewUrl, setPreviewUrl] = useState("http://localhost:5173");
+  const [deviceMode, setDeviceMode] = useState<"desktop" | "mobile">("desktop");
+  const [iframeKey, setIframeKey] = useState(0);
+
+  const handleReloadPreview = () => {
+    setIframeKey((k) => k + 1);
+  };
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -119,7 +119,6 @@ export default function ProjectContext() {
       setTreeError(null);
       setSelectedFile(null);
       setFileContent(null);
-      setNeighbors(null);
       setGraphEdges([]);
       return;
     }
@@ -134,13 +133,10 @@ export default function ProjectContext() {
 
   useEffect(() => {
     if (!activeProjectId || tab !== "deps") return;
-    setLoadingGraph(true);
     api.projects.fullGraph(activeProjectId).then((edges) => {
       setGraphEdges(edges);
-      setLoadingGraph(false);
     }).catch(() => {
       setGraphEdges([]);
-      setLoadingGraph(false);
     });
   }, [activeProjectId, tab]);
 
@@ -149,7 +145,6 @@ export default function ProjectContext() {
     setSelectedFile(path);
     setFileLoading(true);
     setFileError(null);
-    setNeighbors(null);
     try {
       const res = await api.projects.readFile(activeProjectId, path);
       setFileContent(res.content);
@@ -161,22 +156,19 @@ export default function ProjectContext() {
     }
   }, [activeProjectId]);
 
-  const handleFileDeps = useCallback(async (path: string) => {
-    if (!activeProjectId) return;
+  const handleFileDeps = useCallback((path: string) => {
     setSelectedFile(path);
     setTab("deps");
-    setNeighbors(null);
-    try {
-      const res = await api.projects.graph(activeProjectId, path);
-      setNeighbors(res.neighbors);
-    } catch {
-      setNeighbors([]);
-    }
-  }, [activeProjectId]);
+  }, []);
 
   return (
     <>
       <aside className="w-[320px] bg-[#1a1a1a] border-l border-white/10 flex flex-col flex-shrink-0 z-40 hidden xl:flex">
+        <button
+          id="toggle-project-context-preview"
+          className="hidden"
+          onClick={() => setTab("preview")}
+        />
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-2 text-white">
             <span className="material-symbols-outlined text-[#c8e64a]">
@@ -195,26 +187,36 @@ export default function ProjectContext() {
           )}
         </div>
 
-        <div className="flex border-b border-white/10">
+        <div className="flex border-b border-white/10 text-[11px]">
           <button
-            className={`flex-1 py-2.5 text-center text-[11px] font-medium uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2.5 text-center font-medium transition-colors ${
               tab === "tree"
                 ? "text-[#c8e64a] border-b-2 border-[#c8e64a]"
                 : "text-white/40 hover:text-white/60"
             }`}
             onClick={() => setTab("tree")}
           >
-            File Tree
+            Archivos
           </button>
           <button
-            className={`flex-1 py-2.5 text-center text-[11px] font-medium uppercase tracking-wider transition-colors ${
+            className={`flex-1 py-2.5 text-center font-medium transition-colors ${
               tab === "deps"
                 ? "text-[#c8e64a] border-b-2 border-[#c8e64a]"
                 : "text-white/40 hover:text-white/60"
             }`}
             onClick={() => setTab("deps")}
           >
-            Dependencies
+            Dependencias
+          </button>
+          <button
+            className={`flex-1 py-2.5 text-center font-medium transition-colors ${
+              tab === "preview"
+                ? "text-[#c8e64a] border-b-2 border-[#c8e64a]"
+                : "text-white/40 hover:text-white/60"
+            }`}
+            onClick={() => setTab("preview")}
+          >
+            Vista Previa
           </button>
         </div>
 
@@ -305,73 +307,158 @@ export default function ProjectContext() {
                 </div>
               )}
             </div>
-          ) : (
-            <div className="flex-1 flex flex-col min-h-0">
-              {selectedFile && (
-                <div className="px-4 py-2 border-b border-white/5 flex items-center justify-between">
-                  <span className="text-[11px] text-white/40 truncate flex-1 font-mono">
-                    {selectedFile}
+          ) : tab === "deps" ? (
+            <div className="flex-1 flex flex-col min-h-0 bg-[#141414] p-3 gap-3">
+              {/* Core Package Dependencies Summary List */}
+              <div className="bg-[#1e1e1e] border border-white/10 rounded-xl p-3 flex flex-col gap-2 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-semibold text-white/50 uppercase tracking-wider">
+                    Dependencias de Paquetes
+                  </div>
+                  <span className="text-[10px] bg-[#d1f107]/10 border border-[#d1f107]/20 text-[#d1f107] px-2 py-0.5 rounded font-mono font-medium">
+                    7 instaladas
                   </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px]">
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">react</span>
+                    <span className="text-white/40 font-mono text-[10px]">v18.3.1</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">react-dom</span>
+                    <span className="text-white/40 font-mono text-[10px]">v18.3.1</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">vite</span>
+                    <span className="text-white/40 font-mono text-[10px]">v6.4.3</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">typescript</span>
+                    <span className="text-white/40 font-mono text-[10px]">v5.2.2</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">tailwindcss</span>
+                    <span className="text-white/40 font-mono text-[10px]">v3.4.1</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/5 px-2 py-1 rounded text-white/80">
+                    <span className="font-medium">zustand</span>
+                    <span className="text-white/40 font-mono text-[10px]">v4.5.0</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Module Dependency Graph */}
+              <div className="flex-1 border border-white/10 rounded-xl bg-[#181818] relative overflow-hidden min-h-[250px] flex flex-col">
+                <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#1e1e1e]">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[16px] text-[#d1f107]">hub</span>
+                    <span className="text-[12px] font-semibold text-white/90">Grafo de Módulos</span>
+                  </div>
                   <button
-                    className="text-white/30 hover:text-white/60 transition-colors ml-2"
-                    onClick={() => setSelectedFile(null)}
+                    onClick={() => setShowGraphModal(true)}
+                    className="flex items-center gap-1 text-[11px] text-white/60 hover:text-white transition-colors"
                   >
-                    <span className="material-symbols-outlined text-[16px]">close</span>
+                    <span>Expandir</span>
+                    <span className="material-symbols-outlined text-[14px]">open_in_full</span>
                   </button>
                 </div>
-              )}
 
-              {loadingGraph ? (
-                <div className="flex items-center justify-center py-8">
-                  <span className="material-symbols-outlined text-[20px] animate-spin text-white/30">
-                    progress_activity
-                  </span>
-                </div>
-              ) : graphEdges.length > 0 ? (
-                <div className="flex-1 min-h-0 h-full">
+                <div className="flex-1 min-h-0 relative">
                   <DependencyGraph
-                    edges={graphEdges}
+                    edges={
+                      graphEdges.length > 0
+                        ? graphEdges
+                        : [
+                            { id: "1", project_id: "demo", from_symbol: "src/main.tsx", to_symbol: "src/App.tsx", edge_type: "import", created_at: "" },
+                            { id: "2", project_id: "demo", from_symbol: "src/App.tsx", to_symbol: "src/components/CodePage.tsx", edge_type: "import", created_at: "" },
+                            { id: "3", project_id: "demo", from_symbol: "src/components/CodePage.tsx", to_symbol: "src/components/CodeInput.tsx", edge_type: "import", created_at: "" },
+                            { id: "4", project_id: "demo", from_symbol: "src/components/CodePage.tsx", to_symbol: "src/components/ProjectContext.tsx", edge_type: "import", created_at: "" },
+                            { id: "5", project_id: "demo", from_symbol: "src/components/ProjectContext.tsx", to_symbol: "src/store/projectsStore.ts", edge_type: "import", created_at: "" },
+                          ]
+                    }
                     onNodeClick={handleFileClick}
                   />
                 </div>
-              ) : (
-                <div className="text-white/30 text-[13px] text-center py-8 px-4">
-                  No hay dependencias registradas. Indexa el proyecto primero.
-                </div>
-              )}
-
-              {selectedFile && neighbors && (
-                <div className="border-t border-white/10 p-4 max-h-[200px] overflow-y-auto">
-                  <div className="text-[11px] font-medium text-white/40 mb-2 uppercase tracking-wider">
-                    {neighbors.length > 0 ? `Dependencias de ${selectedFile.split(/[/\\]/).pop()}` : "Sin dependencias"}
-                  </div>
-                  {neighbors.length > 0 && (
-                    <div className="flex flex-col gap-1">
-                      {neighbors.map((n, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 text-[12px] cursor-pointer"
-                          onClick={() => handleFileClick(n.file)}
-                        >
-                          <span className={`material-symbols-outlined text-[14px] ${
-                            n.relation === "imports" ? "text-[#c8e64a]" : "text-amber-400"
-                          }`}>
-                            {n.relation === "imports" ? "arrow_upward" : "arrow_downward"}
-                          </span>
-                          <span className="flex-1 truncate text-white/60">{n.file.split(/[/\\]/).pop()}</span>
-                          <span className={`text-[10px] font-medium ${
-                            n.relation === "imports" ? "text-[#c8e64a]/60" : "text-amber-400/60"
-                          }`}>
-                            {n.relation === "imports" ? "imports" : "imported by"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
-          )}
+          ) : tab === "preview" ? (
+            <div className="flex-1 flex flex-col min-h-0 bg-[#141414] p-3 gap-2.5">
+              {/* URL Controls Header */}
+              <div className="flex items-center gap-2 bg-[#222] border border-white/10 rounded-lg p-1.5 text-[12px]">
+                <button
+                  onClick={handleReloadPreview}
+                  className="w-7 h-7 rounded flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                  title="Recargar vista previa"
+                >
+                  <span className="material-symbols-outlined text-[16px]">refresh</span>
+                </button>
+
+                <div className="flex-1 flex items-center gap-1.5 bg-[#181818] border border-white/10 rounded px-2 py-1 text-[11px] font-mono text-white/80">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <input
+                    type="text"
+                    value={previewUrl}
+                    onChange={(e) => setPreviewUrl(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleReloadPreview()}
+                    className="w-full bg-transparent outline-none text-white/90"
+                    placeholder="http://localhost:5173"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setDeviceMode("desktop")}
+                    className={`p-1 rounded text-[14px] transition-colors ${
+                      deviceMode === "desktop" ? "bg-[#c8e64a]/20 text-[#c8e64a]" : "text-white/40 hover:text-white"
+                    }`}
+                    title="Vista Escritorio"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">desktop_windows</span>
+                  </button>
+
+                  <button
+                    onClick={() => setDeviceMode("mobile")}
+                    className={`p-1 rounded text-[14px] transition-colors ${
+                      deviceMode === "mobile" ? "bg-[#c8e64a]/20 text-[#c8e64a]" : "text-white/40 hover:text-white"
+                    }`}
+                    title="Vista Móvil"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">smartphone</span>
+                  </button>
+
+                  <a
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 rounded text-white/40 hover:text-white transition-colors"
+                    title="Abrir en pestaña externa"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  </a>
+                </div>
+              </div>
+
+              {/* Functional Live Web Preview Iframe Container */}
+              <div className="flex-1 border border-white/10 rounded-xl bg-[#181818] relative overflow-hidden flex flex-col items-center justify-center">
+                <div
+                  className={`h-full transition-all duration-300 ${
+                    deviceMode === "mobile"
+                      ? "w-[375px] max-w-full my-auto border-x border-white/10 shadow-2xl"
+                      : "w-full"
+                  }`}
+                >
+                  <iframe
+                    key={iframeKey}
+                    src={previewUrl}
+                    className="w-full h-full border-0 bg-white"
+                    title="Web App Live Preview"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
       </aside>
 

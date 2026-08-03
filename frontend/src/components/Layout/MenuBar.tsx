@@ -191,23 +191,25 @@ export default function MenuBar() {
               </button>
 
               {subMenu === menu.label && (
-                <div className="absolute left-full top-0 ml-1 w-56 bg-surface-elevated border border-border-subtle rounded-xl shadow-xl shadow-black/30 py-1 z-50">
-                  {menu.items.map((item, i) =>
-                    item.divider ? (
-                      <div key={i} className="h-px bg-border-subtle my-1" />
-                    ) : (
-                      <button
-                        key={i}
-                        className="w-full flex items-center justify-between px-3 py-1.5 text-[13px] text-on-surface hover:bg-surface-variant transition-colors text-left"
-                        onClick={() => { item.action(); setSubMenu(null); }}
-                      >
-                        <span>{item.label}</span>
-                        {item.shortcut && (
-                          <span className="text-text-muted text-[11px] ml-4">{item.shortcut}</span>
-                        )}
-                      </button>
-                    ),
-                  )}
+                <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                  <div className="w-56 bg-surface-elevated border border-border-subtle rounded-xl shadow-xl shadow-black/30 py-1">
+                    {menu.items.map((item, i) =>
+                      item.divider ? (
+                        <div key={i} className="h-px bg-border-subtle my-1" />
+                      ) : (
+                        <button
+                          key={i}
+                          className="w-full flex items-center justify-between px-3 py-1.5 text-[13px] text-on-surface hover:bg-surface-variant transition-colors text-left"
+                          onClick={() => { item.action(); setSubMenu(null); }}
+                        >
+                          <span>{item.label}</span>
+                          {item.shortcut && (
+                            <span className="text-text-muted text-[11px] ml-4">{item.shortcut}</span>
+                          )}
+                        </button>
+                      ),
+                    )}
+                  </div>
                 </div>
               )}
             </div>

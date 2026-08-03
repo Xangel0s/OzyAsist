@@ -76,9 +76,11 @@ export default function ProjectChats({ projectId, onBack, onSelectChat }: Projec
 
         <div className="flex flex-col gap-2">
           {filtered.map((chat) => (
-            <button
+            <div
               key={chat.id}
-              className="flex items-center gap-4 bg-[#1e1e1e] rounded-xl border border-white/10 p-4 text-left hover:bg-[#252525] hover:border-white/15 transition-all group"
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer flex items-center gap-4 bg-[#1e1e1e] rounded-xl border border-white/10 p-4 text-left hover:bg-[#252525] hover:border-white/15 transition-all group"
               onClick={() => onSelectChat(chat.id)}
             >
               <div className="w-10 h-10 rounded-lg bg-[#c8e64a]/15 flex items-center justify-center shrink-0">
@@ -99,7 +101,7 @@ export default function ProjectChats({ projectId, onBack, onSelectChat }: Projec
               >
                 <span className="material-symbols-outlined text-[16px]">delete</span>
               </button>
-            </button>
+            </div>
           ))}
 
           {filtered.length === 0 && (

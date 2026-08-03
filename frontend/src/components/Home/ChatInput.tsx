@@ -147,6 +147,9 @@ export default function ChatInput({
 
   const allPluginCategories = Object.keys(dynamicPluginProfilesMap);
 
+  const isResponding = useChatStore((s) => s.isResponding);
+  const cancelResponse = useChatStore((s) => s.cancelResponse);
+
   return (
     <div
       className={`w-full bg-[#1e1e1e] rounded-2xl border border-white/10 flex flex-col shadow-lg shadow-black/30 focus-within:border-white/15 transition-colors relative z-20 ${
@@ -226,19 +229,21 @@ export default function ChatInput({
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
                   </button>
                   {activeSubmenu === "proyecto" && (
-                    <div className="absolute left-full top-0 ml-1 w-56 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      {["OzyAsist (Actual)", "crm-camp", "coolify-vm"].map((p) => (
-                        <button
-                          key={p}
-                          className="w-full px-3.5 py-2 hover:bg-white/10 transition-colors text-left truncate"
-                          onClick={() => {
-                            useToastStore.getState().show(`Proyecto vinculado: ${p}`, "info");
-                            setShowAddMenu(false);
-                          }}
-                        >
-                          {p}
-                        </button>
-                      ))}
+                    <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                      <div className="w-56 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5">
+                        {["OzyAsist (Actual)", "crm-camp", "coolify-vm"].map((p) => (
+                          <button
+                            key={p}
+                            className="w-full px-3.5 py-2 hover:bg-white/10 transition-colors text-left truncate"
+                            onClick={() => {
+                              useToastStore.getState().show(`Proyecto vinculado: ${p}`, "info");
+                              setShowAddMenu(false);
+                            }}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -254,35 +259,37 @@ export default function ChatInput({
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
                   </button>
                   {activeSubmenu === "habilidades" && (
-                    <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      {allSkillsList.map((sk) => (
+                    <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                      <div className="w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5">
+                        {allSkillsList.map((sk) => (
+                          <button
+                            key={sk}
+                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                            onClick={() => handleSelectSkill(sk)}
+                          >
+                            <span className="material-symbols-outlined text-[16px] text-white/40">settings_suggest</span>
+                            <span className="font-mono text-[12px]">{sk}</span>
+                          </button>
+                        ))}
+                        <div className="h-px bg-white/10 my-1" />
                         <button
-                          key={sk}
                           className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                          onClick={() => handleSelectSkill(sk)}
+                          onClick={() => openSettings("habilidades")}
                         >
-                          <span className="material-symbols-outlined text-[16px] text-white/40">settings_suggest</span>
-                          <span className="font-mono text-[12px]">{sk}</span>
+                          <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
+                          <span>Administrar habilidades</span>
                         </button>
-                      ))}
-                      <div className="h-px bg-white/10 my-1" />
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => openSettings("habilidades")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
-                        <span>Administrar habilidades</span>
-                      </button>
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => {
-                          useUIStore.getState().setActiveView("skills");
-                          setShowAddMenu(false);
-                        }}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
-                        <span>Explorar habilidades</span>
-                      </button>
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                          onClick={() => {
+                            useUIStore.getState().setActiveView("skills");
+                            setShowAddMenu(false);
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
+                          <span>Explorar habilidades</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -296,54 +303,56 @@ export default function ChatInput({
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
                   </button>
                   {activeSubmenu === "conectores" && (
-                    <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => openSettings("conectores")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
-                        <span>Agregar conector</span>
-                      </button>
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => openSettings("conectores")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
-                        <span>Administrar conectores</span>
-                      </button>
-                      <div className="h-px bg-white/10 my-1" />
-                      {userConnectors.length > 0 ? (
-                        userConnectors.map((c) => (
-                          <div key={c.id} className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
-                            <div className="flex items-center gap-2.5">
-                              <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
-                              <span className="font-medium text-[13px]">{c.name}</span>
+                    <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                      <div className="w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5">
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                          onClick={() => openSettings("conectores")}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
+                          <span>Agregar conector</span>
+                        </button>
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                          onClick={() => openSettings("conectores")}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
+                          <span>Administrar conectores</span>
+                        </button>
+                        <div className="h-px bg-white/10 my-1" />
+                        {userConnectors.length > 0 ? (
+                          userConnectors.map((c) => (
+                            <div key={c.id} className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors">
+                              <div className="flex items-center gap-2.5">
+                                <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_checked</span>
+                                <span className="font-medium text-[13px]">{c.name}</span>
+                              </div>
+                              <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
+                                <span className="w-3.5 h-3.5 bg-white rounded-full" />
+                              </span>
                             </div>
-                            <span className="w-8 h-4.5 bg-[#3b82f6] rounded-full flex items-center justify-end px-0.5 shadow-sm cursor-pointer">
-                              <span className="w-3.5 h-3.5 bg-white rounded-full" />
-                            </span>
+                          ))
+                        ) : (
+                          <div className="px-3.5 py-2 text-[12px] text-white/40 italic">
+                            Sin conectores MCP activos
                           </div>
-                        ))
-                      ) : (
-                        <div className="px-3.5 py-2 text-[12px] text-white/40 italic">
-                          Sin conectores MCP activos
-                        </div>
-                      )}
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
-                        onClick={() => openSettings("conectores")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_unchecked</span>
-                        <span>Agregar desde opencode</span>
-                      </button>
-                      <div className="h-px bg-white/10 my-1" />
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
-                        onClick={() => openSettings("conectores")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">search</span>
-                        <span>Acceso a herramientas</span>
-                      </button>
+                        )}
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
+                          onClick={() => openSettings("conectores")}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/40">radio_button_unchecked</span>
+                          <span>Agregar desde opencode</span>
+                        </button>
+                        <div className="h-px bg-white/10 my-1" />
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left text-white/70"
+                          onClick={() => openSettings("conectores")}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/60">search</span>
+                          <span>Acceso a herramientas</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -357,48 +366,52 @@ export default function ChatInput({
                     <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
                   </button>
                   {activeSubmenu === "plugins" && (
-                    <div className="absolute left-full top-0 ml-1 w-56 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50">
-                      {allPluginCategories.map((cat) => (
-                        <div
-                          key={cat}
-                          className="relative"
-                          onMouseEnter={() => setActivePluginProfile(cat)}
+                    <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                      <div className="w-56 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5">
+                        {allPluginCategories.map((cat) => (
+                          <div
+                            key={cat}
+                            className="relative"
+                            onMouseEnter={() => setActivePluginProfile(cat)}
+                          >
+                            <button className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left">
+                              <span className="truncate">{cat}</span>
+                              <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
+                            </button>
+                            {activePluginProfile === cat && dynamicPluginProfilesMap[cat] && (
+                              <div className="absolute left-full top-0 -ml-1 pl-1.5 z-50">
+                                <div className="w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 max-h-72 overflow-y-auto">
+                                  {dynamicPluginProfilesMap[cat].map((sk) => (
+                                    <button
+                                      key={sk}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                                      onClick={() => handleSelectSkill(sk)}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px] text-white/40">article</span>
+                                      <span className="font-mono text-[12px] text-white truncate">{sk}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        <div className="h-px bg-white/10 my-1" />
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                          onClick={() => openSettings("plugins")}
                         >
-                          <button className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left">
-                            <span className="truncate">{cat}</span>
-                            <span className="material-symbols-outlined text-[14px] text-white/40">chevron_right</span>
-                          </button>
-                          {activePluginProfile === cat && dynamicPluginProfilesMap[cat] && (
-                            <div className="absolute left-full top-0 ml-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 max-h-72 overflow-y-auto">
-                              {dynamicPluginProfilesMap[cat].map((sk) => (
-                                <button
-                                  key={sk}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                                  onClick={() => handleSelectSkill(sk)}
-                                >
-                                  <span className="material-symbols-outlined text-[16px] text-white/40">article</span>
-                                  <span className="font-mono text-[12px] text-white truncate">{sk}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                      <div className="h-px bg-white/10 my-1" />
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => openSettings("plugins")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
-                        <span>Administrar plugins</span>
-                      </button>
-                      <button
-                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                        onClick={() => openSettings("plugins")}
-                      >
-                        <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
-                        <span>Explorar plugins</span>
-                      </button>
+                          <span className="material-symbols-outlined text-[16px] text-white/60">work</span>
+                          <span>Administrar plugins</span>
+                        </button>
+                        <button
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                          onClick={() => openSettings("plugins")}
+                        >
+                          <span className="material-symbols-outlined text-[16px] text-white/60">add</span>
+                          <span>Explorar plugins</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -463,14 +476,26 @@ export default function ChatInput({
             )}
           </div>
 
-          <button
-            className={`${compact ? "w-8 h-8" : "w-9 h-9"} rounded-full bg-[#c8e64a] flex items-center justify-center text-[#1a1a1a] hover:bg-[#b8d63a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm shadow-[#c8e64a]/20`}
-            onClick={handleSend}
-            disabled={!value.trim()}
-            aria-label="Enviar mensaje"
-          >
-            <span className={`material-symbols-outlined ${compact ? "text-[18px]" : "text-[20px]"}`}>arrow_upward</span>
-          </button>
+          {isResponding ? (
+            <button
+              className={`${compact ? "w-8 h-8" : "w-9 h-9"} rounded-full bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 flex items-center justify-center transition-all shadow-md active:scale-95`}
+              onClick={cancelResponse}
+              aria-label="Cancelar respuesta"
+              title="Detener respuesta (Cancelar)"
+            >
+              <span className={`material-symbols-outlined ${compact ? "text-[16px]" : "text-[18px]"}`}>square</span>
+            </button>
+          ) : (
+            <button
+              className={`${compact ? "w-8 h-8" : "w-9 h-9"} rounded-full bg-[#c8e64a] flex items-center justify-center text-[#1a1a1a] hover:bg-[#b8d63a] transition-colors disabled:opacity-30 disabled:cursor-not-allowed shadow-sm shadow-[#c8e64a]/20`}
+              onClick={handleSend}
+              disabled={!value.trim() && !selectedSkillPill}
+              aria-label="Enviar mensaje"
+              title="Enviar mensaje"
+            >
+              <span className={`material-symbols-outlined ${compact ? "text-[18px]" : "text-[20px]"}`}>arrow_upward</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -1,11 +1,52 @@
+import { useState, useEffect } from "react";
 import { useUIStore } from "../../store/uiStore";
 import MenuBar from "./MenuBar";
+import { wsClient } from "../../services/ws";
+import { useToastStore } from "../../store/toastStore";
+
+function WifiSignalIcon({ connected }: { connected: boolean }) {
+  if (connected) {
+    return (
+      <div className="flex items-end gap-[2px] h-3.5 w-3.5 justify-center" title="Señal del Agente: Excelente">
+        <span className="w-[2.5px] h-[30%] bg-emerald-400 rounded-sm" />
+        <span className="w-[2.5px] h-[55%] bg-emerald-400 rounded-sm" />
+        <span className="w-[2.5px] h-[80%] bg-emerald-400 rounded-sm" />
+        <span className="w-[2.5px] h-[100%] bg-emerald-400 rounded-sm" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-end gap-[2px] h-3.5 w-3.5 justify-center opacity-60" title="Sin señal del Agente">
+      <span className="w-[2.5px] h-[30%] bg-amber-400 rounded-sm animate-pulse" />
+      <span className="w-[2.5px] h-[55%] bg-text-muted/40 rounded-sm" />
+      <span className="w-[2.5px] h-[80%] bg-text-muted/40 rounded-sm" />
+      <span className="w-[2.5px] h-[100%] bg-text-muted/40 rounded-sm" />
+    </div>
+  );
+}
 
 export default function TopAppBar() {
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const coworkMode = useUIStore((s) => s.coworkMode);
   const toggleCoworkMode = useUIStore((s) => s.toggleCoworkMode);
+  const [agentConnected, setAgentConnected] = useState(wsClient.isConnected());
+
+  useEffect(() => {
+    const unsubscribe = wsClient.subscribeStatus((connected) => {
+      setAgentConnected(connected);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleConnectAgent = () => {
+    wsClient.connect();
+    if (wsClient.isConnected()) {
+      useToastStore.getState().show("Conexión con el agente establecida", "success");
+    } else {
+      useToastStore.getState().show("Intentando reconectar con el Agente...", "info");
+    }
+  };
 
   const goBack = () => window.history.back();
   const goForward = () => window.history.forward();
@@ -31,7 +72,8 @@ export default function TopAppBar() {
         <button
           className="hover:bg-surface-variant transition-colors p-1.5 rounded-lg flex items-center justify-center"
           onClick={() => setSearchOpen(true)}
-          aria-label="Buscar"
+          aria-label="Búsqueda Inteligente (Ctrl+K)"
+          title="Búsqueda Inteligente (Ctrl+K)"
         >
           <span className="material-symbols-outlined text-[20px]">search</span>
         </button>
@@ -51,6 +93,18 @@ export default function TopAppBar() {
         </button>
       </div>
       <div className="flex items-center gap-3">
+        <button
+          className={`flex items-center justify-center p-2 rounded-full transition-all ${
+            agentConnected
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20"
+              : "bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20"
+          }`}
+          onClick={handleConnectAgent}
+          title={agentConnected ? "Agente En Línea (Señal Excelente)" : "Sin Conexión — Clic para reconectar con el Agente"}
+        >
+          <WifiSignalIcon connected={agentConnected} />
+        </button>
+
         <button
           className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium transition-all ${
             coworkMode
