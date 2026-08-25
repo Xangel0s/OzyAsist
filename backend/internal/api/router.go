@@ -22,9 +22,14 @@ func NewRouter() *gin.Engine {
 
 	apiGroup := r.Group("/api")
 	{
-		// Auth
+		// Auth & Profiles
+		apiGroup.GET("/auth/profiles", handlers.ListProfiles)
+		apiGroup.POST("/auth/profiles", handlers.CreateProfile)
 		apiGroup.POST("/auth/register", handlers.Register)
 		apiGroup.POST("/auth/login", handlers.Login)
+		apiGroup.POST("/auth/pin/verify", handlers.VerifyPin)
+		apiGroup.POST("/auth/pin/update", handlers.UpdatePin)
+		apiGroup.DELETE("/auth/profiles/:id", handlers.DeleteProfile)
 		apiGroup.PUT("/users/profile", handlers.UpdateProfile)
 
 		// Chat
@@ -48,6 +53,18 @@ func NewRouter() *gin.Engine {
 		apiGroup.GET("/projects/:id/fullgraph", handlers.GetAllProjectGraph)
 		apiGroup.GET("/projects/:id/file", handlers.GetFileContent)
 		apiGroup.POST("/projects/:id/upload-files", handlers.UploadProjectFiles)
+
+		// Git Operations
+		apiGroup.GET("/projects/:id/git/status", handlers.GetGitStatus)
+		apiGroup.POST("/projects/:id/git/init", handlers.InitGit)
+		apiGroup.POST("/projects/:id/git/stage", handlers.StageGit)
+		apiGroup.POST("/projects/:id/git/unstage", handlers.UnstageGit)
+		apiGroup.POST("/projects/:id/git/commit", handlers.CommitGit)
+		apiGroup.POST("/projects/:id/git/sync", handlers.SyncGit)
+		apiGroup.POST("/projects/:id/git/generate-msg", handlers.GenerateGitCommitMessage)
+
+		// Terminal Operations
+		apiGroup.POST("/projects/:id/terminal/exec", handlers.ExecuteTerminalCommand)
 
 		// Skills
 		apiGroup.GET("/skills", handlers.ListSkills)

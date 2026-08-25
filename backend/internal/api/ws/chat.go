@@ -88,13 +88,33 @@ func processAttachments(chat *models.Chat, attachments []attachment, content str
 }
 
 type serverMessage struct {
-	Type      string `json:"type"`
+	Type string `json:"type"`
+
+	// Texto / eventos genéricos
 	Content   string `json:"content,omitempty"`
 	MessageID string `json:"message_id,omitempty"`
+	Warning   string `json:"warning,omitempty"`
+
+	// state:sync
+	State string `json:"state,omitempty"`
+
+	// tool:call / tool:approval_request
 	ToolID    string `json:"tool_id,omitempty"`
 	ToolName  string `json:"tool_name,omitempty"`
 	ToolInput string `json:"tool_input,omitempty"`
-	Warning   string `json:"warning,omitempty"`
+
+	// tool:result
+	ToolOutput  string `json:"tool_output,omitempty"`
+	ToolSuccess bool   `json:"tool_success,omitempty"`
+	DurationMs  int64  `json:"duration_ms,omitempty"`
+
+	// agent:completed
+	TaskID    string `json:"task_id,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Turns     int    `json:"turns,omitempty"`
+
+	// error
+	Error string `json:"error,omitempty"`
 }
 
 func handleChatMessage(client *Client, msg clientMessage) {
@@ -104,6 +124,7 @@ func handleChatMessage(client *Client, msg clientMessage) {
 		return
 	}
 
+	// Persistir mensaje del usuario
 	userMsg := &models.Message{
 		ID:        uuid.NewString(),
 		ChatID:    msg.ChatID,
@@ -122,22 +143,11 @@ func handleChatMessage(client *Client, msg clientMessage) {
 	}
 	memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "user", msg.Content)
 
-	// Agent consent check — only in code mode with a project
-	if chat.ProjectID != "" && chat.Mode == "code" && agent.DetectActionIntent(msg.Content) {
-		project, err := db.GetProject(chat.ProjectID)
-		if err != nil {
-			writeJSON(client, serverMessage{Type: "error", Content: "proyecto no encontrado: " + err.Error()})
-			return
-		}
-		switch project.AgentConsent {
-		case "always":
-			runAgentTask(client, msg, chat, project, "always")
-			return
-		case "ask":
-			writeJSON(client, serverMessage{Type: "consent_required", Content: msg.Content})
-			storePendingConsent(client, msg, chat, project.UserID, project.PermissionLevel)
-			return
-		}
+	// --- BIFURCACIÓN: Modo Code con proyecto → ReAct Loop ---
+	// --- Modo Chat → streaming directo (sin agent loop) ---
+	if chat.Mode == "code" && chat.ProjectID != "" {
+		runReActLoopSession(client, msg, chat)
+		return
 	}
 
 	handleChatMessageNormal(client, msg, chat)
@@ -282,24 +292,29 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 			fullContent += chunk.Content
 			writeJSON(client, serverMessage{Type: "text", Content: chunk.Content})
 		case "tool_call":
-			toolCalls = append(toolCalls, map[string]any{
-				"id":        chunk.ToolID,
-				"name":      chunk.ToolName,
-				"arguments": chunk.ToolInput,
-			})
-			writeJSON(client, serverMessage{
-				Type:      "tool_call",
-				ToolID:    chunk.ToolID,
-				ToolName:  chunk.ToolName,
-				ToolInput: chunk.ToolInput,
-			})
+			// Modo Chat normal — el LLM emitió un tool_call (informativo, no se ejecuta aquí)
+			if chunk.ToolCall != nil {
+				tc := chunk.ToolCall
+				inputStr := string(tc.Input)
+				toolCalls = append(toolCalls, map[string]any{
+					"id":        tc.ID,
+					"name":      tc.Name,
+					"arguments": inputStr,
+				})
+				writeJSON(client, serverMessage{
+					Type:      "tool_call",
+					ToolID:    tc.ID,
+					ToolName:  tc.Name,
+					ToolInput: inputStr,
+				})
+			}
 		case "done":
 			assistantMsg := &models.Message{
-				ID:             msgID,
-				ChatID:         msg.ChatID,
-				Role:           "assistant",
-				Content:        fullContent,
-				CreatedAt:      time.Now(),
+				ID:        msgID,
+				ChatID:    msg.ChatID,
+				Role:      "assistant",
+				Content:   fullContent,
+				CreatedAt: time.Now(),
 			}
 			if len(toolCalls) > 0 {
 				tcJSON, _ := json.Marshal(toolCalls)
@@ -314,6 +329,7 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 			writeJSON(client, serverMessage{Type: "error", Content: chunk.Content})
 		}
 	}
+
 }
 
 func CancelStream(chatID string) {
@@ -426,6 +442,74 @@ func processAsNormalChat(client *Client, msg clientMessage, chat *models.Chat) {
 	handleChatMessageNormal(client, msg, chat)
 }
 
+// runReActLoopSession arranca el ReAct Loop para Modo Code y conecta los eventos al cliente WS.
+// Retorna inmediatamente — el loop corre de forma asíncrona en su goroutine.
+func runReActLoopSession(client *Client, msg clientMessage, chat *models.Chat) {
+	provider, err := providers.Get(chat.Provider)
+	if err != nil {
+		// Intentar con el primer provider disponible
+		available := providers.Available()
+		if len(available) == 0 {
+			writeJSON(client, serverMessage{Type: "error", Content: "No hay ningún proveedor LLM configurado."})
+			return
+		}
+		provider, err = providers.Get(available[0])
+		if err != nil {
+			writeJSON(client, serverMessage{Type: "error", Content: "Provider no disponible: " + err.Error()})
+			return
+		}
+	}
+
+	// Cargar proyecto para el contexto y permisos
+	var project *models.Project
+	if chat.ProjectID != "" {
+		p, err := db.GetProject(chat.ProjectID)
+		if err == nil {
+			project = p
+		}
+	}
+
+	permLevel := "sandboxed"
+	if project != nil && project.PermissionLevel != "" {
+		permLevel = project.PermissionLevel
+	}
+
+	// Callback de emisión — convierte AgentEvent a serverMessage WS
+	emit := func(ev agent.AgentEvent) {
+		writeJSON(client, serverMessage{
+			Type:        ev.Type,
+			State:       ev.State,
+			Content:     ev.Content,
+			MessageID:   ev.MessageID,
+			ToolID:      ev.ToolID,
+			ToolName:    ev.ToolName,
+			ToolInput:   ev.ToolInput,
+			ToolOutput:  ev.ToolOutput,
+			ToolSuccess: ev.ToolSuccess,
+			DurationMs:  ev.DurationMs,
+			TaskID:      ev.TaskID,
+			Turns:       ev.Turns,
+			Error:       ev.Error,
+		})
+	}
+
+	// Arrancar el loop asíncrono
+	sessionID := agent.StartAgentLoop(context.Background(), agent.AgentLoopParams{
+		Provider:        provider,
+		Chat:            chat,
+		Project:         project,
+		UserMessage:     msg.Content,
+		PermissionLevel: permLevel,
+		Emit:            emit,
+	})
+
+	// Enviar session_id al cliente para que pueda cancelar o responder aprobaciones
+	writeJSON(client, serverMessage{
+		Type:      "agent:session_started",
+		SessionID: sessionID,
+	})
+}
+
 func writeJSON(client *Client, msg serverMessage) {
 	data, _ := json.Marshal(msg)
 	select {
@@ -433,3 +517,4 @@ func writeJSON(client *Client, msg serverMessage) {
 	default:
 	}
 }
+

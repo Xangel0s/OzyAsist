@@ -3,7 +3,6 @@ import { persist } from "zustand/middleware";
 
 export type View =
   | "home"
-  | "code"
   | "chat"
   | "chats"
   | "projects"

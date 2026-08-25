@@ -84,6 +84,11 @@ export default function ChatInput({
 
   const handleSend = () => {
     const trimmed = value.trim();
+    if (!currentModel || currentModel === "sin-proveedor" || !useChatStore.getState().defaultProvider) {
+      useToastStore.getState().show("No hay ningún proveedor LLM configurado. Configura tu API Key en Personalizar.", "info");
+      useUIStore.getState().openSettings("proveedores");
+      return;
+    }
     if (trimmed || selectedSkillPill) {
       const fullMsg = selectedSkillPill ? `${selectedSkillPill} ${trimmed}`.trim() : trimmed;
       onSend(fullMsg);

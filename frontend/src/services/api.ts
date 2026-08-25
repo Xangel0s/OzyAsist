@@ -31,6 +31,18 @@ export interface MessageDTO {
   createdAt: string;
 }
 
+export interface UserDTO {
+  id: string;
+  name: string;
+  email?: string;
+  avatarColor?: string;
+  hasPin: boolean;
+  role?: string;
+  plan?: string;
+  profileMd?: string;
+  createdAt: string;
+}
+
 export interface ProjectDTO {
   id: string;
   userId: string;
@@ -94,6 +106,32 @@ export interface AgentTaskResult {
 }
 
 export const api = {
+  auth: {
+    listProfiles: () => request<UserDTO[]>("/auth/profiles"),
+    createProfile: (data: { name: string; email?: string; avatarColor?: string; pin?: string; role?: string }) =>
+      request<UserDTO>("/auth/profiles", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    login: (data: { userId: string; pin?: string }) =>
+      request<{ status: string; user: UserDTO }>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    verifyPin: (data: { userId: string; pin: string }) =>
+      request<{ valid: boolean; user: UserDTO }>("/auth/pin/verify", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updatePin: (data: { userId: string; oldPin?: string; newPin: string }) =>
+      request<{ status: string; hasPin: boolean }>("/auth/pin/update", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    deleteProfile: (userId: string) =>
+      request<{ status: string }>(`/auth/profiles/${userId}`, { method: "DELETE" }),
+  },
+
   chats: {
     list: () => request<ChatDTO[]>("/chats"),
     create: (data: { title: string; mode: string; provider?: string; model?: string; projectId?: string }) =>
@@ -264,4 +302,70 @@ export const api = {
         body: JSON.stringify(keys),
       }),
   },
+
+  git: {
+    status: (projectId: string) =>
+      request<GitStatusDTO>(`/projects/${projectId}/git/status`),
+    init: (projectId: string) =>
+      request<{ message: string; output: string }>(`/projects/${projectId}/git/init`, { method: "POST" }),
+    stage: (projectId: string, paths: string[], all = false) =>
+      request<{ message: string; output: string }>(`/projects/${projectId}/git/stage`, {
+        method: "POST",
+        body: JSON.stringify({ paths, all }),
+      }),
+    unstage: (projectId: string, paths: string[], all = false) =>
+      request<{ message: string; output: string }>(`/projects/${projectId}/git/unstage`, {
+        method: "POST",
+        body: JSON.stringify({ paths, all }),
+      }),
+    commit: (projectId: string, message: string, sync = false) =>
+      request<{ message: string; output: string; syncOutput?: string }>(`/projects/${projectId}/git/commit`, {
+        method: "POST",
+        body: JSON.stringify({ message, sync }),
+      }),
+    sync: (projectId: string) =>
+      request<{ message: string; pull: string; push?: string; pushErr?: string }>(`/projects/${projectId}/git/sync`, {
+        method: "POST",
+      }),
+    generateMsg: (projectId: string) =>
+      request<{ message: string; highlights: string[] }>(`/projects/${projectId}/git/generate-msg`, {
+        method: "POST",
+      }),
+  },
+
+  terminal: {
+    exec: (projectId: string, command: string, timeoutSecs = 30) =>
+      request<TerminalExecResult>(`/projects/${projectId}/terminal/exec`, {
+        method: "POST",
+        body: JSON.stringify({ command, timeoutSecs }),
+      }),
+  },
 };
+
+export interface GitFileItem {
+  path: string;
+  status: "M" | "A" | "D" | "U" | "R";
+  added: number;
+  deleted: number;
+  staged: boolean;
+}
+
+export interface GitStatusDTO {
+  initialized: boolean;
+  branch: string;
+  ahead: number;
+  behind: number;
+  files: GitFileItem[];
+  totalAdded: number;
+  totalDeleted: number;
+  error?: string;
+}
+
+export interface TerminalExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  duration: string;
+  error?: string;
+}
+

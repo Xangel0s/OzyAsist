@@ -25,6 +25,8 @@ export default function WelcomeScreen() {
       initials,
       role: role || "Desarrollador",
       plan: "free",
+      hasPin: false,
+      avatarColor: "#d1f107",
       hasUsedAI,
     });
     setOnboardingStep(0);

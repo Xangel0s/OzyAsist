@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"github.com/ozyassist/backend/internal/agent"
 )
 
 var upgrader = websocket.Upgrader{
@@ -82,6 +83,24 @@ func (c *Client) readPump() {
 			}
 			if err := json.Unmarshal(raw, &cancelMsg); err == nil {
 				CancelStream(cancelMsg.ChatID)
+			}
+		case "cancel_session":
+			// Cancela un loop agéntico activo por session_id
+			var cancelMsg struct {
+				SessionID string `json:"session_id"`
+			}
+			if err := json.Unmarshal(raw, &cancelMsg); err == nil && cancelMsg.SessionID != "" {
+				agent.CancelSession(cancelMsg.SessionID)
+			}
+		case "tool_approval":
+			// Respuesta de aprobación del usuario a una herramienta del loop
+			var approvalMsg struct {
+				SessionID string `json:"session_id"`
+				ToolID    string `json:"tool_id"`
+				Approved  bool   `json:"approved"`
+			}
+			if err := json.Unmarshal(raw, &approvalMsg); err == nil && approvalMsg.SessionID != "" {
+				agent.RespondApproval(approvalMsg.SessionID, approvalMsg.ToolID, approvalMsg.Approved)
 			}
 		case "consent_response":
 			var consentMsg clientMessage

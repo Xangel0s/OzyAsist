@@ -2,11 +2,13 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/ozyassist/backend/internal/db/models"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func escapeLike(s string) string {
@@ -21,14 +23,14 @@ func EnsureDefaultUser() error {
 		count = 0
 	}
 	if count > 0 {
-		row := DB.QueryRow("SELECT id FROM users LIMIT 1")
+		row := DB.QueryRow("SELECT id FROM users ORDER BY created_at ASC LIMIT 1")
 		return row.Scan(&defaultUserID)
 	}
 
 	id := uuid.NewString()
 	_, err := DB.Exec(
-		`INSERT INTO users (id, name, created_at) VALUES (?, ?, ?)`,
-		id, "Usuario Local", time.Now())
+		`INSERT INTO users (id, name, avatar_color, plan, role, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		id, "Angel", "#d1f107", "free", "developer", time.Now())
 	if err != nil {
 		return err
 	}
@@ -38,6 +40,141 @@ func EnsureDefaultUser() error {
 
 func DefaultUserID() string {
 	return defaultUserID
+}
+
+func SetActiveUserID(id string) {
+	defaultUserID = id
+}
+
+func ListUsers() ([]models.User, error) {
+	rows, err := DB.Query(`
+		SELECT id, name, COALESCE(email, ''), COALESCE(avatar_color, '#d1f107'), 
+		       COALESCE(pin_hash, '') != '' AS has_pin, COALESCE(pin_hash, ''),
+		       COALESCE(plan, 'free'), COALESCE(role, 'developer'),
+		       COALESCE(profile_md, ''), COALESCE(default_provider, ''), COALESCE(default_model, ''), created_at
+		FROM users ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var u models.User
+		var pinHash string
+		if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.AvatarColor, &u.HasPin, &pinHash, &u.Plan, &u.Role, &u.ProfileMd, &u.DefaultProvider, &u.DefaultModel, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		u.PinHash = pinHash
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func GetUser(id string) (*models.User, error) {
+	var u models.User
+	var pinHash string
+	err := DB.QueryRow(`
+		SELECT id, name, COALESCE(email, ''), COALESCE(avatar_color, '#d1f107'), 
+		       COALESCE(pin_hash, '') != '' AS has_pin, COALESCE(pin_hash, ''),
+		       COALESCE(plan, 'free'), COALESCE(role, 'developer'),
+		       COALESCE(profile_md, ''), COALESCE(default_provider, ''), COALESCE(default_model, ''), created_at
+		FROM users WHERE id = ?`, id).Scan(
+		&u.ID, &u.Name, &u.Email, &u.AvatarColor, &u.HasPin, &pinHash, &u.Plan, &u.Role, &u.ProfileMd, &u.DefaultProvider, &u.DefaultModel, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	u.PinHash = pinHash
+	return &u, nil
+}
+
+func CreateUserProfile(name, email, avatarColor, pin, role string) (*models.User, error) {
+	id := uuid.NewString()
+	if avatarColor == "" {
+		avatarColor = "#d1f107"
+	}
+	if role == "" {
+		role = "developer"
+	}
+
+	pinHash := ""
+	if strings.TrimSpace(pin) != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(pin)), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("error hashing PIN: %w", err)
+		}
+		pinHash = string(hashed)
+	}
+
+	now := time.Now()
+	_, err := DB.Exec(`
+		INSERT INTO users (id, name, email, avatar_color, pin_hash, plan, role, created_at)
+		VALUES (?, ?, ?, ?, ?, 'free', ?, ?)`,
+		id, name, email, avatarColor, pinHash, role, now)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.User{
+		ID:          id,
+		Name:        name,
+		Email:       email,
+		AvatarColor: avatarColor,
+		HasPin:      pinHash != "",
+		Plan:        "free",
+		Role:        role,
+		CreatedAt:   now,
+	}, nil
+}
+
+func VerifyUserPin(id, pin string) (bool, *models.User, error) {
+	u, err := GetUser(id)
+	if err != nil {
+		return false, nil, err
+	}
+	if !u.HasPin {
+		return true, u, nil
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(u.PinHash), []byte(strings.TrimSpace(pin)))
+	if err != nil {
+		return false, nil, nil
+	}
+	return true, u, nil
+}
+
+func UpdateUserPin(id, oldPin, newPin string) error {
+	u, err := GetUser(id)
+	if err != nil {
+		return err
+	}
+
+	if u.HasPin {
+		if err := bcrypt.CompareHashAndPassword([]byte(u.PinHash), []byte(strings.TrimSpace(oldPin))); err != nil {
+			return fmt.Errorf("PIN actual incorrecto")
+		}
+	}
+
+	newHash := ""
+	if strings.TrimSpace(newPin) != "" {
+		hashed, err := bcrypt.GenerateFromPassword([]byte(strings.TrimSpace(newPin)), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("error hashing nuevo PIN: %w", err)
+		}
+		newHash = string(hashed)
+	}
+
+	_, err = DB.Exec(`UPDATE users SET pin_hash = ? WHERE id = ?`, newHash, id)
+	return err
+}
+
+func DeleteUser(id string) error {
+	var count int
+	if err := DB.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count); err == nil && count <= 1 {
+		return fmt.Errorf("no puedes eliminar el único perfil existente")
+	}
+	_, err := DB.Exec(`DELETE FROM users WHERE id = ?`, id)
+	return err
 }
 
 func UpdateUserProfile(userID, profileMd string) error {

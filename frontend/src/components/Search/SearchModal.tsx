@@ -72,9 +72,9 @@ export default function SearchModal() {
     p.name.toLowerCase().includes(query.toLowerCase()),
   );
 
-  const handleSelectChat = (chatId: string, mode: string) => {
+  const handleSelectChat = (chatId: string) => {
     setActiveChat(chatId);
-    setActiveView(mode === "code" ? "code" : "chat");
+    setActiveView("home");
     setSearchOpen(false);
   };
 
@@ -128,7 +128,7 @@ export default function SearchModal() {
                     <button
                       key={ch.id}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors text-left"
-                      onClick={() => handleSelectChat(ch.id, "chat")}
+                      onClick={() => handleSelectChat(ch.id)}
                     >
                       <span className="material-symbols-outlined text-[16px]">forum</span>
                       <span className="truncate">{ch.title}</span>
@@ -178,7 +178,7 @@ export default function SearchModal() {
                     <button
                       key={chat.id}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-body-md text-text-muted hover:text-on-surface hover:bg-surface-variant transition-colors text-left"
-                      onClick={() => handleSelectChat(chat.id, chat.mode)}
+                      onClick={() => handleSelectChat(chat.id)}
                     >
                       <span className="material-symbols-outlined text-[16px]">chat_bubble</span>
                       <span className="truncate">{chat.title}</span>

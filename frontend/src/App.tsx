@@ -5,14 +5,13 @@ import { useKeyboard } from "./hooks";
 import TopAppBar from "./components/Layout/TopAppBar";
 import Sidebar from "./components/Layout/Sidebar";
 import HomePage from "./components/Home/HomePage";
-import CodePage from "./components/Code/CodePage";
 import ChatPage from "./components/Chat/ChatPage";
 import ChatsTasksPage from "./components/Chat/ChatsTasksPage";
 import ProjectsPage from "./components/ProjectPanel/ProjectsPage";
 import SkillsPage from "./components/Skills/SkillsPage";
 import ConnectorsPage from "./components/Connectors/ConnectorsPage";
 import OnboardingPage from "./components/Onboarding/OnboardingPage";
-import WelcomeScreen from "./components/Onboarding/WelcomeScreen";
+import ProfileSelectorModal from "./components/Auth/ProfileSelectorModal";
 import SearchModal from "./components/Search/SearchModal";
 import Toast from "./components/Common/Toast";
 import ErrorBoundary from "./components/Common/ErrorBoundary";
@@ -21,7 +20,6 @@ import SettingsModal from "./components/Settings/SettingsModal";
 
 const pageMap: Record<string, React.ComponentType> = {
   home: HomePage,
-  code: CodePage,
   chat: ChatPage,
   chats: ChatsTasksPage,
   projects: ProjectsPage,
@@ -53,6 +51,7 @@ function HydrationGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const user = useAuthStore((s) => s.user);
+  const isLocked = useAuthStore((s) => s.isLocked);
   const activeView = useUIStore((s) => s.activeView);
   const theme = useUIStore((s) => s.theme);
   const setSearchOpen = useUIStore((s) => s.setSearchOpen);
@@ -83,10 +82,10 @@ export default function App() {
     }
   }, [theme]);
 
-  if (!user) {
+  if (!user || isLocked) {
     return (
       <HydrationGate>
-        <WelcomeScreen />
+        <ProfileSelectorModal />
         <Toast />
       </HydrationGate>
     );

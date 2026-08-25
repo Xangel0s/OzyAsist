@@ -4,6 +4,7 @@ import { api, type ChatDTO, type MessageDTO } from "../services/api";
 import { wsClient } from "../services/ws";
 import { useMemoryStore } from "./memoryStore";
 import { useToastStore } from "./toastStore";
+import type { ToolCallBlockData } from "../components/Code/ToolCallBlock";
 
 export interface Message {
   id: string;
@@ -11,6 +12,7 @@ export interface Message {
   content: string;
   timestamp: string;
   feedback?: "like" | "dislike" | null;
+  toolCalls?: ToolCallBlockData[];
 }
 
 export interface Chat {
@@ -25,10 +27,14 @@ export interface Chat {
   _messagesLoaded?: boolean;
 }
 
+export type AgentState = "idle" | "thinking" | "executing" | "awaiting";
+
 interface ChatState {
   chats: Chat[];
   activeChatId: string | null;
   isResponding: boolean;
+  agentState: AgentState;
+  activeSessionId: string | null;
   consentPending: { chatId: string; intent: string } | null;
   defaultProvider: string;
   defaultModel: string;
@@ -50,438 +56,549 @@ interface ChatState {
   updateChatProvider: (chatId: string, provider: string, model: string) => void;
   setDefaultModel: (model: string, provider: string) => void;
   cancelResponse: () => void;
+  respondToolApproval: (toolId: string, approved: boolean) => void;
   loadProviders: () => Promise<void>;
 }
 
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
-  chats: [],
-  activeChatId: null,
-  isResponding: false,
-  consentPending: null,
-  defaultProvider: "",
-  defaultModel: "",
+      chats: [],
+      activeChatId: null,
+      isResponding: false,
+      agentState: "idle",
+      activeSessionId: null,
+      consentPending: null,
+      defaultProvider: "",
+      defaultModel: "",
 
-  setActiveChat: (id) => {
-    if (get().isResponding) {
-      wsClient.cancelStream(get().activeChatId ?? "");
-    }
-    set({ activeChatId: id });
-    const chat = get().chats.find((c) => c.id === id);
-    if (chat && chat.messages.length === 0 && !chat._messagesLoaded) {
-      get().loadMessages(id);
-    }
-  },
+      setActiveChat: (id) => {
+        set({ activeChatId: id });
+        get().loadMessages(id);
+      },
 
-  addChat: (chat) => set((s) => ({ chats: [chat, ...s.chats] })),
-
-  addMessage: (chatId, message) =>
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === chatId
-          ? { ...c, messages: [...c.messages, message] }
-          : c,
-      ),
-    })),
-
-  updateMessage: (chatId, messageId, updates) =>
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              messages: c.messages.map((m) =>
-                m.id === messageId ? { ...m, ...updates } : m,
-              ),
-            }
-          : c,
-      ),
-    })),
-
-  updateChatTitle: (chatId, title) => {
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, title } : c,
-      ),
-    }));
-    api.chats.update(chatId, { name: title }).catch(() => {});
-  },
-
-  loadChats: async () => {
-    try {
-      const dtos = await api.chats.list();
-      const { defaultProvider, defaultModel } = get();
-      const chats: Chat[] = dtos.map((dto: ChatDTO) => ({
-        id: dto.id,
-        title: dto.name || "Chat",
-        projectId: dto.projectId,
-        mode: dto.mode || "chat",
-        provider: dto.provider || defaultProvider,
-        model: dto.model || defaultModel,
-        messages: [],
-        createdAt: dto.createdAt,
-      }));
-      set({ chats });
-    } catch {
-      // server not available — keep local state
-    }
-  },
-
-  createChat: async (mode, projectId?, provider?, model?) => {
-    const { defaultProvider, defaultModel } = get();
-    const targetProvider = provider || defaultProvider;
-    const targetModel = model || defaultModel;
-
-    try {
-      const dto = await api.chats.create({
-        title: "Nuevo chat",
-        mode,
-        provider: targetProvider,
-        model: targetModel,
-        projectId,
-      });
-      const chat: Chat = {
-        id: dto.id,
-        title: dto.name || "Nuevo chat",
-        projectId: projectId || dto.projectId,
-        mode: mode,
-        provider: dto.provider || targetProvider,
-        model: dto.model || targetModel,
-        messages: [],
-        createdAt: dto.createdAt,
-        _messagesLoaded: true,
-      };
-      set((s) => ({ chats: [chat, ...s.chats], activeChatId: chat.id }));
-      return chat.id;
-    } catch {
-      // Local fallback for offline mode
-      const localId = "local-" + Date.now();
-      const chat: Chat = {
-        id: localId,
-        title: "Nuevo chat",
-        projectId: projectId,
-        mode: mode,
-        provider: targetProvider,
-        model: targetModel,
-        messages: [],
-        createdAt: new Date().toISOString(),
-        _messagesLoaded: true,
-      };
-      set((s) => ({ chats: [chat, ...s.chats], activeChatId: localId }));
-      return localId;
-    }
-  },
-
-  deleteChat: async (chatId) => {
-    set((s) => ({
-      chats: s.chats.filter((c) => c.id !== chatId),
-      activeChatId: s.activeChatId === chatId ? null : s.activeChatId,
-    }));
-    try {
-      await api.chats.delete(chatId);
-    } catch {
-      // Backend error or offline — local state updated optimistically
-    }
-  },
-
-  sendMessage: async (chatId, content) => {
-    const chat = get().chats.find((c) => c.id === chatId);
-    if (!chat || get().isResponding) return;
-
-    const isFirstMessage = chat.messages.length === 0;
-    const title = isFirstMessage
-      ? content.length > 36
-        ? content.slice(0, 36) + "..."
-        : content
-      : chat.title;
-
-    const userMsg: Message = {
-      id: `u-${Date.now()}`,
-      role: "user",
-      content,
-      timestamp: new Date().toISOString(),
-    };
-
-    const assistantMsg: Message = {
-      id: `a-${Date.now()}`,
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toISOString(),
-    };
-
-    set((s) => ({
-      isResponding: true,
-      chats: s.chats.map((c) =>
-        c.id === chatId
-          ? { ...c, messages: [...c.messages, userMsg, assistantMsg], title: isFirstMessage ? title : c.title }
-          : c,
-      ),
-    }));
-
-    if (isFirstMessage && title !== chat.title) {
-      get().updateChatTitle(chatId, title);
-    }
-
-    try {
-      await wsClient.connect();
-
-      const pendingContent: string[] = [];
-
-      wsClient.sendMessage(chatId, content, {
-        onText: (text) => {
-          pendingContent.push(text);
-          get().updateMessage(chatId, assistantMsg.id, {
-            content: pendingContent.join(""),
-          });
-        },
-        onToolCall: () => {},
-        onWarn: (warning) => {
-          useToastStore.getState().show(warning, "warning");
-        },
-        onConsentRequired: (intent) => {
-          const chat = get().chats.find((c) => c.id === chatId);
-          const hasMsgs = (chat?.messages.length ?? 0) > 2;
-          if (!hasMsgs) {
-            set((s) => ({
-              isResponding: false,
-              consentPending: { chatId, intent },
-              chats: s.chats.map((c) =>
-                c.id === chatId
-                  ? { ...c, messages: c.messages.filter((m) => m.id !== assistantMsg.id) }
-                  : c
-              ),
-            }));
-          } else {
-            set({ consentPending: { chatId, intent } });
+      addChat: (chat) => {
+        set((s) => {
+          const exists = s.chats.some((c) => c.id === chat.id);
+          if (exists) {
+            return {
+              chats: s.chats.map((c) => (c.id === chat.id ? { ...c, ...chat } : c)),
+              activeChatId: chat.id,
+            };
           }
-        },
-        onDone: (_messageId) => {
-          const fullContent = pendingContent.join("");
-          const updated: Partial<Message> = {
-            content: fullContent,
-            timestamp: new Date().toISOString(),
+          return {
+            chats: [chat, ...s.chats],
+            activeChatId: chat.id,
           };
-          get().updateMessage(chatId, assistantMsg.id, updated);
+        });
+      },
 
-          if (fullContent.trim()) {
-            const firstLine = fullContent.split("\n")[0].slice(0, 60);
-            useMemoryStore.getState().addEntry({
-              topic: `Asistente: ${firstLine.length < 60 ? firstLine : firstLine + "..."}`,
-              content: fullContent,
-              source: "chat",
+      addMessage: (chatId, message) => {
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId ? { ...c, messages: [...c.messages, message] } : c,
+          ),
+        }));
+      },
+
+      loadChats: async () => {
+        try {
+          const serverChats = await api.chats.list();
+          set((s) => {
+            const serverMap = new Map(serverChats.map((c: ChatDTO) => [c.id, c]));
+            const merged: Chat[] = serverChats.map((sc: ChatDTO) => {
+              const local = s.chats.find((c) => c.id === sc.id);
+              return {
+                id: sc.id,
+                title: sc.name || "Nuevo Chat",
+                projectId: sc.projectId || undefined,
+                mode: (sc.mode as "chat" | "code") || "chat",
+                provider: sc.provider || s.defaultProvider || "",
+                model: sc.model || s.defaultModel || "",
+                messages: local?._messagesLoaded ? local.messages : local?.messages || [],
+                createdAt: sc.createdAt || new Date().toISOString(),
+                _messagesLoaded: local?._messagesLoaded,
+              };
             });
+            for (const local of s.chats) {
+              if (!serverMap.has(local.id)) {
+                merged.push(local);
+              }
+            }
+            return { chats: merged };
+          });
+        } catch {
+        }
+      },
+
+      createChat: async (mode = "chat", projectId, provider, model) => {
+        const id = `chat-${Date.now()}`;
+        const title = mode === "code" ? "Nuevo Código" : "Nuevo Chat";
+        const chosenProvider = provider || get().defaultProvider || "";
+        const chosenModel = model || get().defaultModel || "";
+
+        const newChat: Chat = {
+          id,
+          title,
+          projectId,
+          mode,
+          provider: chosenProvider,
+          model: chosenModel,
+          messages: [],
+          createdAt: new Date().toISOString(),
+          _messagesLoaded: true,
+        };
+
+        set((s) => ({
+          chats: [newChat, ...s.chats],
+          activeChatId: id,
+        }));
+
+        try {
+          const created = await api.chats.create({
+            title,
+            mode,
+            projectId: projectId || undefined,
+            provider: chosenProvider,
+            model: chosenModel,
+          });
+          if (created?.id && created.id !== id) {
+            set((s) => ({
+              chats: s.chats.map((c) =>
+                c.id === id ? { ...c, id: created.id } : c,
+              ),
+              activeChatId: created.id,
+            }));
+            return created.id;
+          }
+        } catch {
+        }
+        return id;
+      },
+
+      deleteChat: async (chatId) => {
+        set((s) => {
+          const next = s.chats.filter((c) => c.id !== chatId);
+          const nextActive =
+            s.activeChatId === chatId
+              ? next.length > 0
+                ? next[0].id
+                : null
+              : s.activeChatId;
+          return { chats: next, activeChatId: nextActive };
+        });
+
+        try {
+          await api.chats.delete(chatId);
+        } catch {
+        }
+      },
+
+      updateChatTitle: async (chatId, title) => {
+        set((s) => ({
+          chats: s.chats.map((c) => (c.id === chatId ? { ...c, title } : c)),
+        }));
+        try {
+          await api.chats.update(chatId, { name: title });
+        } catch {
+        }
+      },
+
+      updateMessage: (chatId, messageId, updates) => {
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === messageId ? { ...m, ...updates } : m,
+                  ),
+                }
+              : c,
+          ),
+        }));
+      },
+
+      sendMessage: async (chatId, content) => {
+        const chat = get().chats.find((c) => c.id === chatId);
+        if (!chat || get().isResponding || get().consentPending) return;
+
+        const isFirstMessage = chat.messages.length === 0;
+        const title = content.slice(0, 30) + (content.length > 30 ? "..." : "");
+
+        const userMsg: Message = {
+          id: `u-${Date.now()}`,
+          role: "user",
+          content,
+          timestamp: new Date().toISOString(),
+        };
+
+        const assistantMsg: Message = {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          content: "",
+          timestamp: new Date().toISOString(),
+          toolCalls: [],
+        };
+
+        set((s) => ({
+          isResponding: true,
+          agentState: "thinking",
+          chats: s.chats.map((c) =>
+            c.id === chatId
+              ? { ...c, messages: [...c.messages, userMsg, assistantMsg], title: isFirstMessage ? title : c.title }
+              : c,
+          ),
+        }));
+
+        if (isFirstMessage && title !== chat.title) {
+          get().updateChatTitle(chatId, title);
+        }
+
+        try {
+          await wsClient.connect();
+
+          const pendingContent: string[] = [];
+          const currentToolCalls: ToolCallBlockData[] = [];
+
+          wsClient.sendMessage(chatId, content, {
+            onSessionStarted: (sessionId) => {
+              set({ activeSessionId: sessionId });
+            },
+
+            onStateSync: (ev) => {
+              set({ agentState: ev.state });
+            },
+
+            onText: (text) => {
+              pendingContent.push(text);
+              get().updateMessage(chatId, assistantMsg.id, {
+                content: pendingContent.join(""),
+              });
+            },
+
+            onToolCall: (ev) => {
+              const existingIdx = currentToolCalls.findIndex((t) => t.toolId === ev.toolId);
+              const toolData: ToolCallBlockData = {
+                toolId: ev.toolId,
+                toolName: ev.toolName,
+                toolInput: ev.toolInput,
+                status: "calling",
+              };
+              if (existingIdx >= 0) {
+                currentToolCalls[existingIdx] = { ...currentToolCalls[existingIdx], ...toolData };
+              } else {
+                currentToolCalls.push(toolData);
+              }
+              set({ agentState: "executing" });
+              get().updateMessage(chatId, assistantMsg.id, {
+                toolCalls: [...currentToolCalls],
+              });
+            },
+
+            onToolApprovalRequest: (ev) => {
+              const existingIdx = currentToolCalls.findIndex((t) => t.toolId === ev.toolId);
+              const toolData: ToolCallBlockData = {
+                toolId: ev.toolId,
+                toolName: ev.toolName,
+                toolInput: ev.toolInput,
+                status: "awaiting_approval",
+              };
+              if (existingIdx >= 0) {
+                currentToolCalls[existingIdx] = toolData;
+              } else {
+                currentToolCalls.push(toolData);
+              }
+              set({ agentState: "awaiting" });
+              get().updateMessage(chatId, assistantMsg.id, {
+                toolCalls: [...currentToolCalls],
+              });
+            },
+
+            onToolResult: (ev) => {
+              const existingIdx = currentToolCalls.findIndex((t) => t.toolId === ev.toolId);
+              if (existingIdx >= 0) {
+                currentToolCalls[existingIdx] = {
+                  ...currentToolCalls[existingIdx],
+                  status: ev.toolSuccess ? "success" : "error",
+                  output: ev.toolOutput,
+                  durationMs: ev.durationMs,
+                };
+              }
+              get().updateMessage(chatId, assistantMsg.id, {
+                toolCalls: [...currentToolCalls],
+              });
+            },
+
+            onAgentCompleted: (_ev) => {
+              const fullContent = pendingContent.join("");
+              const updated: Partial<Message> = {
+                content: fullContent,
+                timestamp: new Date().toISOString(),
+                toolCalls: [...currentToolCalls],
+              };
+              get().updateMessage(chatId, assistantMsg.id, updated);
+
+              if (fullContent.trim()) {
+                const firstLine = fullContent.split("\n")[0].slice(0, 60);
+                useMemoryStore.getState().addEntry({
+                  topic: `Agente: ${firstLine.length < 60 ? firstLine : firstLine + "..."}`,
+                  content: fullContent,
+                  source: "chat",
+                });
+              }
+
+              set({ isResponding: false, agentState: "idle", activeSessionId: null });
+            },
+
+            onWarn: (warning) => {
+              useToastStore.getState().show(warning, "warning");
+            },
+
+            onConsentRequired: (intent) => {
+              const currentChat = get().chats.find((c) => c.id === chatId);
+              const hasMsgs = (currentChat?.messages.length ?? 0) > 2;
+              if (!hasMsgs) {
+                set((s) => ({
+                  isResponding: false,
+                  agentState: "idle",
+                  consentPending: { chatId, intent },
+                  chats: s.chats.map((c) =>
+                    c.id === chatId
+                      ? { ...c, messages: c.messages.filter((m) => m.id !== assistantMsg.id) }
+                      : c
+                  ),
+                }));
+              } else {
+                set({ consentPending: { chatId, intent }, agentState: "idle" });
+              }
+            },
+
+            onDone: (_messageId) => {
+              const fullContent = pendingContent.join("");
+              const updated: Partial<Message> = {
+                content: fullContent,
+                timestamp: new Date().toISOString(),
+                toolCalls: [...currentToolCalls],
+              };
+              get().updateMessage(chatId, assistantMsg.id, updated);
+
+              if (fullContent.trim()) {
+                const firstLine = fullContent.split("\n")[0].slice(0, 60);
+                useMemoryStore.getState().addEntry({
+                  topic: `Asistente: ${firstLine.length < 60 ? firstLine : firstLine + "..."}`,
+                  content: fullContent,
+                  source: "chat",
+                });
+              }
+
+              set({ isResponding: false, agentState: "idle", activeSessionId: null });
+            },
+
+            onError: (error) => {
+              get().updateMessage(chatId, assistantMsg.id, {
+                content: `[Error: ${error}]`,
+                toolCalls: [...currentToolCalls],
+              });
+              set({ isResponding: false, agentState: "idle", activeSessionId: null });
+            },
+          });
+        } catch {
+          get().updateMessage(chatId, assistantMsg.id, {
+            content: "[Error: no se pudo conectar con el servidor]",
+          });
+          set({ isResponding: false, agentState: "idle", activeSessionId: null });
+        }
+      },
+
+      cancelResponse: () => {
+        const activeChatId = get().activeChatId;
+        if (activeChatId) {
+          wsClient.cancelStream(activeChatId);
+        }
+        set({ isResponding: false, agentState: "idle", activeSessionId: null });
+      },
+
+      respondToolApproval: (toolId: string, approved: boolean) => {
+        wsClient.respondToolApproval(toolId, approved);
+        set({ agentState: approved ? "executing" : "idle" });
+
+        const activeChatId = get().activeChatId;
+        if (activeChatId) {
+          set((s) => ({
+            chats: s.chats.map((c) => {
+              if (c.id !== activeChatId) return c;
+              const msgs = [...c.messages];
+              if (msgs.length === 0) return c;
+              const last = { ...msgs[msgs.length - 1] };
+              if (last.toolCalls) {
+                last.toolCalls = last.toolCalls.map((t) =>
+                  t.toolId === toolId
+                    ? {
+                        ...t,
+                        status: approved ? "calling" : "error",
+                        output: approved ? undefined : "Herramienta denegada por el usuario",
+                      }
+                    : t
+                );
+                msgs[msgs.length - 1] = last;
+              }
+              return { ...c, messages: msgs };
+            }),
+          }));
+        }
+      },
+
+      setMessageFeedback: async (chatId, messageId, feedback) => {
+        get().updateMessage(chatId, messageId, { feedback });
+        try {
+          await api.chats.updateFeedback(chatId, messageId, feedback ?? "");
+        } catch {
+        }
+      },
+
+      regenerateMessage: async (chatId) => {
+        const chat = get().chats.find((c) => c.id === chatId);
+        if (!chat || get().isResponding || get().consentPending) return;
+
+        const messages = [...chat.messages];
+        let lastUserIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+          if (messages[i].role === "user") {
+            lastUserIdx = i;
+            break;
+          }
+        }
+        if (lastUserIdx === -1) return;
+
+        const lastUserContent = messages[lastUserIdx].content;
+        const messagesToKeep = messages.slice(0, lastUserIdx);
+
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId ? { ...c, messages: messagesToKeep } : c,
+          ),
+        }));
+
+        await get().sendMessage(chatId, lastUserContent);
+      },
+
+      resolveConsent: (decision) => {
+        const pending = get().consentPending;
+        if (!pending) return;
+        set({ consentPending: null, isResponding: true, agentState: "thinking" });
+
+        const assistantMsg: Message = {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          content: "",
+          timestamp: new Date().toISOString(),
+          toolCalls: [],
+        };
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === pending.chatId
+              ? { ...c, messages: [...c.messages, assistantMsg] }
+              : c
+          ),
+        }));
+
+        const pendingContent: string[] = [];
+
+        const sent = wsClient.sendConsentResponse(pending.chatId, decision, {
+          onText: (text) => {
+            pendingContent.push(text);
+            get().updateMessage(pending.chatId, assistantMsg.id, { content: pendingContent.join("") });
+          },
+          onDone: () => {
+            const fullContent = pendingContent.join("");
+            if (!fullContent.trim()) {
+              get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Acción rechazada]" });
+            }
+            set({ isResponding: false, agentState: "idle" });
+          },
+          onError: (error) => {
+            get().updateMessage(pending.chatId, assistantMsg.id, { content: `[Error: ${error}]` });
+            set({ isResponding: false, agentState: "idle" });
+          },
+        });
+        if (!sent) {
+          get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Error: No hay conexión con el servidor]" });
+          set({ isResponding: false, agentState: "idle" });
+        }
+      },
+
+      dismissConsent: () => {
+        const pending = get().consentPending;
+        if (pending) {
+          set({ consentPending: null });
+        }
+      },
+
+      updateChatProvider: (chatId, provider, model) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId ? { ...c, provider, model } : c,
+          ),
+        })),
+
+      setDefaultModel: (model, provider) =>
+        set({ defaultModel: model, defaultProvider: provider }),
+
+      loadProviders: async () => {
+        try {
+          const opencodeKey = localStorage.getItem("opencode_key") || "";
+          const openaiKey = localStorage.getItem("openai_key") || "";
+          const openrouterKey = localStorage.getItem("openrouter_key") || "";
+          const anthropicKey = localStorage.getItem("anthropic_key") || "";
+
+          if (opencodeKey || openaiKey || openrouterKey || anthropicKey) {
+            await api.settings.update({
+              opencode_key: opencodeKey,
+              openai_key: openaiKey,
+              openrouter_key: openrouterKey,
+              anthropic_key: anthropicKey,
+            }).catch(() => {});
           }
 
-          set({ isResponding: false });
-        },
-        onError: (error) => {
-          get().updateMessage(chatId, assistantMsg.id, {
-            content: `[Error: ${error}]`,
-          });
-          set({ isResponding: false });
-        },
-      });
-    } catch {
-      get().updateMessage(chatId, assistantMsg.id, {
-        content: "[Error: no se pudo conectar con el servidor]",
-      });
-      set({ isResponding: false });
-    }
-  },
-
-  setMessageFeedback: async (chatId, messageId, feedback) => {
-    get().updateMessage(chatId, messageId, { feedback });
-
-    try {
-      await api.chats.updateFeedback(chatId, messageId, feedback ?? "");
-    } catch {
-    }
-  },
-
-  regenerateMessage: async (chatId) => {
-    const chat = get().chats.find((c) => c.id === chatId);
-    if (!chat || get().isResponding || get().consentPending) return;
-
-    const messages = [...chat.messages];
-    let lastUserIdx = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "user") {
-        lastUserIdx = i;
-        break;
-      }
-    }
-    if (lastUserIdx === -1) return;
-
-    const lastUserContent = messages[lastUserIdx].content;
-    const messagesToKeep = messages.slice(0, lastUserIdx);
-
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, messages: messagesToKeep } : c,
-      ),
-    }));
-
-    await get().sendMessage(chatId, lastUserContent);
-  },
-
-  resolveConsent: (decision) => {
-    const pending = get().consentPending;
-    if (!pending) return;
-    set({ consentPending: null, isResponding: true });
-
-    const assistantMsg: Message = {
-      id: `a-${Date.now()}`,
-      role: "assistant",
-      content: "",
-      timestamp: new Date().toISOString(),
-    };
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === pending.chatId
-          ? { ...c, messages: [...c.messages, assistantMsg] }
-          : c
-      ),
-    }));
-
-    const pendingContent: string[] = [];
-
-    const sent = wsClient.sendConsentResponse(pending.chatId, decision, {
-      onText: (text) => {
-        pendingContent.push(text);
-        get().updateMessage(pending.chatId, assistantMsg.id, { content: pendingContent.join("") });
-      },
-      onToolCall: () => {},
-      onAgentStep: (result) => {
-        try {
-          const step = JSON.parse(result);
-          pendingContent.push(`[Paso ${step.stepId}] ${step.success ? "OK" : "FAIL"}: ${step.output || step.error}\n`);
-          get().updateMessage(pending.chatId, assistantMsg.id, { content: pendingContent.join("") });
+          const providers = await api.models.list();
+          if (providers.length > 0) {
+            const first = providers[0];
+            const modelId = first.models[0] || "";
+            set({ defaultProvider: first.provider, defaultModel: modelId });
+          } else {
+            set({ defaultProvider: "", defaultModel: "" });
+          }
         } catch {
-          pendingContent.push(result);
-          get().updateMessage(pending.chatId, assistantMsg.id, { content: pendingContent.join("") });
+          set({ defaultProvider: "", defaultModel: "" });
         }
       },
-      onAgentDone: (_taskId, results) => {
-        let summary = "";
+
+      loadMessages: async (chatId) => {
         try {
-          const stepsList: { stepId: number; success: boolean; output?: string; error?: string }[] = JSON.parse(results);
-          stepsList.forEach((s) => {
-            summary += `${s.success ? "✅" : "❌"} Paso ${s.stepId}: ${s.output || s.error}\n`;
-          });
-          get().updateMessage(pending.chatId, assistantMsg.id, { content: summary });
+          const data = await api.chats.getById(chatId);
+          const messages: Message[] = (data.messages || []).map((m: MessageDTO) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            timestamp: m.createdAt || new Date().toISOString(),
+            feedback: (m.feedback as "like" | "dislike" | null) || null,
+          }));
+          set((s) => ({
+            chats: s.chats.map((c) =>
+              c.id === chatId ? { ...c, messages, _messagesLoaded: true } : c,
+            ),
+          }));
         } catch {
-          summary = results;
-          get().updateMessage(pending.chatId, assistantMsg.id, { content: results });
         }
-        const firstLine = summary.split("\n")[0].slice(0, 60);
-        useMemoryStore.getState().addEntry({
-          topic: `Agente: ${firstLine || "Tarea completada"}`,
-          content: summary,
-          source: "chat" as const,
-        });
-        set({ isResponding: false });
       },
-      onDone: () => {
-        const fullContent = pendingContent.join("");
-        if (!fullContent.trim()) {
-          get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Acción rechazada]" });
-        }
-        set({ isResponding: false });
+
+      clearChatMessages: (chatId: string) => {
+        set((s) => ({
+          chats: s.chats.map((c) => (c.id === chatId ? { ...c, messages: [] } : c)),
+        }));
       },
-      onError: (error) => {
-        get().updateMessage(pending.chatId, assistantMsg.id, { content: `[Error: ${error}]` });
-        set({ isResponding: false });
-      },
-    });
-    if (!sent) {
-      get().updateMessage(pending.chatId, assistantMsg.id, { content: "[Error: No hay conexión con el servidor]" });
-      set({ isResponding: false });
-    }
-  },
-
-  dismissConsent: () => {
-    const pending = get().consentPending;
-    if (pending) {
-      wsClient.cancelStream(pending.chatId);
-    }
-    set({ consentPending: null, isResponding: false });
-  },
-
-  cancelResponse: () => {
-    const { activeChatId, consentPending } = get();
-    const targetChatId = consentPending?.chatId || activeChatId;
-    if (targetChatId) {
-      wsClient.cancelStream(targetChatId);
-    }
-    set({ isResponding: false, consentPending: null });
-    useToastStore.getState().show("Respuesta cancelada", "info");
-  },
-
-  updateChatProvider: (chatId, provider, model) =>
-    set((s) => ({
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, provider, model } : c,
-      ),
-    })),
-
-  setDefaultModel: (model, provider) =>
-    set({ defaultModel: model, defaultProvider: provider }),
-
-  loadProviders: async () => {
-    try {
-      const opencodeKey = localStorage.getItem("opencode_key") || "";
-      const openaiKey = localStorage.getItem("openai_key") || "";
-      const openrouterKey = localStorage.getItem("openrouter_key") || "";
-      const anthropicKey = localStorage.getItem("anthropic_key") || "";
-
-      if (opencodeKey || openaiKey || openrouterKey || anthropicKey) {
-        await api.settings.update({
-          opencode_key: opencodeKey,
-          openai_key: openaiKey,
-          openrouter_key: openrouterKey,
-          anthropic_key: anthropicKey,
-        }).catch(() => {});
-      }
-
-      const providers = await api.models.list();
-      if (providers.length > 0) {
-        const first = providers[0];
-        const modelId = first.models[0] || "";
-        set({ defaultProvider: first.provider, defaultModel: modelId });
-      } else {
-        set({ defaultProvider: "", defaultModel: "" });
-      }
-    } catch {
-      set({ defaultProvider: "", defaultModel: "" });
-    }
-  },
-
-  loadMessages: async (chatId) => {
-    try {
-      const data = await api.chats.getById(chatId);
-      const messages: Message[] = (data.messages || []).map((m: MessageDTO) => ({
-        id: m.id,
-        role: m.role,
-        content: m.content,
-        timestamp: m.createdAt || new Date().toISOString(),
-        feedback: (m.feedback as "like" | "dislike" | null) || null,
-      }));
-      set((s) => ({
-        chats: s.chats.map((c) =>
-          c.id === chatId ? { ...c, messages, _messagesLoaded: true } : c,
-        ),
-      }));
-    } catch {
-    }
-  },
-
-  clearChatMessages: (chatId: string) => {
-    set((s) => ({
-      chats: s.chats.map((c) => (c.id === chatId ? { ...c, messages: [] } : c)),
-    }));
-  },
-}),
+    }),
     {
       name: "ozy-chats",
       partialize: (state) => ({

@@ -57,13 +57,7 @@ export default function ChatPage() {
       c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.messages.some((m) => m.content.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesFilter =
-      filterType === "Todo" ||
-      (filterType === "Chat" && c.mode === "chat") ||
-      (filterType === "Code" && c.mode === "code") ||
-      (filterType === "Cowork" && (c.mode as string) === "cowork");
-
-    return matchesSearch && matchesFilter && (c.messages.length > 0 || c.id === activeChatId);
+    return matchesSearch && (c.messages.length > 0 || c.id === activeChatId);
   });
 
   // If there is an active chat with messages, show the active chat conversation view

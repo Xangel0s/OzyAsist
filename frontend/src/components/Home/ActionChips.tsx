@@ -1,18 +1,14 @@
-import { useUIStore } from "../../store/uiStore";
-
 interface Chip {
   icon: string;
   label: string;
-  view: "chat" | "code";
-  prompt?: string;
+  prompt: string;
 }
 
 const chips: Chip[] = [
-  { icon: "code", label: "Código", view: "code" },
-  { icon: "edit", label: "Escribir", view: "chat", prompt: "Ayúdame a escribir un texto sobre" },
-  { icon: "school", label: "Aprender", view: "chat", prompt: "Quiero aprender sobre" },
-  { icon: "local_cafe", label: "Vida personal", view: "chat", prompt: "Necesito consejos sobre" },
-  { icon: "lightbulb", label: "Selección de modelo", view: "chat" },
+  { icon: "code", label: "Código", prompt: "Ayúdame a escribir y revisar código para " },
+  { icon: "edit", label: "Escribir", prompt: "Ayúdame a redactar un texto sobre " },
+  { icon: "school", label: "Aprender", prompt: "Quiero aprender sobre " },
+  { icon: "lightbulb", label: "Ideas", prompt: "Dame ideas innovadoras sobre " },
 ];
 
 interface Props {
@@ -20,13 +16,9 @@ interface Props {
 }
 
 export default function ActionChips({ onSend }: Props) {
-  const setActiveView = useUIStore((s) => s.setActiveView);
-
   const handleClick = (chip: Chip) => {
     if (chip.prompt && onSend) {
       onSend(chip.prompt);
-    } else {
-      setActiveView(chip.view);
     }
   };
 

@@ -1,19 +1,60 @@
 const WS_URL = "ws://localhost:8080/ws";
 
+// ============================================================
+// Tipos del protocolo de eventos del ReAct Loop
+// ============================================================
+
+export interface ToolCallEvent {
+  toolId: string;
+  toolName: string;
+  toolInput: string;
+}
+
+export interface ToolResultEvent {
+  toolId: string;
+  toolOutput: string;
+  toolSuccess: boolean;
+  durationMs: number;
+}
+
+export interface ToolApprovalRequestEvent {
+  toolId: string;
+  toolName: string;
+  toolInput: string;
+}
+
+export interface AgentStateEvent {
+  state: "thinking" | "executing" | "awaiting" | "idle";
+}
+
+export interface AgentCompletedEvent {
+  taskId: string;
+  messageId: string;
+  turns: number;
+}
+
+// StreamCallbacks — unificados para Modo Chat y Modo Code (ReAct Loop)
 export interface StreamCallbacks {
+  // Modo Chat + Modo Code (texto)
   onText: (text: string) => void;
-  onToolCall: (toolCall: { toolId: string; toolName: string; toolInput: string }) => void;
   onDone: (messageId: string) => void;
   onError: (error: string) => void;
   onWarn?: (warning: string) => void;
   onConsentRequired?: (intent: string) => void;
-  onAgentStep?: (result: string) => void;
-  onAgentDone?: (taskId: string, result: string) => void;
+
+  // ReAct Loop — Modo Code
+  onSessionStarted?: (sessionId: string) => void;
+  onStateSync?: (ev: AgentStateEvent) => void;
+  onToolCall?: (ev: ToolCallEvent) => void;
+  onToolApprovalRequest?: (ev: ToolApprovalRequestEvent) => void;
+  onToolResult?: (ev: ToolResultEvent) => void;
+  onAgentCompleted?: (ev: AgentCompletedEvent) => void;
 }
 
 interface StreamSession {
   chatId: string;
   callbacks: StreamCallbacks;
+  sessionId?: string; // ID del loop agéntico activo (para cancelar/aprobar)
 }
 
 class WsClient {
@@ -87,68 +128,120 @@ class WsClient {
     });
   }
 
-  private handleMessage(data: { type: string; content?: string; tool_id?: string; tool_name?: string; tool_input?: string; chat_id?: string; message_id?: string; warning?: string }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private handleMessage(data: Record<string, any>) {
     if (!this.session) return;
+    const cb = this.session.callbacks;
 
     switch (data.type) {
+      // --- Modo Chat + Modo Code (texto) ---
       case "text":
-        this.session.callbacks.onText(data.content ?? "");
+        cb.onText(data.content ?? "");
         break;
-      case "tool_call":
-        this.session.callbacks.onToolCall({
+
+      case "done":
+        cb.onDone(data.message_id ?? "");
+        this.session = null;
+        break;
+
+      case "error":
+        cb.onError(data.error ?? data.content ?? "Error desconocido");
+        this.session = null;
+        break;
+
+      case "warn":
+        cb.onWarn?.(data.warning ?? "");
+        break;
+
+      case "consent_required":
+        cb.onConsentRequired?.(data.content ?? "");
+        this.session = null;
+        break;
+
+      // --- ReAct Loop — Modo Code ---
+      case "agent:session_started":
+        // El backend nos da el sessionId para poder cancelar o responder aprobaciones
+        if (this.session && data.session_id) {
+          this.session.sessionId = data.session_id;
+        }
+        cb.onSessionStarted?.(data.session_id ?? "");
+        break;
+
+      case "message:delta":
+        cb.onText(data.content ?? "");
+        break;
+
+      case "state:sync":
+        cb.onStateSync?.({ state: data.state ?? "idle" });
+        break;
+
+      case "tool:call":
+        cb.onToolCall?.({
           toolId: data.tool_id ?? "",
           toolName: data.tool_name ?? "",
           toolInput: data.tool_input ?? "",
         });
         break;
-      case "done":
-        this.session.callbacks.onDone(data.message_id ?? "");
+
+      case "tool:approval_request":
+        cb.onToolApprovalRequest?.({
+          toolId: data.tool_id ?? "",
+          toolName: data.tool_name ?? "",
+          toolInput: data.tool_input ?? "",
+        });
+        break;
+
+      case "tool:result":
+        cb.onToolResult?.({
+          toolId: data.tool_id ?? "",
+          toolOutput: data.tool_output ?? "",
+          toolSuccess: data.tool_success ?? false,
+          durationMs: data.duration_ms ?? 0,
+        });
+        break;
+
+      case "agent:completed":
+        cb.onAgentCompleted?.({
+          taskId: data.task_id ?? "",
+          messageId: data.message_id ?? "",
+          turns: data.turns ?? 0,
+        });
         this.session = null;
         break;
-      case "error":
-        this.session.callbacks.onError(data.content ?? "Error desconocido");
-        this.session = null;
-        break;
-      case "warn":
-        if (this.session.callbacks.onWarn) {
-          this.session.callbacks.onWarn(data.warning ?? "");
-        }
-        break;
-      case "consent_required":
-        if (this.session.callbacks.onConsentRequired) {
-          this.session.callbacks.onConsentRequired(data.content ?? "");
-        }
-        this.session = null;
-        break;
+
+      // Legado — compatibilidad con mensajes del viejo agente
       case "agent_start":
         break;
       case "agent_step":
-        if (this.session.callbacks.onAgentStep) {
-          this.session.callbacks.onAgentStep(data.content ?? "");
-        }
         break;
       case "agent_done":
-        if (this.session.callbacks.onAgentDone) {
-          this.session.callbacks.onAgentDone(data.message_id ?? "", data.content ?? "");
-        }
         this.session = null;
         break;
     }
   }
 
-  sendMessage(chatId: string, content: string, callbacks: StreamCallbacks, attachments?: { id: string; type: string }[]) {
+  sendMessage(
+    chatId: string,
+    content: string,
+    callbacks: StreamCallbacks,
+    attachments?: { id: string; type: string }[]
+  ) {
     if (this.session) {
       callbacks.onError("Ya hay un streaming en curso");
       return;
     }
-
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       callbacks.onError("No hay conexión WebSocket");
       return;
     }
 
     this.session = { chatId, callbacks };
-    const msg: { type: string; chat_id: string; content: string; attachments?: { id: string; type: string }[] } = { type: "message", chat_id: chatId, content };
+    const msg: {
+      type: string;
+      chat_id: string;
+      content: string;
+      attachments?: { id: string; type: string }[];
+    } = { type: "message", chat_id: chatId, content };
     if (attachments && attachments.length > 0) {
       msg.attachments = attachments;
     }
@@ -162,9 +255,29 @@ class WsClient {
     return true;
   }
 
+  /** Responde a una solicitud de aprobación de herramienta del ReAct Loop */
+  respondToolApproval(toolId: string, approved: boolean) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.session?.sessionId) return;
+    this.ws.send(
+      JSON.stringify({
+        type: "tool_approval",
+        session_id: this.session.sessionId,
+        tool_id: toolId,
+        approved,
+      })
+    );
+  }
+
   cancelStream(chatId: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: "cancel", chat_id: chatId }));
+      // Si hay una sesión de loop agéntico, cancelarla también
+      if (this.session?.sessionId) {
+        this.ws.send(
+          JSON.stringify({ type: "cancel_session", session_id: this.session.sessionId })
+        );
+      }
     }
     this.session = null;
   }

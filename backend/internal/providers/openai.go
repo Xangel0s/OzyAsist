@@ -38,16 +38,17 @@ func (p *OpenAIProvider) SupportsTools() bool { return true }
 func (p *OpenAIProvider) Models() []string    { return []string{"gpt-4o", "gpt-4o-mini", "o3", "o4-mini"} }
 
 func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Message, opts CompletionOptions) (<-chan StreamChunk, error) {
-	ch := make(chan StreamChunk)
+	ch := make(chan StreamChunk, 32)
 
 	model := opts.Model
 	if model == "" {
 		model = p.cfg.model
 	}
+
 	body := map[string]any{
-		"model":      model,
-		"messages":   toOpenAIMessages(messages),
-		"stream":     true,
+		"model":          model,
+		"messages":       toOpenAIMessages(messages),
+		"stream":         true,
 		"stream_options": map[string]bool{"include_usage": false},
 	}
 	if opts.Temperature != 0 {
@@ -55,6 +56,11 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	}
 	if opts.MaxTokens != 0 {
 		body["max_tokens"] = opts.MaxTokens
+	}
+
+	// Tool calling — OpenAI usa "tools" con "function.parameters" (JSON Schema)
+	if len(opts.Tools) > 0 {
+		body["tools"] = toOpenAITools(opts.Tools)
 	}
 
 	raw, _ := json.Marshal(body)
@@ -78,17 +84,35 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 		resp.Body.Close()
 		close(ch)
 		errStr := strings.TrimSpace(string(errBody))
-		if len(errStr) > 200 {
-			errStr = errStr[:200] + "..."
+		if len(errStr) > 300 {
+			errStr = errStr[:300] + "..."
 		}
-		if errStr != "" {
-			return nil, fmt.Errorf("API %s (status %d): %s", p.Name(), resp.StatusCode, errStr)
-		}
-		return nil, fmt.Errorf("API %s status %d", p.Name(), resp.StatusCode)
+		return nil, fmt.Errorf("API %s (status %d): %s", p.Name(), resp.StatusCode, errStr)
 	}
 
 	go p.readStream(ctx, ch, resp.Body)
 	return ch, nil
+}
+
+// toOpenAITools convierte ToolDef agnóstico al formato nativo de OpenAI.
+// OpenAI espera: {"type":"function","function":{"name","description","parameters":<JSON Schema>}}
+func toOpenAITools(tools []ToolDef) []any {
+	out := make([]any, len(tools))
+	for i, t := range tools {
+		schema := t.InputSchema
+		if schema == nil {
+			schema = json.RawMessage(`{"type":"object","properties":{}}`)
+		}
+		out[i] = map[string]any{
+			"type": "function",
+			"function": map[string]any{
+				"name":        t.Name,
+				"description": t.Description,
+				"parameters":  schema,
+			},
+		}
+	}
+	return out
 }
 
 func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, body io.ReadCloser) {
@@ -98,39 +122,36 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
 
-	var toolAccum map[int]struct {
-		id     string
-		name   string
-		args   string
+	// Acumulador de tool calls indexado por index delta
+	type tcAccum struct {
+		id   string
+		name string
+		args string
 	}
+	toolAccum := make(map[int]*tcAccum)
 
 	for scanner.Scan() {
-		line := scanner.Text()
-
 		if ctx.Err() != nil {
 			ch <- StreamChunk{Type: "error", Content: "cancelado"}
 			return
 		}
 
+		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
-
 		data := strings.TrimPrefix(line, "data: ")
 		if data == "[DONE]" {
 			return
 		}
 
 		var sse struct {
-			ID      string `json:"id"`
-			Object  string `json:"object"`
 			Choices []struct {
 				Index int `json:"index"`
-			Delta struct {
-				Role             string `json:"role"`
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
-				ToolCalls        []struct {
+				Delta struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Type     string `json:"type"`
@@ -149,37 +170,48 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 		}
 
 		for _, choice := range sse.Choices {
+			// Texto en streaming
 			if choice.Delta.Content != "" {
 				ch <- StreamChunk{Type: "text", Content: choice.Delta.Content}
 			}
 
+			// Acumular tool calls (llegan fragmentados en múltiples deltas)
 			for _, tc := range choice.Delta.ToolCalls {
-				if tc.Function.Name != "" || tc.ID != "" {
-					if toolAccum == nil {
-						toolAccum = make(map[int]struct{ id string; name string; args string })
-					}
-					acc := toolAccum[tc.Index]
-					if tc.ID != "" {
-						acc.id = tc.ID
-					}
-					if tc.Function.Name != "" {
-						acc.name = tc.Function.Name
-					}
-					acc.args += tc.Function.Arguments
+				acc, ok := toolAccum[tc.Index]
+				if !ok {
+					acc = &tcAccum{}
 					toolAccum[tc.Index] = acc
 				}
+				if tc.ID != "" {
+					acc.id = tc.ID
+				}
+				if tc.Function.Name != "" {
+					acc.name = tc.Function.Name
+				}
+				acc.args += tc.Function.Arguments
 			}
 
+			// finish_reason="tool_calls" → emitir tool calls completos
 			if choice.FinishReason == "tool_calls" {
 				for _, acc := range toolAccum {
+					var inputRaw json.RawMessage
+					if acc.args != "" {
+						inputRaw = json.RawMessage(acc.args)
+					} else {
+						inputRaw = json.RawMessage(`{}`)
+					}
 					ch <- StreamChunk{
-						Type:     "tool_call",
-						ToolID:   acc.id,
-						ToolName: acc.name,
-						ToolInput: acc.args,
+						Type: "tool_call",
+						ToolCall: &ToolCall{
+							ID:    acc.id,
+							Name:  acc.name,
+							Input: inputRaw,
+						},
 					}
 				}
-				toolAccum = nil
+				toolAccum = make(map[int]*tcAccum)
+				ch <- StreamChunk{Type: "done"}
+				return
 			}
 
 			if choice.FinishReason == "stop" {
@@ -194,11 +226,63 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 	}
 }
 
+// toOpenAIMessages convierte el historial extendido al formato de OpenAI.
+// Los mensajes role="tool" se envían con tool_call_id.
+// Los mensajes role="assistant" con ToolCalls se envían con tool_calls[].
 func toOpenAIMessages(msgs []Message) []any {
-	out := make([]any, len(msgs))
-	for i, m := range msgs {
-		obj := map[string]any{"role": m.Role, "content": m.Content}
-		out[i] = obj
+	out := make([]any, 0, len(msgs))
+	for _, m := range msgs {
+		switch m.Role {
+		case "system":
+			out = append(out, map[string]any{
+				"role":    "system",
+				"content": m.Content,
+			})
+		case "user":
+			out = append(out, map[string]any{
+				"role":    "user",
+				"content": m.Content,
+			})
+		case "assistant":
+			if len(m.ToolCalls) == 0 {
+				out = append(out, map[string]any{
+					"role":    "assistant",
+					"content": m.Content,
+				})
+			} else {
+				tcs := make([]any, len(m.ToolCalls))
+				for i, tc := range m.ToolCalls {
+					argStr := "{}"
+					if tc.Input != nil {
+						argStr = string(tc.Input)
+					}
+					tcs[i] = map[string]any{
+						"id":   tc.ID,
+						"type": "function",
+						"function": map[string]any{
+							"name":      tc.Name,
+							"arguments": argStr,
+						},
+					}
+				}
+				obj := map[string]any{
+					"role":       "assistant",
+					"tool_calls": tcs,
+				}
+				if m.Content != "" {
+					obj["content"] = m.Content
+				}
+				out = append(out, obj)
+			}
+		case "tool":
+			if m.ToolResult != nil {
+				out = append(out, map[string]any{
+					"role":         "tool",
+					"tool_call_id": m.ToolResult.ToolCallID,
+					"content":      m.ToolResult.Content,
+				})
+			}
+		}
 	}
 	return out
 }

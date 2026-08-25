@@ -193,10 +193,10 @@ export default function ProjectDetail({ project }: { project: Project }) {
   };
 
   const handleStartProjectChat = async () => {
-    const chatId = await createChat("code", project.id);
+    const chatId = await createChat("chat", project.id);
     if (chatId) {
       setActiveChat(chatId);
-      setActiveView("code");
+      setActiveView("home");
       toast(`Sesión iniciada en el proyecto "${project.name}"`, "success");
     }
   };
@@ -750,7 +750,7 @@ export function ${filename.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9]/g, "")
                       className="w-full py-2 bg-white/10 hover:bg-white/15 text-white font-medium text-[13px] rounded-xl transition-colors flex items-center justify-center gap-2"
                       onClick={() => {
                         setActiveChat(c.id);
-                        setActiveView("code");
+                        setActiveView("home");
                       }}
                     >
                       <span className="material-symbols-outlined text-[16px]">chat</span>

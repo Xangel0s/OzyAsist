@@ -1,7 +1,7 @@
 # AGENTS.md — OzyAssist Guidelines & Instructions
 
 ## Project Overview
-OzyAssist is an open-source AI desktop/code/cowork assistant inspired by Claude Desktop, Claude Code, and Cowork environments. It features a Go backend with SQLite, WebSocket streaming, task execution capabilities, and a React + Vite + TypeScript frontend.
+OzyAssist is an open-source AI desktop/code/cowork assistant inspired by Claude Desktop, Manus, and Claude Code. It features a Go backend with SQLite, WebSocket streaming, task execution capabilities, local multi-profile security with 6-digit PIN, and a React + Vite + TypeScript frontend with unified chat, tool execution, and rich artifact rendering.
 
 ## Architecture & Tech Stack
 - **Backend**: Go (Gin / gorilla/websocket / SQLite / Qdrant optional / local LLM or API providers)
@@ -17,11 +17,11 @@ OzyAssist is an open-source AI desktop/code/cowork assistant inspired by Claude 
 
 ## UI Architecture & Claude Desktop Alignment
 - **Navigation & Layout**:
-  - `Sidebar.tsx`: Features top mode pill (`Inicio | Code`), brand lime `+ Nuevo` button (`#d1f107`), and navigation (`Proyectos`, `Artefactos`, `Personalizar`).
+  - `Sidebar.tsx`: Features top brand lime `+ New session` button (`#d1f107` / `⌘N`), unified navigation (`Inicio`, `Proyectos`, `Artefactos`, `Personalizar`), collapsible recent history, and bottom user profile card with 6-digit PIN security.
   - `Personalizar`: Triggers `SettingsModal` directly for centralized management of Skills, Connectors, Plugins, and LLM Providers.
 - **Settings Modal & Ecosystem**:
   - `SettingsModal.tsx`: Full settings dialog with 8 categories, MCP Connector creation modal, Skill Upload modal, Inline `SKILL.md` editor, and Marketplace Directory modal.
-  - **LLM Providers**: Supports OpenRouter, OpenAI, Anthropic, DeepSeek, and Ollama local host URL with `localStorage` persistence and live connection testing.
+  - **LLM Providers**: Supports OpenRouter, OpenAI, Anthropic, DeepSeek, and Ollama local host URL with dynamic backend validation.
 - **Brand Theme Colors**:
   - Primary Brand Color: Vibrant Electric Neon Lime `#d1f107` (`bg-[#d1f107] text-[#181e00] font-bold`).
   - Dark Surface Colors: Surface Dim `#131313`, Surface Container `#1e1e1e` / `#222222`.

@@ -24,19 +24,20 @@ export default function ChatsTasksPage() {
     return matchesSearch && matchesMode;
   });
 
-  const handleOpenChat = (chatId: string, mode: "chat" | "code") => {
+  const handleOpenChat = (chatId: string) => {
     if (isSelectMode) {
       toggleSelect(chatId);
       return;
     }
     setActiveChat(chatId);
-    setActiveView(mode === "code" ? "code" : "chat");
+    setActiveView("home");
   };
 
   const handleCreateNew = async () => {
     const chatId = await createChat("chat");
     if (chatId) {
-      setActiveView("chat");
+      setActiveChat(chatId);
+      setActiveView("home");
     }
   };
 
@@ -183,7 +184,7 @@ export default function ChatsTasksPage() {
                     ? "bg-surface-variant border border-[#d1f107]/40"
                     : "hover:bg-surface-container-high/60 border border-transparent"
                 }`}
-                onClick={() => handleOpenChat(chat.id, chat.mode)}
+                onClick={() => handleOpenChat(chat.id)}
               >
                 <div className="flex items-center gap-3.5 min-w-0 flex-1">
                   {isSelectMode && (
@@ -199,7 +200,7 @@ export default function ChatsTasksPage() {
                     />
                   )}
                   <span className="material-symbols-outlined text-[20px] text-text-muted shrink-0 group-hover:text-on-surface transition-colors">
-                    {chat.mode === "code" ? "code" : "chat_bubble_outline"}
+                    chat_bubble_outline
                   </span>
                   <span className="text-[14px] text-on-surface font-medium truncate">
                     {chat.title}

@@ -14,8 +14,16 @@ data/qdrant/
 backend/data/*.db
 backend/data/*.db-shm
 backend/data/*.db-wal
-backup_original/
 *.tsbuildinfo
+
+# Old versions / backups (never commit)
+backup_original/
+stitch_ozy_claude_desktop/
+stitch_ozy_claude_desktop.zip
+version con datos agregados/
+
+# Scripts dir (empty after move to docs/)
+scripts/
 
 # IDE
 .vscode/
