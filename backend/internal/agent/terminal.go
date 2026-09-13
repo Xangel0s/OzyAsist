@@ -90,8 +90,8 @@ func ExecuteShellInDir(ctx context.Context, shell, script, dir string) (*CmdResu
 	}
 
 	return &CmdResult{
-		Stdout:   stdout.String(),
-		Stderr:   stderr.String(),
+		Stdout:   strings.ToValidUTF8(stdout.String(), ""),
+		Stderr:   strings.ToValidUTF8(stderr.String(), ""),
 		ExitCode: exitCode,
 		Duration: duration,
 	}, nil
@@ -182,15 +182,15 @@ func ExecuteStreamingCommand(ctx context.Context, script, dir string) (*CmdResul
 	}
 
 	return &CmdResult{
-		Stdout:   strings.Join(stdoutLines, "\n"),
-		Stderr:   strings.Join(stderrLines, "\n"),
+		Stdout:   strings.ToValidUTF8(strings.Join(stdoutLines, "\n"), ""),
+		Stderr:   strings.ToValidUTF8(strings.Join(stderrLines, "\n"), ""),
 		ExitCode: exitCode,
 		Duration: duration,
 	}, nil
 }
 
 // buildShellCmd construye el comando para el shell correcto según la plataforma.
-// En Windows usa powershell.exe con -NonInteractive -Command.
+// En Windows usa powershell.exe con -NonInteractive -Command y fuerza codificación UTF-8.
 func buildShellCmd(ctx context.Context, shell, script, dir string) *exec.Cmd {
 	var cmd *exec.Cmd
 	switch shell {
@@ -198,7 +198,9 @@ func buildShellCmd(ctx context.Context, shell, script, dir string) *exec.Cmd {
 		// -NonInteractive: no pedir input interactivo
 		// -NoProfile: arranque más rápido
 		// -Command: ejecutar el script directamente
-		cmd = exec.CommandContext(ctx, "powershell.exe", "-NonInteractive", "-NoProfile", "-Command", script)
+		// Forzar UTF-8 en consola y en pipeline para evitar caracteres corruptos () en español/tildes
+		utf8Prefix := "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; "
+		cmd = exec.CommandContext(ctx, "powershell.exe", "-NonInteractive", "-NoProfile", "-Command", utf8Prefix+script)
 	default:
 		cmd = exec.CommandContext(ctx, shell, "-c", script)
 	}

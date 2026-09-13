@@ -41,10 +41,21 @@ export default function ModelSelector({ currentModel, onSelect, onClose }: Model
     api.models.list()
       .then((data) => {
         if (data && data.length > 0) {
-          setGroups(data.map((g) => ({
-            provider: g.provider,
-            models: g.models.map((id) => ({ id, name: id })),
-          })));
+          const isFlat = data.length > 0 && !data[0].models;
+          if (isFlat) {
+            const grouped: Record<string, { id: string; name: string }[]> = {};
+            data.forEach((m: any) => {
+              const p = m.group || m.provider;
+              if (!grouped[p]) grouped[p] = [];
+              grouped[p].push({ id: m.id, name: m.name });
+            });
+            setGroups(Object.keys(grouped).map(k => ({ provider: k, models: grouped[k] })));
+          } else {
+            setGroups(data.map((g: any) => ({
+              provider: g.provider,
+              models: g.models.map((id: string) => ({ id, name: id })),
+            })));
+          }
         } else {
           setGroups([]);
         }

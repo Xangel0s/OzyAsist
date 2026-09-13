@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 const defaultBaseURL = "http://localhost:1234/v1"
@@ -23,7 +24,7 @@ func GetEmbeddingClient() *EmbeddingClient {
 		}
 		embedClient = &EmbeddingClient{
 			baseURL: baseURL,
-			client:  &http.Client{},
+			client:  &http.Client{Timeout: 2 * time.Second},
 		}
 	})
 	return embedClient

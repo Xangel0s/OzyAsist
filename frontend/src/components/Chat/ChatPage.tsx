@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useChatStore } from "../../store/chatStore";
 import ChatMessage from "./ChatMessage";
-import ChatInput from "../Home/ChatInput";
+import { OzyChatConsole } from "./OzyChatConsole";
+import { OzyLogo } from "../Brand/OzyLogo";
 import { useScrollToBottom } from "../../hooks";
 
 export default function ChatPage() {
@@ -11,7 +12,7 @@ export default function ChatPage() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const createChat = useChatStore((s) => s.createChat);
   const setActiveChat = useChatStore((s) => s.setActiveChat);
-  const updateChatProvider = useChatStore((s) => s.updateChatProvider);
+  const stopStreaming = useChatStore((s) => s.stopStreaming);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("Todo");
@@ -23,22 +24,14 @@ export default function ChatPage() {
     isResponding,
   ]);
 
-  const handleSend = async (message: string) => {
+  const handleSend = async (message: string, mode: "chat" | "cowork" = "chat", model?: string) => {
     let chatId = activeChatId;
     if (!chatId) {
-      const newId = await createChat("chat");
+      const newId = await createChat(mode === "cowork" ? "code" : "chat", undefined, undefined, model);
       if (!newId) return;
       chatId = newId;
     }
     sendMessage(chatId, message);
-  };
-
-  const handleModelChange = (modelId: string, provider: string) => {
-    if (activeChatId) {
-      updateChatProvider(activeChatId, provider, modelId);
-    } else {
-      useChatStore.setState({ defaultModel: modelId, defaultProvider: provider });
-    }
   };
 
   const formatDate = (dateStr?: string) => {
@@ -63,22 +56,20 @@ export default function ChatPage() {
   // If there is an active chat with messages, show the active chat conversation view
   if (activeChat && activeChat.messages.length > 0) {
     return (
-      <div className="flex flex-1 flex-col h-full bg-[#1a1a1a] min-h-0">
+      <div className="flex flex-1 flex-col h-full bg-[#131313] min-h-0">
         <div className="flex-1 overflow-y-auto px-4 py-6 min-h-0">
-          <div className="max-w-[800px] mx-auto flex flex-col gap-6">
+          <div className="max-w-3xl mx-auto flex flex-col gap-6">
             {activeChat.messages.map((msg) => (
               <ChatMessage key={msg.id} message={msg} chatId={activeChat.id} />
             ))}
             {isResponding && (
-              <div className="flex justify-start">
-                <div className="flex gap-4 max-w-[90%]">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                    <img src="/ozybaselogo.png" alt="OzyBase" className="w-full h-full object-contain" />
-                  </div>
-                  <div className="flex gap-1.5 py-3">
-                    <span className="w-2 h-2 rounded-full bg-white/30 animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-2 h-2 rounded-full bg-white/30 animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-2 h-2 rounded-full bg-white/30 animate-bounce" style={{ animationDelay: "300ms" }} />
+              <div className="flex justify-start my-2">
+                <div className="flex gap-3.5 max-w-[90%] items-center">
+                  <OzyLogo size={24} isThinking />
+                  <div className="flex gap-1.5 py-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#d1f107] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#d1f107] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#d1f107] animate-bounce" style={{ animationDelay: "300ms" }} />
                   </div>
                 </div>
               </div>
@@ -87,17 +78,15 @@ export default function ChatPage() {
           </div>
         </div>
 
-        <div className="px-4 pb-6 pt-2 bg-gradient-to-t from-[#1a1a1a] via-[#1a1a1a] to-transparent">
-          <div className="max-w-[800px] mx-auto">
-            <ChatInput
-              onSend={handleSend}
-              placeholder="Escribe / para habilidades..."
-              modelOverride={activeChat?.model}
-              onModelChange={handleModelChange}
-              compact
+        <div className="px-4 pb-6 pt-2 bg-gradient-to-t from-[#131313] via-[#131313] to-transparent">
+          <div className="max-w-3xl mx-auto">
+            <OzyChatConsole
+              onSendMessage={handleSend}
+              onStopStreaming={stopStreaming}
+              isStreaming={isResponding}
             />
-            <div className="text-center mt-3 text-[11px] text-white/30">
-              Ozy puede cometer errores. Verifica la información importante.
+            <div className="text-center mt-2 text-[11px] text-neutral-500 font-mono">
+              OzyAssist es un agente autónomo de sistema operativo. Verifica acciones críticas.
             </div>
           </div>
         </div>
@@ -107,7 +96,7 @@ export default function ChatPage() {
 
   // Dedicated "Chats y tareas" Page View matching screenshots
   return (
-    <div className="flex flex-1 flex-col h-full bg-[#1a1a1a] p-8 overflow-y-auto min-h-0 text-white">
+    <div className="flex flex-1 flex-col h-full bg-[#131313] p-8 overflow-y-auto min-h-0 text-white">
       <div className="max-w-[850px] mx-auto w-full flex flex-col gap-6">
         {/* Header Title & Actions Bar */}
         <div className="flex items-center justify-between">
@@ -130,74 +119,77 @@ export default function ChatPage() {
               </button>
 
               {showFilterDropdown && (
-                <div className="absolute right-0 top-full mt-1.5 w-44 bg-[#262626] border border-white/10 rounded-xl shadow-2xl py-1 z-50 text-[13px] text-white">
-                  {["Todo", "Chat", "Code", "Cowork", "Archivado"].map((type) => (
+                <div className="absolute right-0 mt-2 w-40 bg-[#222222] border border-white/10 rounded-xl shadow-xl z-20 py-1 overflow-hidden">
+                  {["Todo", "Chat", "Code", "Cowork", "Archivado"].map((f) => (
                     <button
-                      key={type}
-                      className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
+                      key={f}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors hover:bg-white/10 ${
+                        filterType === f ? "text-[#d1f107] font-semibold bg-white/5" : "text-white/80"
+                      }`}
                       onClick={() => {
-                        setFilterType(type);
+                        setFilterType(f);
                         setShowFilterDropdown(false);
                       }}
                     >
-                      <span>{type}</span>
-                      {filterType === type && (
-                        <span className="material-symbols-outlined text-[16px] text-[#3b82f6]">check</span>
-                      )}
+                      {f}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-
-            <button
-              className="px-4 py-1.5 bg-white text-black hover:bg-white/90 text-[13px] font-semibold rounded-lg transition-colors shadow-sm"
-              onClick={() => createChat("chat")}
-            >
-              Nuevo
-            </button>
           </div>
         </div>
 
-        {/* Search Bar Input */}
+        {/* Search Bar */}
         <div className="relative w-full">
-          <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[18px] text-white/40">
+          <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 text-[18px]">
             search
           </span>
           <input
             type="text"
-            placeholder="Buscar chats y tareas..."
+            placeholder="Buscar en tus chats..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#242424] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-[14px] text-white placeholder:text-white/40 focus:outline-none focus:border-white/30 transition-all"
+            className="w-full pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-white/40 focus:outline-none focus:border-[#d1f107]/50 transition-colors"
           />
         </div>
 
-        {/* Chats List Table */}
-        <div className="flex flex-col border-t border-white/10 pt-2">
+        {/* List of Chats */}
+        <div className="flex flex-col gap-2">
           {filteredChats.length === 0 ? (
-            <div className="py-12 text-center text-white/40 text-[14px]">
+            <div className="text-center py-12 text-white/40 text-sm">
               No se encontraron chats o tareas.
             </div>
           ) : (
-            filteredChats.map((chat) => (
-              <button
-                key={chat.id}
-                className="flex items-center justify-between py-3.5 px-3 hover:bg-white/5 rounded-xl transition-all text-left group"
-                onClick={() => setActiveChat(chat.id)}
+            filteredChats.map((c) => (
+              <div
+                key={c.id}
+                onClick={() => setActiveChat(c.id)}
+                className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                  activeChatId === c.id
+                    ? "bg-white/10 border-[#d1f107]/30 shadow-sm"
+                    : "bg-white/[0.02] border-white/5 hover:bg-white/[0.06] hover:border-white/10"
+                }`}
               >
-                <div className="flex items-center gap-3 min-w-0 pr-4">
-                  <span className="material-symbols-outlined text-[18px] text-white/40 group-hover:text-white/70 transition-colors">
-                    chat_bubble
-                  </span>
-                  <span className="text-[14px] font-medium text-white/90 group-hover:text-white truncate">
-                    {chat.title || "Nueva conversación"}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-white/60">
+                    <span className="material-symbols-outlined text-[18px]">
+                      {c.mode === "code" ? "terminal" : "chat_bubble"}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-white line-clamp-1">{c.title || "Nuevo chat"}</h3>
+                    <p className="text-xs text-white/40 line-clamp-1">
+                      {c.messages.length > 0
+                        ? c.messages[c.messages.length - 1].content
+                        : "Sin mensajes aún"}
+                    </p>
+                  </div>
                 </div>
-                <span className="text-[12px] text-white/40 font-mono whitespace-nowrap">
-                  {formatDate(chat.createdAt)}
-                </span>
-              </button>
+                <div className="text-xs text-white/40 font-mono">
+                  {formatDate(c.createdAt)}
+                </div>
+              </div>
             ))
           )}
         </div>

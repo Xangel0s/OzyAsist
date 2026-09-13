@@ -2,18 +2,49 @@
 node_modules/
 backend/bin/
 backend/tmp/
+backend/tools/
 
 # Build artifacts
 frontend/dist/
 frontend/.tauri/
-backend/target/
+frontend/test-results/
+backend/dist/
+backend/internal/api/dist/assets/
+**/target/
 *.exe
+*.exe~
+*.pdb
+*.dll
+*.rlib
+*.rmeta
+*.exp
+*.lib
+
+# Machine learning models & training artifacts
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+training/*.gguf
+training/venv/
+training/outputs/
+training/exports/
+training/unsloth_compiled_cache/
+training/_unsloth_sentencepiece_temp/
 
 # Runtime data
 data/qdrant/
 backend/data/*.db
 backend/data/*.db-shm
 backend/data/*.db-wal
+backend/data/research/
+backend/data/uploads/
+**/data/research/
+backend/Desktop/
+backend/desktop_icons_count.txt
+backend/print_chat.go
 *.tsbuildinfo
 
 # Old versions / backups (never commit)
@@ -41,3 +72,4 @@ Thumbs.db
 
 # Logs
 *.log
+

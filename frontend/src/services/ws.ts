@@ -61,15 +61,31 @@ class WsClient {
   private ws: WebSocket | null = null;
   private session: StreamSession | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = false;
 
   private statusListeners: Array<(connected: boolean) => void> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private eventListeners: Map<string, Set<(data: any) => void>> = new Map();
 
   subscribeStatus(listener: (connected: boolean) => void): () => void {
     this.statusListeners.push(listener);
     listener(this.isConnected());
     return () => {
       this.statusListeners = this.statusListeners.filter((l) => l !== listener);
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  subscribe(eventType: string, handler: (data: any) => void): () => void {
+    if (!this.eventListeners.has(eventType)) {
+      this.eventListeners.set(eventType, new Set());
+    }
+    this.eventListeners.get(eventType)!.add(handler);
+    // Ensure WS is connected
+    this.connect().catch(() => {});
+    return () => {
+      this.eventListeners.get(eventType)?.delete(handler);
     };
   }
 
@@ -101,12 +117,22 @@ class WsClient {
 
       this.ws.onopen = () => {
         this.notifyStatus(true);
+        if (this.pingTimer) clearInterval(this.pingTimer);
+        this.pingTimer = setInterval(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: "ping" }));
+          }
+        }, 20000);
         resolve();
       };
       this.ws.onclose = () => {
         this.notifyStatus(false);
+        if (this.pingTimer) {
+          clearInterval(this.pingTimer);
+          this.pingTimer = null;
+        }
         if (this.session) {
-          this.session.callbacks.onError("Conexión perdida");
+          this.session.callbacks.onError("Conexión perdida con el servidor");
           this.session = null;
         }
         if (this.shouldReconnect) {
@@ -130,6 +156,17 @@ class WsClient {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private handleMessage(data: Record<string, any>) {
+    // 1. Dispatch to global event subscribers
+    if (data?.type && this.eventListeners.has(data.type)) {
+      this.eventListeners.get(data.type)!.forEach((listener) => {
+        try {
+          listener(data);
+        } catch (err) {
+          console.error("Error in WS subscriber:", err);
+        }
+      });
+    }
+
     if (!this.session) return;
     const cb = this.session.callbacks;
 
@@ -224,7 +261,8 @@ class WsClient {
     chatId: string,
     content: string,
     callbacks: StreamCallbacks,
-    attachments?: { id: string; type: string }[]
+    attachments?: { id: string; type: string }[],
+    voiceMode?: boolean
   ) {
     if (this.session) {
       callbacks.onError("Ya hay un streaming en curso");
@@ -241,9 +279,13 @@ class WsClient {
       chat_id: string;
       content: string;
       attachments?: { id: string; type: string }[];
+      voice_mode?: boolean;
     } = { type: "message", chat_id: chatId, content };
     if (attachments && attachments.length > 0) {
       msg.attachments = attachments;
+    }
+    if (voiceMode) {
+      msg.voice_mode = true;
     }
     this.ws.send(JSON.stringify(msg));
   }
@@ -310,3 +352,4 @@ class WsClient {
 }
 
 export const wsClient = new WsClient();
+export const wsService = wsClient;

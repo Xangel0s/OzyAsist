@@ -553,49 +553,115 @@ func DeleteConnector(id string) error {
 
 func CreateAgentTask(t *models.AgentTask) error {
 	_, err := DB.Exec(
-		`INSERT INTO agent_tasks (id, project_id, chat_id, goal, plan_json, status, permission_level, summary, created_at)
-		 VALUES (?, NULLIF(?, ''), NULLIF(?, ''), ?, ?, ?, ?, ?, ?)`,
-		t.ID, t.ProjectID, t.ChatID, t.Goal, t.PlanJSON, t.Status, t.PermissionLevel, t.Summary, t.CreatedAt)
+		`INSERT INTO agent_tasks (id, user_id, project_id, title, prompt, status, total_steps, current_step, error_message, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.UserID, t.ProjectID, t.Title, t.Prompt, string(t.Status), t.TotalSteps, t.CurrentStep, t.ErrorMessage, t.CreatedAt, t.UpdatedAt)
 	return err
 }
 
 func UpdateTaskStatus(id, status, summary string) error {
-	terminal := status == "completed" || status == "failed" || status == "cancelled"
-	var query string
-	if terminal {
-		query = `UPDATE agent_tasks SET status = ?, summary = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`
+	var err error
+	if summary != "" {
+		_, err = DB.Exec(`UPDATE agent_tasks SET status = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, status, summary, id)
 	} else {
-		query = `UPDATE agent_tasks SET status = ?, summary = ? WHERE id = ?`
+		_, err = DB.Exec(`UPDATE agent_tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, status, id)
 	}
-	_, err := DB.Exec(query, status, summary, id)
 	return err
 }
 
 func GetTask(id string) (*models.AgentTask, error) {
 	row := DB.QueryRow(
-		`SELECT id, COALESCE(project_id,''), COALESCE(chat_id,''), goal, COALESCE(plan_json,'[]'), status, permission_level, COALESCE(summary,''), created_at, completed_at
+		`SELECT id, user_id, project_id, title, prompt, status, total_steps, current_step, error_message, created_at, updated_at
 		 FROM agent_tasks WHERE id = ?`, id)
 	var t models.AgentTask
-	err := row.Scan(&t.ID, &t.ProjectID, &t.ChatID, &t.Goal, &t.PlanJSON, &t.Status, &t.PermissionLevel, &t.Summary, &t.CreatedAt, &t.CompletedAt)
+	var status string
+	err := row.Scan(&t.ID, &t.UserID, &t.ProjectID, &t.Title, &t.Prompt, &status, &t.TotalSteps, &t.CurrentStep, &t.ErrorMessage, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
+	t.Status = models.TaskStatus(status)
 	return &t, nil
 }
 
-func CreateAgentAction(a *models.AgentAction) error {
+func CreateTaskStep(s *models.TaskStep) error {
 	_, err := DB.Exec(
-		`INSERT INTO agent_actions (id, task_id, action_type, target, details_json, requires_confirmation, confirmed_by_user, result, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.ID, a.TaskID, a.ActionType, a.Target, a.DetailsJSON, a.RequiresConfirmation, a.ConfirmedByUser, a.Result, a.CreatedAt)
+		`INSERT INTO task_steps (id, task_id, step_order, agent_assigned, action_type, payload, requires_pin, pin_authorized, verification_rule, status, output, retry_count, max_retries, created_at, completed_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		s.ID, s.TaskID, s.StepOrder, s.AgentAssigned, s.ActionType, s.Payload, s.RequiresPIN, s.PINAuthorized, s.VerificationRule, string(s.Status), s.Output, s.RetryCount, s.MaxRetries, s.CreatedAt, s.CompletedAt)
 	return err
+}
+
+func UpdateTaskStepStatus(stepID string, status models.StepStatus, output *string) error {
+	terminal := status == models.StepStatusCompleted || status == models.StepStatusFailed
+	var err error
+	if terminal {
+		_, err = DB.Exec(`UPDATE task_steps SET status = ?, output = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?`, string(status), output, stepID)
+	} else {
+		_, err = DB.Exec(`UPDATE task_steps SET status = ?, output = ? WHERE id = ?`, string(status), output, stepID)
+	}
+	return err
+}
+
+func GetPendingTaskSteps(taskID string) ([]models.TaskStep, error) {
+	rows, err := DB.Query(
+		`SELECT id, task_id, step_order, agent_assigned, action_type, payload, requires_pin, pin_authorized, verification_rule, status, output, retry_count, max_retries, created_at, completed_at
+		 FROM task_steps WHERE task_id = ? AND status != 'completed' ORDER BY step_order ASC`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var steps []models.TaskStep
+	for rows.Next() {
+		var s models.TaskStep
+		var st string
+		if err := rows.Scan(&s.ID, &s.TaskID, &s.StepOrder, &s.AgentAssigned, &s.ActionType, &s.Payload, &s.RequiresPIN, &s.PINAuthorized, &s.VerificationRule, &st, &s.Output, &s.RetryCount, &s.MaxRetries, &s.CreatedAt, &s.CompletedAt); err != nil {
+			return nil, err
+		}
+		s.Status = models.StepStatus(st)
+		steps = append(steps, s)
+	}
+	return steps, nil
 }
 
 func ConfirmAction(actionID string) error {
 	_, err := DB.Exec(
-		`UPDATE agent_actions SET confirmed_by_user = 1 WHERE id = ?`, actionID)
+		`UPDATE task_steps SET pin_authorized = 1 WHERE id = ?`, actionID)
 	return err
 }
+
+func CancelAllRunningTasks() error {
+	query := `UPDATE agent_tasks SET status = 'cancelled', error_message = 'Cancelación forzosa por Kill-Switch', updated_at = CURRENT_TIMESTAMP WHERE status IN ('pending', 'planning', 'running', 'blocked_approval')`
+	_, err := DB.Exec(query)
+	return err
+}
+
+func CreateAgentAction(a *models.AgentAction) error {
+	stepOrder := 1
+	var maxOrder int
+	_ = DB.QueryRow(`SELECT COALESCE(MAX(step_order), 0) FROM task_steps WHERE task_id = ?`, a.TaskID).Scan(&maxOrder)
+	stepOrder = maxOrder + 1
+
+	st := models.StepStatusCompleted
+	if a.RequiresConfirmation && !a.ConfirmedByUser {
+		st = models.StepStatusPending
+	}
+	s := &models.TaskStep{
+		ID:            a.ID,
+		TaskID:        a.TaskID,
+		StepOrder:     stepOrder,
+		AgentAssigned: "ozy",
+		ActionType:    a.ActionType,
+		Payload:       a.DetailsJSON,
+		RequiresPIN:   a.RequiresConfirmation,
+		PINAuthorized: a.ConfirmedByUser,
+		Status:        st,
+		Output:        &a.Result,
+		CreatedAt:     a.CreatedAt,
+	}
+	return CreateTaskStep(s)
+}
+
 
 func GetMessages(chatID string) ([]models.Message, error) {
 	rows, err := DB.Query(

@@ -49,6 +49,20 @@ func ValidateAndAuthorize(step PlanStep, level PermissionLevel, sandbox *Sandbox
 
 	switch step.ActionType {
 	case "file_read", "file_write":
+		// En modo autónomo o trusted, se permite el acceso al sistema de archivos del usuario/sistema
+		if level == Autonomous || level == Trusted {
+			targetPath := step.Target
+			if !filepath.IsAbs(targetPath) && sandbox != nil {
+				targetPath = filepath.Join(sandbox.ProjectRoot, targetPath)
+			}
+			absPath, err := filepath.Abs(targetPath)
+			if err != nil {
+				return nil, fmt.Errorf("resolve path: %w", err)
+			}
+			auth.ResolvedPath = absPath
+			return auth, nil
+		}
+
 		if sandbox == nil {
 			return nil, fmt.Errorf("sandbox required for %s", step.ActionType)
 		}
@@ -97,8 +111,8 @@ func ValidateAndAuthorize(step PlanStep, level PermissionLevel, sandbox *Sandbox
 	case "browser_action":
 		return nil, fmt.Errorf("browser actions not implemented yet")
 
-	case "llm_reason":
-		// siempre permitido
+	case "llm_reason", "os_inspect", "os_mutate", "os_exec", "web_search", "system_info":
+		// siempre permitido de forma nativa e inmediata
 
 	default:
 		return nil, fmt.Errorf("unknown action type: %s", step.ActionType)

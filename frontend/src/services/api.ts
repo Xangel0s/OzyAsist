@@ -139,12 +139,17 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ name: data.title, mode: data.mode, provider: data.provider, model: data.model, project_id: data.projectId }),
       }),
-    getById: (id: string) => request<{ chat: ChatDTO; messages: MessageDTO[] }>(`/chats/${id}`),
-    update: (id: string, data: { name?: string; provider?: string; model?: string }) =>
-      request<ChatDTO>(`/chats/${id}`, {
+    getById: (id: string) => {
+      if (!id) throw new Error("ID de chat vacío");
+      return request<{ chat: ChatDTO; messages: MessageDTO[] }>(`/chats/${id}`);
+    },
+    update: (id: string, data: { name?: string; provider?: string; model?: string }) => {
+      if (!id) throw new Error("ID de chat vacío");
+      return request<ChatDTO>(`/chats/${id}`, {
         method: "PATCH",
         body: JSON.stringify(data),
-      }),
+      });
+    },
     delete: (id: string) => request<void>(`/chats/${id}`, { method: "DELETE" }),
     updateFeedback: (chatId: string, messageId: string, feedback: string) =>
       request<{ ok: boolean }>(`/chats/${chatId}/messages/${messageId}/feedback`, {
@@ -204,6 +209,13 @@ export const api = {
         body: JSON.stringify(data),
       }),
     delete: (id: string) => request<void>(`/skills/${id}`, { method: "DELETE" }),
+  },
+
+  mcp: {
+    list: () => request<MCPConnectorDTO[]>("/mcp"),
+    create: (d: {name: string, command: string, args: string[], env: string[]}) => request<MCPConnectorDTO>("/mcp", { method: "POST", body: JSON.stringify(d) }),
+    delete: (id: string) => request<{ status: string }>(`/mcp/${id}`, { method: "DELETE" }),
+    reconnect: (id: string) => request<{ status: string }>(`/mcp/${id}/reconnect`, { method: "POST" }),
   },
 
   connectors: {
@@ -275,6 +287,7 @@ export const api = {
 
   models: {
     list: () => request<{ provider: string; models: string[] }[]>("/models"),
+    available: () => request<any[]>("/models/available"),
     select: (data: { provider: string; model: string }) =>
       request<void>("/models/select", { method: "POST", body: JSON.stringify(data) }),
   },
@@ -296,7 +309,15 @@ export const api = {
   },
 
   settings: {
-    update: (keys: { opencode_key?: string; openai_key?: string; openrouter_key?: string; anthropic_key?: string; deepseek_key?: string }) =>
+    update: (keys: {
+      opencode_key?: string;
+      openai_key?: string;
+      openrouter_key?: string;
+      anthropic_key?: string;
+      deepseek_key?: string;
+      local_host_url?: string;
+      ollama_url?: string;
+    }) =>
       request<{ status: string; providers: any[] }>("/settings", {
         method: "PUT",
         body: JSON.stringify(keys),
@@ -340,7 +361,63 @@ export const api = {
         body: JSON.stringify({ command, timeoutSecs }),
       }),
   },
+
+  security: {
+    getAuditTrail: () =>
+      request<{ is_valid: boolean; total_verified: number; logs: AuditEntryDTO[] }>("/security/audit"),
+    getTaskSnapshots: (taskId: string) =>
+      request<{ task_id: string; snapshots: ShadowSnapshotDTO[] }>(`/security/snapshots/${taskId}`),
+    undoTask: (taskId: string) =>
+      request<{ success: boolean; task_id: string; restored_files: string[]; message: string }>(`/security/undo/${taskId}`, {
+        method: "POST",
+      }),
+    killSuspectProcess: (pid: number) =>
+      request<{ success: boolean; pid: number; message: string }>("/security/watchdog/kill", {
+        method: "POST",
+        body: JSON.stringify({ pid }),
+      }),
+  },
+
+  audio: {
+    getDevices: () =>
+      request<{ devices: { id: number; name: string; type: string; channels: number; is_default: boolean }[]; total: number }>("/audio/devices"),
+    getStatus: () =>
+      request<{ status: string; hardware_access: boolean; engine: string; input_devices: number; vad_enabled: boolean }>("/audio/status"),
+    testWakeWord: (text: string) =>
+      request<{ match: { matched: boolean; keyword: string; confidence: number; clean_phrase: string } }>("/audio/wakeword/test", {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }),
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  post: <T = any>(path: string, body?: any) =>
+    request<T>(path.startsWith("/api") ? path.slice(4) : path, {
+      method: "POST",
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get: <T = any>(path: string) =>
+    request<T>(path.startsWith("/api") ? path.slice(4) : path),
 };
+
+export interface AuditEntryDTO {
+  id: number;
+  timestamp: string;
+  agent: string;
+  action: string;
+  details: string;
+  prev_hash: string;
+  record_hash: string;
+}
+
+export interface ShadowSnapshotDTO {
+  id: string;
+  task_id: string;
+  file_path: string;
+  created_at: string;
+}
 
 export interface GitFileItem {
   path: string;
@@ -369,3 +446,14 @@ export interface TerminalExecResult {
   error?: string;
 }
 
+export interface MCPConnectorDTO {
+  id: string;
+  userId: string;
+  name: string;
+  command: string;
+  args: string;
+  env: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}

@@ -13,6 +13,10 @@ export interface Message {
   timestamp: string;
   feedback?: "like" | "dislike" | null;
   toolCalls?: ToolCallBlockData[];
+  thoughtTrace?: string;
+  isThinking?: boolean;
+  isStreaming?: boolean;
+  latencyMs?: number;
 }
 
 export interface Chat {
@@ -43,7 +47,7 @@ interface ChatState {
   addMessage: (chatId: string, message: Message) => void;
   loadChats: () => Promise<void>;
   createChat: (mode: "chat" | "code", projectId?: string, provider?: string, model?: string) => Promise<string | null>;
-  sendMessage: (chatId: string, content: string) => Promise<void>;
+  sendMessage: (chatId: string, content: string, voiceMode?: boolean) => Promise<void>;
   deleteChat: (chatId: string) => Promise<void>;
   updateChatTitle: (chatId: string, title: string) => void;
   updateMessage: (chatId: string, messageId: string, updates: Partial<Message>) => void;
@@ -56,6 +60,7 @@ interface ChatState {
   updateChatProvider: (chatId: string, provider: string, model: string) => void;
   setDefaultModel: (model: string, provider: string) => void;
   cancelResponse: () => void;
+  stopStreaming: () => void;
   respondToolApproval: (toolId: string, approved: boolean) => void;
   loadProviders: () => Promise<void>;
 }
@@ -134,8 +139,8 @@ export const useChatStore = create<ChatState>()(
       createChat: async (mode = "chat", projectId, provider, model) => {
         const id = `chat-${Date.now()}`;
         const title = mode === "code" ? "Nuevo Código" : "Nuevo Chat";
-        const chosenProvider = provider || get().defaultProvider || "";
-        const chosenModel = model || get().defaultModel || "";
+        const chosenProvider = provider || get().defaultProvider || "hybrid";
+        const chosenModel = model || get().defaultModel || "ozy-hybrid";
 
         const newChat: Chat = {
           id,
@@ -219,12 +224,19 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
-      sendMessage: async (chatId, content) => {
+      sendMessage: async (chatId, content, voiceMode = false) => {
         const chat = get().chats.find((c) => c.id === chatId);
-        if (!chat || get().isResponding || get().consentPending) return;
+        if (!chat || get().consentPending) return;
+        // En voiceMode lanzamos error si ya hay una respuesta en curso para que
+        // el catch de OzyLive pueda limpiar el watchdog. En modo normal retornamos silenciosamente.
+        if (get().isResponding) {
+          if (voiceMode) throw new Error("busy");
+          return;
+        }
 
         const isFirstMessage = chat.messages.length === 0;
         const title = content.slice(0, 30) + (content.length > 30 ? "..." : "");
+        const startTimeMs = Date.now();
 
         const userMsg: Message = {
           id: `u-${Date.now()}`,
@@ -239,6 +251,7 @@ export const useChatStore = create<ChatState>()(
           content: "",
           timestamp: new Date().toISOString(),
           toolCalls: [],
+          isStreaming: true,
         };
 
         set((s) => ({
@@ -255,11 +268,11 @@ export const useChatStore = create<ChatState>()(
           get().updateChatTitle(chatId, title);
         }
 
+        const pendingContent: string[] = [];
+        const currentToolCalls: ToolCallBlockData[] = [];
+
         try {
           await wsClient.connect();
-
-          const pendingContent: string[] = [];
-          const currentToolCalls: ToolCallBlockData[] = [];
 
           wsClient.sendMessage(chatId, content, {
             onSessionStarted: (sessionId) => {
@@ -332,10 +345,13 @@ export const useChatStore = create<ChatState>()(
 
             onAgentCompleted: (_ev) => {
               const fullContent = pendingContent.join("");
+              const latencyMs = Date.now() - startTimeMs;
               const updated: Partial<Message> = {
                 content: fullContent,
                 timestamp: new Date().toISOString(),
                 toolCalls: [...currentToolCalls],
+                isStreaming: false,
+                latencyMs,
               };
               get().updateMessage(chatId, assistantMsg.id, updated);
 
@@ -396,16 +412,24 @@ export const useChatStore = create<ChatState>()(
             },
 
             onError: (error) => {
+              const currentText = pendingContent.join("");
+              const finalContent = currentText.trim()
+                ? `${currentText}\n\n> ⚠️ *[Aviso: ${error}]*`
+                : `[Error: ${error}]`;
               get().updateMessage(chatId, assistantMsg.id, {
-                content: `[Error: ${error}]`,
+                content: finalContent,
                 toolCalls: [...currentToolCalls],
               });
               set({ isResponding: false, agentState: "idle", activeSessionId: null });
             },
-          });
+          }, undefined, voiceMode);
         } catch {
+          const currentText = pendingContent.join("");
+          const finalContent = currentText.trim()
+            ? `${currentText}\n\n> ⚠️ *[Aviso: no se pudo conectar con el servidor]*`
+            : "[Error: no se pudo conectar con el servidor]";
           get().updateMessage(chatId, assistantMsg.id, {
-            content: "[Error: no se pudo conectar con el servidor]",
+            content: finalContent,
           });
           set({ isResponding: false, agentState: "idle", activeSessionId: null });
         }
@@ -417,6 +441,10 @@ export const useChatStore = create<ChatState>()(
           wsClient.cancelStream(activeChatId);
         }
         set({ isResponding: false, agentState: "idle", activeSessionId: null });
+      },
+
+      stopStreaming: () => {
+        get().cancelResponse();
       },
 
       respondToolApproval: (toolId: string, approved: boolean) => {
@@ -563,8 +591,8 @@ export const useChatStore = create<ChatState>()(
 
           const providers = await api.models.list();
           if (providers.length > 0) {
-            const first = providers[0];
-            const modelId = first.models[0] || "";
+            const first = providers[0] as any;
+            const modelId = first.models ? first.models[0] : (first.id || "");
             set({ defaultProvider: first.provider, defaultModel: modelId });
           } else {
             set({ defaultProvider: "", defaultModel: "" });

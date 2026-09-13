@@ -36,7 +36,9 @@ export default function Sidebar() {
   });
 
   const visibleChats = chats.filter((c) => {
-    return c.messages.length > 0 || c.id === activeChatId;
+    if (typeFilter === "Chat") return c.mode === "chat";
+    if (typeFilter === "Tarea") return c.mode === "code";
+    return true;
   });
 
   const handleNewChat = async () => {
@@ -191,22 +193,39 @@ export default function Sidebar() {
           </div>
 
           <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 scrollbar-thin">
-            {visibleChats.map((c) => (
-              <button
-                key={c.id}
-                className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-[12px] text-left transition-colors truncate group ${
-                  activeChatId === c.id
-                    ? "bg-white/10 text-white font-medium"
-                    : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                }`}
-                onClick={() => {
-                  setActiveChat(c.id);
-                  setActiveView("home");
-                }}
-              >
-                <span className="truncate pr-2">{c.title || "Nueva conversación"}</span>
-              </button>
-            ))}
+            {visibleChats.length === 0 ? (
+              <div className="px-3 py-4 text-center text-[11px] text-zinc-500 font-sans">
+                Sin conversaciones recientes
+              </div>
+            ) : (
+              visibleChats.map((c) => (
+                <div
+                  key={c.id}
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-[12px] text-left transition-colors truncate group cursor-pointer ${
+                    activeChatId === c.id
+                      ? "bg-white/10 text-white font-medium"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                  onClick={() => {
+                    setActiveChat(c.id);
+                    setActiveView("home");
+                  }}
+                >
+                  <span className="truncate pr-2 flex-1">{c.title || "Nueva conversación"}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      useChatStore.getState().deleteChat(c.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:text-rose-400 hover:bg-white/10 transition-all text-neutral-500 shrink-0"
+                    title="Eliminar conversación"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">delete</span>
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

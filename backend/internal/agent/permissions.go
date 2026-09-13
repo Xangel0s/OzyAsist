@@ -8,23 +8,25 @@ import (
 type PermissionLevel string
 
 const (
-	ReadOnly  PermissionLevel = "read_only"
-	Sandboxed PermissionLevel = "sandboxed"
-	Trusted   PermissionLevel = "trusted"
+	ReadOnly   PermissionLevel = "read_only"
+	Sandboxed  PermissionLevel = "sandboxed"
+	Trusted    PermissionLevel = "trusted"
+	Autonomous PermissionLevel = "autonomous"
 )
 
 var destructivePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\brm\s+-rf\b`),
-	regexp.MustCompile(`(?i)\brmdir\b`),
-	regexp.MustCompile(`(?i)\bformat\b`),
-	regexp.MustCompile(`(?i)\bdd\b`),
+	regexp.MustCompile(`(?i)\bformat\s+[a-z]:`),
+	regexp.MustCompile(`(?i)\bdd\s+if=`),
 	regexp.MustCompile(`(?i)\bmkfs\b`),
 	regexp.MustCompile(`(?i)\bfdisk\b`),
 	regexp.MustCompile(`(?i)\bfsck\b`),
 	regexp.MustCompile(`(?i)\bchmod\s+777\b`),
 	regexp.MustCompile(`(?i)\bchown\b`),
 	regexp.MustCompile(`(?i)\bdel\s+/[fqs]\b`),
-	regexp.MustCompile(`(?i)\brmdir\s+/s\b`),
+	regexp.MustCompile(`(?i)\brmdir\s+/[sS]\b`),
+	regexp.MustCompile(`(?i)\bgit\s+push\b.*(--force|-f\b)`),
+	regexp.MustCompile(`(?i)\bgit\s+reset\s+--hard\b`),
 }
 
 // IsDestructiveCommand verifica si un comando contiene patrones destructivos conocidos.
@@ -56,8 +58,9 @@ func RequiresConfirmation(level PermissionLevel, actionType, target string) bool
 		default:
 			return true
 		}
-	case Trusted:
+	case Trusted, Autonomous:
 		return false
 	}
 	return true
 }
+

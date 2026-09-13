@@ -1,0 +1,42 @@
+FROM ./exports/OzyAssist-7B-q4_k_m.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}
+{{- if .Tools }}<|im_start|>system
+You are a helpful assistant with tool calling capabilities.
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{{- range .Tools }}
+{"type": "function", "function": {{ .Function }}}
+{{- end }}
+</tools>
+For each function call, return a json object with function name and arguments within <tool_call></tool_call> XML tags:
+<tool_call>
+{"name": <function-name>, "arguments": <args-json-object>}
+</tool_call><|im_end|>
+{{ end }}
+{{- range $i, $_ := .Messages }}
+{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{- else if eq .Role "assistant" }}<|im_start|>assistant
+{{- if .Content }}{{ .Content }}{{- end }}
+{{- if .ToolCalls }}
+<tool_call>
+{{ range .ToolCalls }}{"name": "{{ .Function.Name }}", "arguments": {{ .Function.Arguments }}}{{ end }}
+</tool_call>
+{{- end }}<|im_end|>
+{{- else if eq .Role "tool" }}<|im_start|>user
+<tool_response>
+{{ .Content }}
+</tool_response><|im_end|>
+{{- end }}
+{{- end }}
+<|im_start|>assistant
+"""
+
+SYSTEM """Eres OzyAssist, un agente asistente de IA diseñado para controlar sistemas Windows de forma local y segura. Tu trabajo es interpretar las peticiones del usuario y convertirlas en llamadas a herramientas del sistema, devolviendo EXCLUSIVAMENTE formato JSON."""
+
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER temperature 0.3

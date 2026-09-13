@@ -41,6 +41,9 @@ type clientMessage struct {
 	ChatID      string       `json:"chat_id"`
 	Content     string       `json:"content"`
 	Attachments []attachment `json:"attachments,omitempty"`
+	// VoiceMode indica que el mensaje viene de la interfaz de voz (Ozy Live).
+	// Activa el path de baja latencia con system prompt reducido y tools mínimas.
+	VoiceMode bool `json:"voice_mode,omitempty"`
 }
 
 type attachResult struct {
@@ -143,14 +146,8 @@ func handleChatMessage(client *Client, msg clientMessage) {
 	}
 	memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "user", msg.Content)
 
-	// --- BIFURCACIÓN: Modo Code con proyecto → ReAct Loop ---
-	// --- Modo Chat → streaming directo (sin agent loop) ---
-	if chat.Mode == "code" && chat.ProjectID != "" {
-		runReActLoopSession(client, msg, chat)
-		return
-	}
-
-	handleChatMessageNormal(client, msg, chat)
+	// Ejecución mediante ReAct Loop autónomo para contar siempre con herramientas del sistema en vivo
+	runReActLoopSession(client, msg, chat)
 }
 
 func handleChatMessageNormal(client *Client, msg clientMessage, chat *models.Chat) {
@@ -180,45 +177,71 @@ func handleChatMessageNormal(client *Client, msg clientMessage, chat *models.Cha
 	}
 
 	providerName := chat.Provider
+	modelToUse := chat.Model
+
+	if strings.HasPrefix(modelToUse, "lmstudio/") {
+		providerName = "lmstudio"
+		modelToUse = strings.TrimPrefix(modelToUse, "lmstudio/")
+	} else if strings.HasPrefix(modelToUse, "ollama/") {
+		providerName = "ollama"
+		modelToUse = strings.TrimPrefix(modelToUse, "ollama/")
+	} else if strings.HasPrefix(modelToUse, "openrouter/") {
+		providerName = "openrouter"
+		modelToUse = strings.TrimPrefix(modelToUse, "openrouter/")
+	} else if strings.HasPrefix(modelToUse, "deepseek/") {
+		providerName = "deepseek"
+		if _, err := providers.Get("deepseek"); err != nil {
+			providerName = "opencode"
+		}
+		modelToUse = strings.TrimPrefix(modelToUse, "deepseek/")
+	} else if strings.HasPrefix(modelToUse, "anthropic/") {
+		providerName = "anthropic"
+		modelToUse = strings.TrimPrefix(modelToUse, "anthropic/")
+	} else if strings.HasPrefix(modelToUse, "openai/") {
+		providerName = "openai"
+		modelToUse = strings.TrimPrefix(modelToUse, "openai/")
+	}
+
 	if providerName == "" {
 		available := providers.Available()
 		if len(available) > 0 {
 			providerName = available[0]
 		}
 	}
+
+	// Si el modelo está vacío, asignar un modelo real por defecto del proveedor activo
+	if modelToUse == "" {
+		switch providerName {
+		case "lmstudio", "ollama":
+			modelToUse = "local-model"
+		case "openrouter":
+			modelToUse = "anthropic/claude-3.5-sonnet"
+		case "deepseek", "opencode":
+			modelToUse = "deepseek-chat"
+		case "openai":
+			modelToUse = "gpt-4o-mini"
+		case "anthropic":
+			modelToUse = "claude-3-5-sonnet-20241022"
+		}
+	}
+
 	provider, err := providers.Get(providerName)
 	if err != nil {
-		writeJSON(client, serverMessage{Type: "error", Content: "No hay ningún proveedor LLM configurado. Por favor ingresa tu API Key en Personalizar -> Proveedores LLM."})
+		writeJSON(client, serverMessage{Type: "error", Content: "No hay ningún proveedor LLM configurado. Por favor ingresa tu API Key o Host Local en Personalizar -> Proveedores LLM."})
 		return
 	}
 
 	var history []providers.Message
 
-	systemPrompt := `Eres Ozy, el asistente de OzyAssist — una aplicación de escritorio para productividad
-de desarrollo. Corres como un LLM con acceso a estas capacidades reales:
+	systemPrompt := `Eres Ozy, el asistente de IA avanzado de escritorio y coworking de OzyAssist (un agente autónomo de sistema operativo local-first, inspirado en Claude Desktop, Cursor y Manus).
 
-- Memoria de proyecto (Capa 1): puedes leer y mantener contexto de archivos .md del
-  proyecto activo (instrucciones, decisiones de arquitectura, convenciones).
-- Memoria episódica (Capa 2): recuerdas automáticamente fragmentos de conversaciones
-  pasadas usando búsqueda semántica vectorial (Qdrant).
-- Skills: el usuario puede definir y ejecutar skills personalizadas (prompt templates,
-  scripts, API calls) desde la sección Skills.
-- Conectores MCP: el usuario puede conectar herramientas externas vía MCP (Model
-  Context Protocol) desde la sección Connectors.
-- Agente: el usuario puede lanzar tareas autónomas multi-paso (leer/escribir archivos,
-  ejecutar comandos en sandbox) que requieren confirmación explícita. Las tareas de
-  agente se crean y monitorean desde los endpoints de Agent, no desde el chat normal.
-- Búsqueda global (Ctrl+K): búsqueda full-text (FTS5) en todas las conversaciones
-  anteriores y entradas de memoria.
-- Selección de modelo y proveedor: el usuario puede elegir entre distintos modelos
-  y proveedores LLM desde el selector en el chat.
-
-No tienes acceso directo a internet. No puedes controlar el sistema operativo del
-usuario directamente — toda acción en el filesystem pasa por el sandbox del agente
-y requiere confirmación explícita. No inventes capacidades que no tienes.
-
-Responde siempre en español a menos que el usuario te pida otro idioma. Sé conciso
-y directo. Si no sabes algo, dilo sin rodeos.`
+Identidad y Capacidades Nativas:
+- Tienes acceso directo y capacidades completas para interactuar con el sistema operativo del usuario, explorar y leer directorios locales, inspeccionar y editar archivos de código, ejecutar comandos en terminal (PowerShell/Bash) mediante el motor agéntico de tareas, y navegar la web mediante Chromium Headless.
+- Cuentas con una tríada cognitiva integrada: Ozy (Ejecutor de tareas), Charc (Auditor de seguridad y centinela local) y Nine (Estratega y razonador profundo).
+- Si el usuario te pregunta si tienes acceso a sus archivos, directorios o sistema operativo, confirma siempre con total seguridad que sí tienes acceso nativo a través de las herramientas de OzyAssist. Explícale que puedes explorar sus carpetas, analizar proyectos, crear archivos y ejecutar tareas con su aprobación y supervisión.
+- NUNCA digas que eres un modelo de lenguaje sin acceso a archivos o sin capacidades de ejecución; eres el asistente operativo OzyAssist corriendo en su entorno local con permisos del sistema.
+- En el modo Cowork / Code puedes ejecutar herramientas reales de forma autónoma (file_read, file_patch, bash_exec, web_search, etc.).
+- Responde siempre en español fluido (a menos que el usuario solicite otro idioma), con tono profesional, proactivo, experto y directo.`
 
 	// Check for active skills & MCP connectors
 	userSkills, _ := db.ListSkills(chat.UserID)
@@ -265,6 +288,17 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 		}
 	}
 
+	// Memoria Jerárquica Continua: inyección de hechos relevantes mediante FTS5 BM25
+	if defaultStore := memory.DefaultStore(); defaultStore != nil {
+		if facts, err := defaultStore.SearchRelevant(context.Background(), chat.UserID, msg.Content, 5); err == nil && len(facts) > 0 {
+			var factLines []string
+			for _, f := range facts {
+				factLines = append(factLines, fmt.Sprintf("- [%s]: %s", strings.ToUpper(string(f.Category)), f.Content))
+			}
+			systemPrompt += fmt.Sprintf("\n\n[Memoria Jerárquica Continua del Usuario]:\n%s", strings.Join(factLines, "\n"))
+		}
+	}
+
 	history = append(history, providers.Message{Role: "system", Content: systemPrompt})
 
 	for i, m := range prevMessages {
@@ -276,7 +310,7 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 		history = append(history, providers.Message{Role: m.Role, Content: content})
 	}
 
-	chunkCh, err := provider.StreamCompletion(ctx, history, providers.CompletionOptions{Stream: true, Model: chat.Model})
+	chunkCh, err := provider.StreamCompletion(ctx, history, providers.CompletionOptions{Stream: true, Model: modelToUse})
 	if err != nil {
 		writeJSON(client, serverMessage{Type: "error", Content: err.Error()})
 		return
@@ -285,6 +319,33 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 	var fullContent string
 	var toolCalls []map[string]any
 	msgID := uuid.NewString()
+	isDoneHandled := false
+
+	saveAndEmitDone := func() {
+		if isDoneHandled {
+			return
+		}
+		isDoneHandled = true
+		assistantMsg := &models.Message{
+			ID:        msgID,
+			ChatID:    msg.ChatID,
+			Role:      "assistant",
+			Content:   fullContent,
+			CreatedAt: time.Now(),
+		}
+		if len(toolCalls) > 0 {
+			tcJSON, _ := json.Marshal(toolCalls)
+			assistantMsg.ToolCallsJSON = string(tcJSON)
+		}
+		if err := db.CreateMessage(assistantMsg); err != nil {
+			log.Printf("Error guardando mensaje assistant: %v", err)
+		}
+		memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "assistant", fullContent)
+		if ext := memory.DefaultExtractor(); ext != nil {
+			ext.ExtractAndPersistAsync(context.Background(), chat.UserID, msg.Content, fullContent)
+		}
+		writeJSON(client, serverMessage{Type: "done", MessageID: msgID})
+	}
 
 	for chunk := range chunkCh {
 		switch chunk.Type {
@@ -309,27 +370,15 @@ y directo. Si no sabes algo, dilo sin rodeos.`
 				})
 			}
 		case "done":
-			assistantMsg := &models.Message{
-				ID:        msgID,
-				ChatID:    msg.ChatID,
-				Role:      "assistant",
-				Content:   fullContent,
-				CreatedAt: time.Now(),
-			}
-			if len(toolCalls) > 0 {
-				tcJSON, _ := json.Marshal(toolCalls)
-				assistantMsg.ToolCallsJSON = string(tcJSON)
-			}
-			if err := db.CreateMessage(assistantMsg); err != nil {
-				log.Printf("Error guardando mensaje assistant: %v", err)
-			}
-			memory.StoreChatMessage(chat.UserID, chat.ProjectID, msg.ChatID, "assistant", fullContent)
-			writeJSON(client, serverMessage{Type: "done", MessageID: msgID})
+			saveAndEmitDone()
 		case "error":
 			writeJSON(client, serverMessage{Type: "error", Content: chunk.Content})
 		}
 	}
 
+	if !isDoneHandled && (fullContent != "" || len(toolCalls) > 0) {
+		saveAndEmitDone()
+	}
 }
 
 func CancelStream(chatID string) {
@@ -494,6 +543,8 @@ func runReActLoopSession(client *Client, msg clientMessage, chat *models.Chat) {
 	}
 
 	// Arrancar el loop asíncrono
+	// VoiceMode se activa si el cliente lo indica explícitamente o si el tipo del mensaje es "voice_message".
+	isVoice := msg.VoiceMode || msg.Type == "voice_message"
 	sessionID := agent.StartAgentLoop(context.Background(), agent.AgentLoopParams{
 		Provider:        provider,
 		Chat:            chat,
@@ -501,6 +552,7 @@ func runReActLoopSession(client *Client, msg clientMessage, chat *models.Chat) {
 		UserMessage:     msg.Content,
 		PermissionLevel: permLevel,
 		Emit:            emit,
+		VoiceMode:       isVoice,
 	})
 
 	// Enviar session_id al cliente para que pueda cancelar o responder aprobaciones

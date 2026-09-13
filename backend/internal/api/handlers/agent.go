@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -121,3 +122,55 @@ func ConfirmAction(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "confirmed"})
 }
+
+func AuthorizeTask(c *gin.Context) {
+	taskID := c.Param("id")
+	var req struct {
+		StepID string `json:"step_id"`
+		PIN    string `json:"pin"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.StepID == "" || req.PIN == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "step_id and pin are required"})
+		return
+	}
+
+	userID := db.DefaultUserID()
+	valid, _, err := db.VerifyUserPin(userID, req.PIN)
+	if err != nil || !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "PIN incorrecto"})
+		return
+	}
+
+	if err := db.ConfirmAction(req.StepID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	_ = db.UpdateTaskStatus(taskID, "pending", "")
+
+	c.JSON(http.StatusOK, gin.H{"status": "authorized"})
+}
+
+type TaskEngineCanceller interface {
+	CancelAllTasks()
+}
+
+var defaultTaskEngine TaskEngineCanceller
+
+func SetTaskEngine(engine TaskEngineCanceller) {
+	defaultTaskEngine = engine
+}
+
+func EmergencyKill(c *gin.Context) {
+	if defaultTaskEngine != nil {
+		defaultTaskEngine.CancelAllTasks()
+	}
+	_ = db.CancelAllRunningTasks()
+	log.Printf("[EMERGENCY] Todas las tareas y subprocesos han sido cancelados forzosamente")
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "killed",
+		"message": "Todos los procesos y tareas han sido detenidos.",
+	})
+}
+
+

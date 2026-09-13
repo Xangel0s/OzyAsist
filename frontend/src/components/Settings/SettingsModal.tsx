@@ -4,11 +4,12 @@ import { useAuthStore } from "../../store/authStore";
 import { useChatStore } from "../../store/chatStore";
 import { useToastStore } from "../../store/toastStore";
 import { useSkillsStore } from "../../store/skillsStore";
-import { useConnectorsStore } from "../../store/connectorsStore";
 import AddConnectorModal from "./modals/AddConnectorModal";
 import UploadSkillModal from "./modals/UploadSkillModal";
 import WriteSkillModal from "./modals/WriteSkillModal";
 import MarketplaceModal from "./modals/MarketplaceModal";
+import SecurityAuditTab from "./tabs/SecurityAuditTab";
+import { MCPConnectorsList } from "./MCPConnectorsList";
 
 interface CategoryGroup {
   title: string;
@@ -22,6 +23,7 @@ const categoryGroups: CategoryGroup[] = [
       { id: "general", label: "General", icon: "settings" },
       { id: "cuenta", label: "Cuenta", icon: "account_circle" },
       { id: "privacidad", label: "Privacidad", icon: "security" },
+      { id: "seguridad", label: "Seguridad & EDR", icon: "verified_user" },
       { id: "ozycode", label: "Ozy Code", icon: "code" },
     ],
   },
@@ -48,6 +50,16 @@ export default function SettingsModal() {
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const settingsCategory = useUIStore((s) => s.settingsCategory);
   const setSettingsCategory = useUIStore((s) => s.setSettingsCategory);
+
+  const normalizedCategory =
+    settingsCategory === "models" || settingsCategory === "providers"
+      ? "proveedores"
+      : settingsCategory === "skills"
+      ? "habilidades"
+      : settingsCategory === "connectors"
+      ? "conectores"
+      : settingsCategory || "general";
+
   const user = useAuthStore((s) => s.user);
   const updateUserProfile = useAuthStore((s) => s.updateProfileMd);
   const logout = useAuthStore((s) => s.logout);
@@ -83,13 +95,10 @@ export default function SettingsModal() {
   const [testingConnection, setTestingConnection] = useState(false);
   const skills = useSkillsStore((s) => s.skills);
   const removeSkill = useSkillsStore((s) => s.removeSkill);
-  const connectors = useConnectorsStore((s) => s.connectors);
-  const removeConnector = useConnectorsStore((s) => s.removeConnector);
 
+  // Modals & Navigation
   const [skillTab, setSkillTab] = useState("Todo");
-  const [connectorTab, setConnectorTab] = useState("Todo");
   const [showAddSkillDropdown, setShowAddSkillDropdown] = useState(false);
-  const [showAddConnectorDropdown, setShowAddConnectorDropdown] = useState(false);
   const [showAddPluginDropdown, setShowAddPluginDropdown] = useState(false);
 
   // Modal Dialog states
@@ -117,9 +126,6 @@ export default function SettingsModal() {
   const [selectedPluginDetail, setSelectedPluginDetail] = useState<string | null>(null);
   const [pluginDetailTab, setPluginDetailTab] = useState<"habilidades" | "conectores">("habilidades");
 
-  // Connector Role Dropdown state
-  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
-  const [connectorsRoleFilter, setConnectorsRoleFilter] = useState("Software Engineer");
 
   // Active / Inactive toggle states connected to global skillsStore
   const disabledSkillsMap = useSkillsStore((s) => s.disabledSkillsMap);
@@ -171,11 +177,13 @@ export default function SettingsModal() {
         openrouter_key: openrouterKey,
         anthropic_key: anthropicKey,
         deepseek_key: deepseekKey,
+        local_host_url: ollamaUrl,
+        ollama_url: ollamaUrl,
       }).catch(() => {});
 
       await useChatStore.getState().loadProviders();
 
-      toast("Claves API y proveedores guardados correctamente", "check_circle");
+      toast("Claves API y Host Local guardados correctamente", "check_circle");
     } catch {
       toast("Error actualizando proveedores", "error");
     }
@@ -185,28 +193,32 @@ export default function SettingsModal() {
     setTestingConnection(true);
     try {
       const { api } = await import("../../services/api");
-      // Sincronizar primero las claves ingresadas con el backend
+      // Sincronizar primero las claves y host local con el backend
       await api.settings.update({
         opencode_key: opencodeKey,
         openai_key: openaiKey,
         openrouter_key: openrouterKey,
         anthropic_key: anthropicKey,
         deepseek_key: deepseekKey,
+        local_host_url: ollamaUrl,
+        ollama_url: ollamaUrl,
       }).catch(() => {});
 
-      // Consultar modelos disponibles para verificar la clave
-      const providersList = await api.models.list();
+      // Consultar modelos disponibles para verificar la conexión
+      const res = await fetch("http://localhost:8080/api/models/available");
+      const modelsData = await res.json();
       setTestingConnection(false);
 
-      if (providersList && providersList.length > 0) {
-        const names = providersList.map((p) => p.provider).join(", ");
-        toast(`Conexión exitosa. Proveedores activos: ${names}`, "check_circle");
+      if (Array.isArray(modelsData) && modelsData.length > 0) {
+        const modelNames = modelsData.slice(0, 3).map((m: any) => m.name || m.id).join(", ");
+        const more = modelsData.length > 3 ? ` (+${modelsData.length - 3} más)` : "";
+        toast(`Conexión exitosa. Modelos detectados: ${modelNames}${more}`, "check_circle");
       } else {
-        toast("No se pudo verificar la conexión. Por favor revisa que las API Keys sean válidas.", "error");
+        toast("No se detectaron modelos activos. Verifica que LM Studio u Ollama esté corriendo o que las API Keys sean válidas.", "error");
       }
     } catch (err: any) {
       setTestingConnection(false);
-      toast(`Error al probar conexión: ${err?.message || 'Verifica la clave API'}`, "error");
+      toast(`Error al probar conexión: ${err?.message || 'Verifica el host local y claves API'}`, "error");
     }
   };
 
@@ -255,7 +267,7 @@ export default function SettingsModal() {
                   <button
                     key={item.id}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-colors text-left ${
-                      settingsCategory === item.id
+                      normalizedCategory === item.id
                         ? "bg-white/10 text-white font-medium shadow-sm"
                         : "text-white/60 hover:text-white hover:bg-white/5"
                     }`}
@@ -277,13 +289,21 @@ export default function SettingsModal() {
           {/* Header */}
           <div className="flex items-center justify-between px-8 py-5 border-b border-white/10 shrink-0">
             <h2 className="text-[18px] font-semibold text-white capitalize">
-              {settingsCategory === "escritorio"
+              {normalizedCategory === "escritorio"
                 ? "Configuración general del escritorio"
-                : settingsCategory === "proveedores"
+                : normalizedCategory === "proveedores"
                 ? "Proveedores LLM & API Keys"
-                : settingsCategory === "ozycode"
+                : normalizedCategory === "ozycode"
                 ? "Configuración de Ozy Code"
-                : settingsCategory}
+                : normalizedCategory === "seguridad"
+                ? "Seguridad EDR & Auditoría Criptográfica"
+                : normalizedCategory === "habilidades"
+                ? "Habilidades & Skills"
+                : normalizedCategory === "conectores"
+                ? "Conectores MCP"
+                : normalizedCategory === "plugins"
+                ? "Plugins de Sistema"
+                : normalizedCategory}
             </h2>
             <button
               className="w-8 h-8 rounded-lg flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition-colors"
@@ -296,7 +316,7 @@ export default function SettingsModal() {
           {/* Content Scroll View */}
           <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-6">
             {/* 1. GENERAL */}
-            {settingsCategory === "general" && (
+            {normalizedCategory === "general" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div>
                   <h3 className="text-[15px] font-semibold mb-4 text-white">Perfil</h3>
@@ -392,7 +412,7 @@ export default function SettingsModal() {
             )}
 
             {/* 2. CUENTA */}
-            {settingsCategory === "cuenta" && (
+            {normalizedCategory === "cuenta" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div className="flex items-center justify-between py-2 border-b border-white/10">
                   <div>
@@ -451,7 +471,7 @@ export default function SettingsModal() {
             )}
 
             {/* 3. PRIVACIDAD */}
-            {settingsCategory === "privacidad" && (
+            {normalizedCategory === "privacidad" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div className="bg-[#242424] p-4 rounded-xl border border-white/10">
                   <h3 className="text-[15px] font-semibold mb-2 text-white">Privacidad 100% Open Source</h3>
@@ -497,8 +517,13 @@ export default function SettingsModal() {
               </div>
             )}
 
+            {/* SEGURIDAD & EDR */}
+            {normalizedCategory === "seguridad" && (
+              <SecurityAuditTab />
+            )}
+
             {/* 4. OZY CODE */}
-            {settingsCategory === "ozycode" && (
+            {normalizedCategory === "ozycode" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div>
                   <h3 className="text-[15px] font-semibold mb-2 text-white">Nivel de Permisos del Agente</h3>
@@ -560,7 +585,7 @@ export default function SettingsModal() {
             )}
 
             {/* 5. ESCRITORIO */}
-            {settingsCategory === "escritorio" && (
+            {normalizedCategory === "escritorio" && (
               <div className="flex flex-col gap-6 max-w-xl">
                 <div className="flex items-center justify-between py-2 border-b border-white/10">
                   <div>
@@ -616,7 +641,7 @@ export default function SettingsModal() {
             )}
 
             {/* 6. PROVEEDORES LLM */}
-            {settingsCategory === "proveedores" && (
+            {normalizedCategory === "proveedores" && (
               <div className="flex flex-col gap-5 max-w-xl">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-medium text-white text-[13px]">OpenCode API Key</label>
@@ -674,12 +699,19 @@ export default function SettingsModal() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-medium text-white text-[13px]">Ollama Local Host URL</label>
+                  <div className="flex items-center justify-between">
+                    <label className="font-medium text-white text-[13px]">Host Local (LM Studio / Ollama / LocalAI / vLLM)</label>
+                    <span className="text-[11px] text-[#d1f107] font-mono">http://100.73.72.32:1234</span>
+                  </div>
                   <input
                     className="bg-[#242424] border border-white/10 rounded-xl px-4 py-2 text-white placeholder:text-white/20 outline-none focus:border-white/20 font-mono text-[13px]"
+                    placeholder="http://100.73.72.32:1234 o http://localhost:11434"
                     value={ollamaUrl}
                     onChange={(e) => setOllamaUrl(e.target.value)}
                   />
+                  <p className="text-[11px] text-white/40">
+                    Detecta automáticamente modelos cargados en LM Studio (vía /v1/models) u Ollama (vía /api/tags).
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-3 mt-2">
@@ -704,7 +736,7 @@ export default function SettingsModal() {
             )}
 
             {/* 7. DESARROLLADOR */}
-            {settingsCategory === "desarrollador" && (
+            {normalizedCategory === "desarrollador" && (
               <div className="flex flex-col gap-5 max-w-xl">
                 <div className="flex items-center justify-between py-2 border-b border-white/10">
                   <div>
@@ -744,7 +776,7 @@ export default function SettingsModal() {
             )}
 
             {/* 8. HABILIDADES */}
-            {(settingsCategory === "habilidades" || settingsCategory === "skills") && (
+            {normalizedCategory === "habilidades" && (
               <div className="flex flex-col gap-5 w-full">
                 {selectedSkillDetail ? (
                   <div className="flex flex-col gap-5">
@@ -1060,190 +1092,14 @@ export default function SettingsModal() {
             )}
 
             {/* 9. CONECTORES (MCP) */}
-            {settingsCategory === "conectores" && (
+            {normalizedCategory === "conectores" && (
               <div className="flex flex-col gap-5 w-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 bg-[#242424] p-1 rounded-xl text-[12px] text-white/50 border border-white/5">
-                    {["Todo", "Conectado", "No conectado"].map((tab) => (
-                      <button
-                        key={tab}
-                        className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                          connectorTab === tab ? "bg-white/15 text-white shadow-sm" : "hover:text-white"
-                        }`}
-                        onClick={() => setConnectorTab(tab)}
-                      >
-                        {tab}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                      onClick={() => setShowMarketplaceModal(true)}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">search</span>
-                    </button>
-
-                    <div className="relative">
-                      <button
-                        className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-1.5"
-                        onClick={() => setShowAddConnectorDropdown(!showAddConnectorDropdown)}
-                      >
-                        <span>Agregar</span>
-                        <span className="material-symbols-outlined text-[16px]">expand_more</span>
-                      </button>
-
-                      {showAddConnectorDropdown && (
-                        <div className="absolute right-0 top-full mt-1.5 w-60 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-1.5 z-50 text-[13px] text-white">
-                          <button
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setShowAddConnectorDropdown(false);
-                              setShowMarketplaceModal(true);
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[18px] text-white/60">storefront</span>
-                            <span>Explorar conectores</span>
-                          </button>
-                          <button
-                            className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setShowAddConnectorDropdown(false);
-                              setShowCustomConnectorModal(true);
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[18px] text-white/60">more_horiz</span>
-                            <span>Agregar conector personalizado</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1.5 relative select-none">
-                    <span>POPULAR PARA</span>
-                    <button
-                      className="text-white hover:underline flex items-center gap-0.5 font-bold"
-                      onClick={() => setShowRoleDropdown(!showRoleDropdown)}
-                    >
-                      <span>{connectorsRoleFilter}</span>
-                      <span className="material-symbols-outlined text-[14px]">expand_more</span>
-                    </button>
-
-                    {showRoleDropdown && (
-                      <div className="absolute left-24 top-full mt-1 w-64 bg-[#262626] border border-white/10 rounded-2xl shadow-2xl py-2 z-50 text-[13px] text-white">
-                        <div className="px-3.5 py-1 text-[11px] font-semibold text-white/40 uppercase">Mostrar conectores para</div>
-                        {[
-                          "Sales",
-                          "Marketing",
-                          "Finance",
-                          "Product Management",
-                          "Engineering",
-                          "Software Engineer",
-                          "Design",
-                          "Data Science",
-                          "Legal",
-                          "Human Resources",
-                          "Operations",
-                        ].map((role) => (
-                          <button
-                            key={role}
-                            className="w-full flex items-center justify-between px-3.5 py-2 hover:bg-white/10 transition-colors text-left"
-                            onClick={() => {
-                              setConnectorsRoleFilter(role);
-                              setShowRoleDropdown(false);
-                            }}
-                          >
-                            <span>{role}</span>
-                            {connectorsRoleFilter === role && (
-                              <div className="flex items-center gap-1 text-[#3b82f6]">
-                                <span className="material-symbols-outlined text-[16px]">check</span>
-                                <span className="text-[11px] text-white/40">Tu rol</span>
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { name: "Slack", icon: "chat", bg: "bg-[#4a154b]/30 text-[#e01e5a]" },
-                      { name: "Atlassian", icon: "task", bg: "bg-[#0052cc]/30 text-[#0052cc]" },
-                      { name: "Gmail", icon: "mail", bg: "bg-[#ea4335]/30 text-[#ea4335]" },
-                    ].map((card) => (
-                      <div key={card.name} className="bg-[#222222] border border-white/10 rounded-xl p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${card.bg}`}>
-                            <span className="material-symbols-outlined text-[18px]">{card.icon}</span>
-                          </div>
-                          <span className="font-medium text-[13px] text-white">{card.name}</span>
-                        </div>
-                        <button className="px-3 py-1 bg-white/10 hover:bg-white/20 text-white text-[12px] font-medium rounded-lg transition-colors">
-                          Conectar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="border border-white/10 rounded-xl overflow-hidden bg-[#222222] mt-2">
-                  <div className="grid grid-cols-12 px-4 py-2.5 border-b border-white/10 text-[12px] font-medium text-white/40">
-                    <div className="col-span-5">Conector</div>
-                    <div className="col-span-4">Tipo</div>
-                    <div className="col-span-3">Estado</div>
-                  </div>
-                  {connectors.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-8 gap-3 text-center">
-                      <span className="material-symbols-outlined text-[32px] text-white/30">power_off</span>
-                      <div className="text-[14px] text-white/70 font-medium">No hay conectores MCP configurados aún</div>
-                      <div className="text-[12px] text-white/40 max-w-sm">Conecta tus herramientas locales (STDIO) o servidores remotos (HTTP/SSE) para usarlos desde Ozy.</div>
-                      <button
-                        className="px-4 py-2 bg-[#d1f107] text-[#181e00] font-bold text-[13px] rounded-xl hover:opacity-90 transition-colors mt-2"
-                        onClick={() => setShowCustomConnectorModal(true)}
-                      >
-                        Agregar conector personalizado
-                      </button>
-                    </div>
-                  ) : (
-                    connectors.map((c) => (
-                      <div key={c.id} className="grid grid-cols-12 px-4 py-3 border-b border-white/5 hover:bg-white/5 transition-colors items-center text-[13px]">
-                        <div className="col-span-5 flex items-center gap-2.5 font-medium text-white">
-                          <span className="material-symbols-outlined text-[18px] text-white/40">power</span>
-                          <span>{c.name}</span>
-                        </div>
-                        <div className="col-span-4 flex items-center gap-2">
-                          <span className="text-white/70">{c.type}</span>
-                          <span className="px-2 py-0.5 bg-white/10 rounded-md text-[10px] text-white/50 font-mono">{c.endpoint || "MCP Server"}</span>
-                        </div>
-                        <div className="col-span-3 flex items-center justify-between text-[#3b82f6]">
-                          <span className="flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[18px]">check</span>
-                            <span className="text-[12px] text-white/60">Conectado</span>
-                          </span>
-                          <button
-                            className="p-1 text-white/40 hover:text-red-400 transition-colors"
-                            onClick={async () => {
-                              await removeConnector(c.id);
-                              toast(`Conector ${c.name} eliminado`, "success");
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">delete</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+                <MCPConnectorsList />
               </div>
             )}
 
             {/* 10. PLUGINS */}
-            {settingsCategory === "plugins" && (
+            {normalizedCategory === "plugins" && (
               <div className="flex flex-col gap-5 w-full">
                 {selectedPluginDetail ? (() => {
                   const customPluginObj = skills.find((s) => s.name === selectedPluginDetail);

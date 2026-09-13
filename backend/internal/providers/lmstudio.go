@@ -12,7 +12,7 @@ func NewLMStudio(baseURL string) *LMStudioProvider {
 }
 
 func (p *LMStudioProvider) Name() string       { return "lmstudio" }
-func (p *LMStudioProvider) SupportsTools() bool { return false }
+func (p *LMStudioProvider) SupportsTools() bool { return true }
 func (p *LMStudioProvider) Models() []string {
 	return []string{"local-model"}
 }

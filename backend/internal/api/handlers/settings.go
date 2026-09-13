@@ -15,11 +15,13 @@ func GetSettings(c *gin.Context) {
 
 func UpdateSettings(c *gin.Context) {
 	var req struct {
-		OpencodeKey  string `json:"opencode_key"`
-		OpenAIKey    string `json:"openai_key"`
+		OpencodeKey   string `json:"opencode_key"`
+		OpenAIKey     string `json:"openai_key"`
 		OpenRouterKey string `json:"openrouter_key"`
-		AnthropicKey string `json:"anthropic_key"`
-		DeepseekKey  string `json:"deepseek_key"`
+		AnthropicKey  string `json:"anthropic_key"`
+		DeepseekKey   string `json:"deepseek_key"`
+		LocalHostURL  string `json:"local_host_url"`
+		OllamaURL     string `json:"ollama_url"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -27,20 +29,20 @@ func UpdateSettings(c *gin.Context) {
 		return
 	}
 
-	if req.OpencodeKey != "" {
-		providers.RegisterProviderKey("opencode", req.OpencodeKey)
-	}
+	providers.RegisterProviderKey("opencode", req.OpencodeKey)
 	if req.DeepseekKey != "" {
-		providers.RegisterProviderKey("opencode", req.DeepseekKey)
+		providers.RegisterProviderKey("deepseek", req.DeepseekKey)
 	}
-	if req.OpenAIKey != "" {
-		providers.RegisterProviderKey("openai", req.OpenAIKey)
+	providers.RegisterProviderKey("openai", req.OpenAIKey)
+	providers.RegisterProviderKey("openrouter", req.OpenRouterKey)
+	providers.RegisterProviderKey("anthropic", req.AnthropicKey)
+
+	host := req.LocalHostURL
+	if host == "" {
+		host = req.OllamaURL
 	}
-	if req.OpenRouterKey != "" {
-		providers.RegisterProviderKey("openrouter", req.OpenRouterKey)
-	}
-	if req.AnthropicKey != "" {
-		providers.RegisterProviderKey("anthropic", req.AnthropicKey)
+	if host != "" {
+		providers.RegisterLocalHostURL(host)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

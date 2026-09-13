@@ -59,8 +59,11 @@ export default function TopAppBar() {
   };
 
   return (
-    <header className="flex justify-between items-center w-full px-4 h-12 bg-background border-b border-border-subtle flex-shrink-0 z-50">
-      <div className="flex items-center gap-2 text-text-muted">
+    <header 
+      className="flex justify-between items-center w-full px-4 h-12 bg-background border-b border-border-subtle flex-shrink-0 z-50"
+      data-tauri-drag-region
+    >
+      <div className="flex items-center gap-2 text-text-muted" data-tauri-drag-region>
         <MenuBar />
         <button
           className="hover:bg-surface-variant transition-colors p-1.5 rounded-lg flex items-center justify-center"
@@ -93,6 +96,15 @@ export default function TopAppBar() {
         </button>
       </div>
       <div className="flex items-center gap-3">
+        <button
+          className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-medium bg-[#d1f107]/15 text-[#d1f107] border border-[#d1f107]/30 hover:bg-[#d1f107]/25 transition-all shadow-sm cursor-pointer"
+          onClick={() => useUIStore.getState().setVoiceLiveOpen(true)}
+          title="Ozy Live — Voz bidireccional continua (Di 'Hey Ozy' o Alt+V)"
+        >
+          <span className="material-symbols-outlined text-[16px] animate-pulse">mic</span>
+          <span className="font-semibold">Ozy Live</span>
+        </button>
+
         <button
           className={`flex items-center justify-center p-2 rounded-full transition-all ${
             agentConnected

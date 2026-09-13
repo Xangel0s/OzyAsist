@@ -15,8 +15,14 @@
         "title": "Ozy Desktop",
         "width": 1280,
         "height": 800,
-        "minWidth": 900,
-        "minHeight": 600
+        "minWidth": 420,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {

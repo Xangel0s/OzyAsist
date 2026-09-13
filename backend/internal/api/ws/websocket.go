@@ -35,10 +35,14 @@ func HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
 		return nil
+	})
+	conn.SetPingHandler(func(appData string) error {
+		conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+		return conn.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(5*time.Second))
 	})
 
 	client := &Client{Conn: conn, Send: make(chan []byte, 256)}
@@ -63,6 +67,8 @@ func (c *Client) readPump() {
 			break
 		}
 
+		c.Conn.SetReadDeadline(time.Now().Add(10 * time.Minute))
+
 		var msg struct {
 			Type string `json:"type"`
 		}
@@ -71,6 +77,8 @@ func (c *Client) readPump() {
 		}
 
 		switch msg.Type {
+		case "ping":
+			_ = c.Conn.WriteControl(websocket.PongMessage, nil, time.Now().Add(5*time.Second))
 		case "message":
 			var chatMsg clientMessage
 			if err := json.Unmarshal(raw, &chatMsg); err == nil && chatMsg.ChatID != "" {

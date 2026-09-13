@@ -20,6 +20,18 @@ func NewRouter() *gin.Engine {
 	r.Use(middleware.CORS())
 	r.Use(middleware.Auth())
 
+	// Disable internal Gin redirects that drop CORS headers
+	r.RedirectTrailingSlash = false
+	r.RedirectFixedPath = false
+
+	// Apply CORS to 404 and 405 handlers explicitly
+	r.NoRoute(middleware.CORS(), func(c *gin.Context) {
+		c.JSON(404, gin.H{"error": "Ruta no encontrada"})
+	})
+	r.NoMethod(middleware.CORS(), func(c *gin.Context) {
+		c.JSON(405, gin.H{"error": "Método no permitido"})
+	})
+
 	apiGroup := r.Group("/api")
 	{
 		// Auth & Profiles
@@ -40,6 +52,12 @@ func NewRouter() *gin.Engine {
 		apiGroup.DELETE("/chats/:id", handlers.DeleteChat)
 		apiGroup.POST("/chats/:id/messages", handlers.SendMessage)
 		apiGroup.PATCH("/chats/:id/messages/:messageId/feedback", handlers.UpdateMessageFeedback)
+
+		// MCP Connectors
+		apiGroup.GET("/mcp", handlers.ListMCPConnectors)
+		apiGroup.POST("/mcp", handlers.CreateMCPConnector)
+		apiGroup.DELETE("/mcp/:id", handlers.DeleteMCPConnector)
+		apiGroup.POST("/mcp/:id/reconnect", handlers.ReconnectMCPConnector)
 
 		// Projects
 		apiGroup.GET("/projects", handlers.ListProjects)
@@ -84,9 +102,11 @@ func NewRouter() *gin.Engine {
 		// Global search
 		apiGroup.GET("/search", handlers.GlobalSearch)
 
-		// Models
+		// Models & Providers
 		apiGroup.GET("/models", handlers.ListModels)
+		apiGroup.GET("/models/available", handlers.GetAvailableModels)
 		apiGroup.POST("/models/select", handlers.SelectModel)
+		apiGroup.POST("/providers/test", handlers.TestProviderConnection)
 
 		// Files
 		apiGroup.POST("/files/upload", handlers.UploadFile)
@@ -98,14 +118,29 @@ func NewRouter() *gin.Engine {
 		apiGroup.GET("/agent/tasks/:id", handlers.GetTask)
 		apiGroup.POST("/agent/tasks/:id/cancel", handlers.CancelTask)
 		apiGroup.POST("/agent/tasks/:id/confirm", handlers.ConfirmAction)
+		apiGroup.POST("/tasks/:id/authorize", handlers.AuthorizeTask)
+		apiGroup.POST("/tasks/:id/cancel", handlers.CancelTask)
+		apiGroup.POST("/tasks/emergency-kill", handlers.EmergencyKill)
+		apiGroup.POST("/agent/tasks/emergency-kill", handlers.EmergencyKill)
 
 		// Sidebar
 		apiGroup.POST("/sidebar/observe", handlers.Observe)
 		apiGroup.POST("/sidebar/command", handlers.SidebarCommand)
 
+		// Security EDR & Audit Trail
+		apiGroup.GET("/security/audit", handlers.GetAuditTrail)
+		apiGroup.GET("/security/snapshots/:taskId", handlers.GetTaskSnapshots)
+		apiGroup.POST("/security/undo/:taskId", handlers.UndoTask)
+		apiGroup.POST("/security/watchdog/kill", handlers.KillSuspectProcess)
+
 		// Settings
 		apiGroup.GET("/settings", handlers.GetSettings)
 		apiGroup.PUT("/settings", handlers.UpdateSettings)
+
+		// Audio & Native Hardware Voice
+		apiGroup.GET("/audio/devices", handlers.GetAudioDevicesHandler)
+		apiGroup.GET("/audio/status", handlers.GetAudioStatusHandler)
+		apiGroup.POST("/audio/wakeword/test", handlers.TestWakeWordHandler)
 
 		// Onboarding
 		apiGroup.POST("/onboarding/analyze-memory", handlers.AnalyzeMemory)
@@ -133,7 +168,7 @@ func NewRouter() *gin.Engine {
 		})
 	})
 
-	// Serve frontend static files if frontend/dist exists
+	// Servir frontend embebido o desde directorio físico
 	distPath := "../frontend/dist"
 	if _, err := os.Stat(distPath); err != nil {
 		cwd, _ := os.Getwd()
@@ -153,6 +188,8 @@ func NewRouter() *gin.Engine {
 			}
 			c.File(filepath.Join(distPath, "index.html"))
 		})
+	} else {
+		RegisterSPA(r)
 	}
 
 	return r

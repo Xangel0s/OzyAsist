@@ -9,13 +9,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type openaiCfg struct {
-	apiKey  string
-	baseURL string
-	model   string
-	client  *http.Client
+	providerName string
+	apiKey       string
+	baseURL      string
+	model        string
+	client       *http.Client
 }
 
 type OpenAIProvider struct {
@@ -25,15 +27,21 @@ type OpenAIProvider struct {
 func NewOpenAI(apiKey string) *OpenAIProvider {
 	return &OpenAIProvider{
 		cfg: &openaiCfg{
-			apiKey:  apiKey,
-			baseURL: "https://api.openai.com/v1",
-			model:   "gpt-4o",
-			client:  &http.Client{},
+			providerName: "openai",
+			apiKey:       apiKey,
+			baseURL:      "https://api.openai.com/v1",
+			model:        "gpt-4o",
+			client:       &http.Client{},
 		},
 	}
 }
 
-func (p *OpenAIProvider) Name() string       { return "openai" }
+func (p *OpenAIProvider) Name() string {
+	if p.cfg != nil && p.cfg.providerName != "" {
+		return p.cfg.providerName
+	}
+	return "openai"
+}
 func (p *OpenAIProvider) SupportsTools() bool { return true }
 func (p *OpenAIProvider) Models() []string    { return []string{"gpt-4o", "gpt-4o-mini", "o3", "o4-mini"} }
 
@@ -41,8 +49,23 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	ch := make(chan StreamChunk, 32)
 
 	model := opts.Model
-	if model == "" {
-		model = p.cfg.model
+	if strings.Contains(p.cfg.baseURL, "openrouter.ai") {
+		// OpenRouter requiere formato "proveedor/modelo" (ej: deepseek/deepseek-chat)
+		if model == "" || strings.Contains(model, "ozyassist") || strings.Contains(model, "local-model") || !strings.Contains(model, "/") {
+			model = p.cfg.model
+		}
+		if strings.HasPrefix(model, "openrouter/") && strings.Count(model, "/") > 1 {
+			model = strings.TrimPrefix(model, "openrouter/")
+		}
+	} else {
+		if model == "" {
+			model = p.cfg.model
+		}
+		model = strings.TrimPrefix(model, "openrouter/")
+		model = strings.TrimPrefix(model, "openai/")
+		model = strings.TrimPrefix(model, "deepseek/")
+		model = strings.TrimPrefix(model, "lmstudio/")
+		model = strings.TrimPrefix(model, "ollama/")
 	}
 
 	body := map[string]any{
@@ -54,29 +77,54 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	if opts.Temperature != 0 {
 		body["temperature"] = opts.Temperature
 	}
-	if opts.MaxTokens != 0 {
+	if opts.MaxTokens > 0 {
 		body["max_tokens"] = opts.MaxTokens
+	} else if strings.Contains(p.cfg.baseURL, "openrouter.ai") {
+		body["max_tokens"] = 1024
+	} else {
+		body["max_tokens"] = 2048
 	}
 
 	// Tool calling — OpenAI usa "tools" con "function.parameters" (JSON Schema)
 	if len(opts.Tools) > 0 {
 		body["tools"] = toOpenAITools(opts.Tools)
+		body["tool_choice"] = "auto"
 	}
 
 	raw, _ := json.Marshal(body)
 
-	req, err := http.NewRequestWithContext(ctx, "POST", p.cfg.baseURL+"/chat/completions", bytes.NewReader(raw))
-	if err != nil {
-		close(ch)
-		return nil, fmt.Errorf("crear request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.cfg.apiKey)
+	var resp *http.Response
+	maxRetries := 2
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "POST", p.cfg.baseURL+"/chat/completions", bytes.NewReader(raw))
+		if err != nil {
+			close(ch)
+			return nil, fmt.Errorf("crear request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+p.cfg.apiKey)
+		if strings.Contains(p.cfg.baseURL, "openrouter.ai") {
+			req.Header.Set("HTTP-Referer", "http://localhost:1420")
+			req.Header.Set("X-Title", "OzyAssist")
+		}
 
-	resp, err := p.cfg.client.Do(req)
-	if err != nil {
-		close(ch)
-		return nil, fmt.Errorf("request fallido: %w", err)
+		resp, err = p.cfg.client.Do(req)
+		if err != nil {
+			close(ch)
+			return nil, fmt.Errorf("request fallido: %w", err)
+		}
+
+		if resp.StatusCode == 429 && attempt < maxRetries {
+			resp.Body.Close()
+			select {
+			case <-ctx.Done():
+				close(ch)
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(1500*(attempt+1)) * time.Millisecond):
+			}
+			continue
+		}
+		break
 	}
 
 	if resp.StatusCode != 200 {
@@ -84,6 +132,21 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 		resp.Body.Close()
 		close(ch)
 		errStr := strings.TrimSpace(string(errBody))
+
+		provName := p.Name()
+		if provName == "" {
+			provName = "LLM"
+		}
+		if resp.StatusCode == 402 {
+			return nil, fmt.Errorf("%s (Créditos insuficientes - 402): %s", provName, errStr)
+		}
+		if resp.StatusCode == 401 {
+			return nil, fmt.Errorf("%s (No autorizado - 401): La API Key ingresada no es válida para %s. Revisa tu clave.", provName, provName)
+		}
+		if resp.StatusCode == 429 {
+			return nil, fmt.Errorf("%s (Límite de peticiones - 429): %s", provName, errStr)
+		}
+
 		if len(errStr) > 300 {
 			errStr = errStr[:300] + "..."
 		}
@@ -129,6 +192,7 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 		args string
 	}
 	toolAccum := make(map[int]*tcAccum)
+	doneEmitted := false
 
 	for scanner.Scan() {
 		if ctx.Err() != nil {
@@ -136,12 +200,34 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 			return
 		}
 
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ":") {
 			continue
 		}
-		data := strings.TrimPrefix(line, "data: ")
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
+			for _, acc := range toolAccum {
+				var inputRaw json.RawMessage
+				if acc.args != "" {
+					inputRaw = json.RawMessage(acc.args)
+				} else {
+					inputRaw = json.RawMessage(`{}`)
+				}
+				ch <- StreamChunk{
+					Type: "tool_call",
+					ToolCall: &ToolCall{
+						ID:    acc.id,
+						Name:  acc.name,
+						Input: inputRaw,
+					},
+				}
+			}
+			ch <- StreamChunk{Type: "done"}
+			doneEmitted = true
 			return
 		}
 
@@ -149,8 +235,8 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 			Choices []struct {
 				Index int `json:"index"`
 				Delta struct {
-					Role    string `json:"role"`
-					Content string `json:"content"`
+					Role      string `json:"role"`
+					Content   string `json:"content"`
 					ToolCalls []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
@@ -211,11 +297,13 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 				}
 				toolAccum = make(map[int]*tcAccum)
 				ch <- StreamChunk{Type: "done"}
+				doneEmitted = true
 				return
 			}
 
-			if choice.FinishReason == "stop" {
+			if choice.FinishReason == "stop" || choice.FinishReason == "length" {
 				ch <- StreamChunk{Type: "done"}
+				doneEmitted = true
 				return
 			}
 		}
@@ -223,6 +311,27 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 
 	if err := scanner.Err(); err != nil {
 		ch <- StreamChunk{Type: "error", Content: err.Error()}
+		return
+	}
+
+	if !doneEmitted {
+		for _, acc := range toolAccum {
+			var inputRaw json.RawMessage
+			if acc.args != "" {
+				inputRaw = json.RawMessage(acc.args)
+			} else {
+				inputRaw = json.RawMessage(`{}`)
+			}
+			ch <- StreamChunk{
+				Type: "tool_call",
+				ToolCall: &ToolCall{
+					ID:    acc.id,
+					Name:  acc.name,
+					Input: inputRaw,
+				},
+			}
+		}
+		ch <- StreamChunk{Type: "done"}
 	}
 }
 
@@ -234,17 +343,26 @@ func toOpenAIMessages(msgs []Message) []any {
 	for _, m := range msgs {
 		switch m.Role {
 		case "system":
+			if strings.TrimSpace(m.Content) == "" {
+				continue
+			}
 			out = append(out, map[string]any{
 				"role":    "system",
 				"content": m.Content,
 			})
 		case "user":
+			if strings.TrimSpace(m.Content) == "" {
+				continue
+			}
 			out = append(out, map[string]any{
 				"role":    "user",
 				"content": m.Content,
 			})
 		case "assistant":
 			if len(m.ToolCalls) == 0 {
+				if strings.TrimSpace(m.Content) == "" {
+					continue
+				}
 				out = append(out, map[string]any{
 					"role":    "assistant",
 					"content": m.Content,
@@ -269,17 +387,21 @@ func toOpenAIMessages(msgs []Message) []any {
 					"role":       "assistant",
 					"tool_calls": tcs,
 				}
-				if m.Content != "" {
+				if strings.TrimSpace(m.Content) != "" {
 					obj["content"] = m.Content
 				}
 				out = append(out, obj)
 			}
 		case "tool":
 			if m.ToolResult != nil {
+				contentStr := m.ToolResult.Content
+				if strings.TrimSpace(contentStr) == "" {
+					contentStr = "ok"
+				}
 				out = append(out, map[string]any{
 					"role":         "tool",
 					"tool_call_id": m.ToolResult.ToolCallID,
-					"content":      m.ToolResult.Content,
+					"content":      contentStr,
 				})
 			}
 		}

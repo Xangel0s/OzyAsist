@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Sandbox valida que todas las operaciones de archivo estén dentro de ProjectRoot.
@@ -35,10 +36,7 @@ func (s *Sandbox) Resolve(path string) (string, error) {
 		return "", fmt.Errorf("resolve path: %w", err)
 	}
 	rel, err := filepath.Rel(s.ProjectRoot, abs)
-	if err != nil {
-		return "", fmt.Errorf("path outside sandbox: %w", err)
-	}
-	if rel[0] == '.' || rel[0] == os.PathSeparator {
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, `..\`) {
 		return "", fmt.Errorf("path traversal detected: %s", rel)
 	}
 	return abs, nil
