@@ -123,6 +123,8 @@ func RegisterProviderKey(name, key string) {
 		Register("anthropic", NewAnthropic(key))
 	case "mistral":
 		Register("mistral", NewMistral(key))
+	case "kilocode", "kilo":
+		Register("kilocode", NewKiloCode(key))
 	}
 }
 
@@ -157,6 +159,8 @@ func GetProviderKey(name string) string {
 		return strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
 	case "mistral":
 		return strings.TrimSpace(os.Getenv("MISTRAL_API_KEY"))
+	case "kilocode", "kilo":
+		return strings.TrimSpace(os.Getenv("KILOCODE_API_KEY"))
 	}
 	return ""
 }
@@ -227,6 +231,9 @@ func InitProviders() {
 	}
 	if key := os.Getenv("MISTRAL_API_KEY"); key != "" {
 		RegisterProviderKey("mistral", key)
+	}
+	if key := os.Getenv("KILOCODE_API_KEY"); key != "" {
+		RegisterProviderKey("kilocode", key)
 	}
 
 	// Registrar host local (LM Studio / Ollama)

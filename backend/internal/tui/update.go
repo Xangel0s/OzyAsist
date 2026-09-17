@@ -601,7 +601,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /queue, /cola     - Consulta los mensajes pendientes en la cola de espera
   /clearqueue       - Vacía la cola de mensajes pendientes
   /provider [nom]   - Consulta o cambia el proveedor LLM activo (cohere, groq, openai, etc.)
-  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic, mistral) o URL local
+  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic, mistral, kilocode) o URL local
   /groq [key]       - Auto-configura Groq desde portapapeles o abre Chrome autenticado para obtenerla
   /voice            - Alterna la escucha activa de voz ("Hey Ozy")
   /model [nombre]   - Consulta o cambia el proveedor/modelo actual
@@ -847,6 +847,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 			{"anthropic", "Anthropic", "Claude 3.5 Sonnet", "claude-3-5-sonnet-20241022"},
 			{"deepseek", "DeepSeek", "DeepSeek-V3 / R1 nativo", "deepseek-chat"},
 			{"mistral", "Mistral AI", "mistral-large, codestral, mixtral-8x22b", "mistral-large-latest"},
+			{"kilocode", "KiloCode Gateway", "+500 modelos: Claude, GPT-5, Gemini, DeepSeek", "kilo/anthropic/claude-sonnet-4-5"},
 			{"lmstudio", "LM Studio / Local", "Modelos locales vía HTTP", "local-model"},
 			{"ollama", "Ollama", "Modelos locales vía Ollama API", "local-model"},
 		}
@@ -984,6 +985,7 @@ O con OpenAI Whisper:
   /key deepseek <tu-api-key>
   /key anthropic <tu-api-key>
   /key mistral <tu-api-key>     (mistral-large-latest, codestral, etc.)
+  /key kilocode <jwt-token>     (Gateway 500+ modelos: Claude, GPT, Gemini...)
   /key local http://localhost:1234 (para LM Studio u Ollama)`
 		}
 		targetProv := strings.ToLower(parts[1])
@@ -1065,6 +1067,30 @@ O con OpenAI Whisper:
 			return fmt.Sprintf("✓ Endpoint local actualizado y guardado: %s", keyVal)
 		}
 
+		if targetProv == "kilocode" || targetProv == "kilo" {
+			_ = providers.SaveConfigKey("KILOCODE_API_KEY", keyVal)
+			_ = os.Setenv("KILOCODE_API_KEY", keyVal)
+			providers.RegisterProviderKey("kilocode", keyVal)
+			if p, err := providers.Get("kilocode"); err == nil {
+				m.provider = p
+				if m.chat != nil {
+					m.chat.Provider = "kilocode"
+					if len(p.Models()) > 0 {
+						m.chat.Model = p.Models()[0]
+					}
+				}
+			}
+			modelName := "kilo/anthropic/claude-sonnet-4-5"
+			if m.chat != nil && m.chat.Model != "" {
+				modelName = m.chat.Model
+			}
+			return fmt.Sprintf("🚀 Proveedor 'KiloCode Gateway' configurado y activado (Modelo: %s).\n"+
+				"✓ Token JWT guardado en .env como KILOCODE_API_KEY\n"+
+				"💡 Gateway unificado con +500 modelos (Claude, GPT, Gemini, DeepSeek, Mistral)\n"+
+				"   Cambia modelo con: /model kilo/anthropic/claude-opus-4-5\n"+
+				"   O: /model kilo/openai/gpt-4o", modelName)
+		}
+
 		if targetProv == "mistral" {
 			_ = providers.SaveConfigKey("MISTRAL_API_KEY", keyVal)
 			_ = os.Setenv("MISTRAL_API_KEY", keyVal)
@@ -1102,7 +1128,7 @@ O con OpenAI Whisper:
 			}
 			return fmt.Sprintf("✓ Proveedor '%s' configurado y guardado en .env (Modelo: %s).", targetProv, modelName)
 		}
-		return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, mistral, local", targetProv)
+		return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, mistral, kilocode, local", targetProv)
 
 	case "/exit", "/quit":
 		return "QUIT"
