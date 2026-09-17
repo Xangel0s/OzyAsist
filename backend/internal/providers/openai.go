@@ -31,7 +31,13 @@ func NewOpenAI(apiKey string) *OpenAIProvider {
 			apiKey:       apiKey,
 			baseURL:      "https://api.openai.com/v1",
 			model:        "gpt-4o",
-			client:       &http.Client{},
+			client: &http.Client{
+				Timeout: 120 * time.Second,
+				Transport: &http.Transport{
+					ResponseHeaderTimeout: 45 * time.Second,
+					IdleConnTimeout:       90 * time.Second,
+				},
+			},
 		},
 	}
 }
@@ -63,9 +69,14 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 		}
 		model = strings.TrimPrefix(model, "openrouter/")
 		model = strings.TrimPrefix(model, "openai/")
+		model = strings.TrimPrefix(model, "cohere/")
+		model = strings.TrimPrefix(model, "groq/")
 		model = strings.TrimPrefix(model, "deepseek/")
 		model = strings.TrimPrefix(model, "lmstudio/")
 		model = strings.TrimPrefix(model, "ollama/")
+		if p.cfg != nil && p.cfg.providerName != "" {
+			model = strings.TrimPrefix(model, p.cfg.providerName+"/")
+		}
 	}
 
 	body := map[string]any{
@@ -183,6 +194,17 @@ func toOpenAITools(tools []ToolDef) []any {
 func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, body io.ReadCloser) {
 	defer body.Close()
 	defer close(ch)
+
+	// Goroutine canceladora: si el context se cancela (Ctrl+C o timeout), cerrar body para desenclavar scanner.Scan()
+	stopCancelWatcher := make(chan struct{})
+	defer close(stopCancelWatcher)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = body.Close()
+		case <-stopCancelWatcher:
+		}
+	}()
 
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)

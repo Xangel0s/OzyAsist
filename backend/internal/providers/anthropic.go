@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type anthropicCfg struct {
@@ -28,7 +29,13 @@ func NewAnthropic(apiKey string) *AnthropicProvider {
 			apiKey:  apiKey,
 			baseURL: "https://api.anthropic.com/v1",
 			model:   "claude-sonnet-4-20250514",
-			client:  &http.Client{},
+			client: &http.Client{
+				Timeout: 120 * time.Second,
+				Transport: &http.Transport{
+					ResponseHeaderTimeout: 45 * time.Second,
+					IdleConnTimeout:       90 * time.Second,
+				},
+			},
 		},
 	}
 }
@@ -119,6 +126,16 @@ func toAnthropicTools(tools []ToolDef) []any {
 func (p *AnthropicProvider) readStream(ctx context.Context, ch chan<- StreamChunk, body io.ReadCloser) {
 	defer body.Close()
 	defer close(ch)
+
+	stopCancelWatcher := make(chan struct{})
+	defer close(stopCancelWatcher)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = body.Close()
+		case <-stopCancelWatcher:
+		}
+	}()
 
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
