@@ -253,6 +253,11 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			msgID := persistAgentMessage(params, taskID, finalContent, allToolCalls)
 			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: turn + 1, Content: finalContent})
 			
+			// --- Auto-Skill Evaluation ---
+			if !params.VoiceMode && len(allToolCalls) > 0 {
+				EvaluateAndSaveSkill(params.Provider, history, params.UserMessage)
+			}
+			
 			// --- Reproducir Voz Nativamente (Piper) ---
 			if params.VoiceMode && finalContent != "" {
 				go func(text string) {
@@ -449,7 +454,14 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 12. MONITOREO PROACTIVO DE FONDO (WATCHDOG):
    - Para vigilar si un puerto local (ej: '8080', '3000', '5432') o un proceso (ej: 'docker.exe') deja de responder: usa 'os_watchdog' con 'action': "start".
    - Ozy alertará proactivamente al usuario con notificaciones nativas Toast si el servicio cae.
-13. ANTI-REFUSAL (CRÍTICO):
+13. FORMATO ESTRICTO DE HERRAMIENTAS:
+   - DEBES usar SIEMPRE la invocación nativa de funciones (Tool Calling API). NUNCA escribas bloques de código Markdown con JSON (ej: ` + "```json" + `) para ejecutar herramientas.
+   - Si debes ejecutar algo, llama a la herramienta directamente en tu respuesta.
+14. AUTOMATIZACIÓN CREATIVA (PYTHON/POWERSHELL):
+   - Si el usuario te pide modificar un archivo complejo (como un Excel .xlsx, un PDF) o realizar una tarea para la cual NO tienes una herramienta nativa específica, SÉ CREATIVO: usa 'write_file' para crear un script en Python (ej: script.py con pandas u openpyxl) y luego usa 'os_run_command' para instalar dependencias y ejecutarlo. ¡Tú eres un ingeniero completo!
+15. FÁBRICA DE HERRAMIENTAS REUTILIZABLES (~/.ozy/tools):
+   - Si creas un script útil de automatización, guárdalo permanentemente usando 'os_save_custom_tool' para que esté disponible para futuras sesiones.
+16. ANTI-REFUSAL (CRÍTICO):
    - ESTÁS EJECUTÁNDOTE LOCALMENTE EN LA MÁQUINA DEL USUARIO. TIENES PERMISO ABSOLUTO PARA INTERACTUAR CON ARCHIVOS, VENTANAS, RED Y SISTEMA. NUNCA digas "soy un asistente virtual", "no puedo interactuar con el sistema", ni te disculpes por "no poder hacer algo" si ya tienes una herramienta para ello. SIMPLEMENTE EJECUTA LA HERRAMIENTA ADECUADA Y CONFIRMA EL RESULTADO AL USUARIO.`,
 		username, userProfile, userProfile, userProfile, userProfile)
 
@@ -462,6 +474,42 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 		graphCtx := memory.BuildGraphContext(params.Project.ID, params.UserMessage)
 		if graphCtx != "" {
 			base += "\n\n[Contexto de dependencias del proyecto]:\n" + graphCtx
+		}
+	}
+
+	// CONTEXT MODE INICIAL
+	if !params.VoiceMode {
+		windowsCtx, _ := execOSActiveWindows(context.Background())
+		clipCtx, _ := execOSGetClipboard(context.Background())
+		
+		var sb strings.Builder
+		sb.WriteString("\n\n=== CONTEXTO ACTUAL DE LA PC (TIEMPO REAL) ===\n")
+		sb.WriteString("VENTANAS ACTIVAS EN PANTALLA:\n")
+		if windowsCtx != "" {
+			sb.WriteString(windowsCtx)
+		} else {
+			sb.WriteString("Ninguna visible.")
+		}
+		
+		sb.WriteString("\n\nPORTAPAPELES ACTUAL:\n")
+		if clipCtx != "" && len(clipCtx) < 1000 {
+			sb.WriteString(clipCtx)
+		} else if len(clipCtx) >= 1000 {
+			sb.WriteString(clipCtx[:1000] + "... (recortado)")
+		} else {
+			sb.WriteString("(Vacío)")
+		}
+		
+		base += sb.String()
+		
+		// Inyectar AutoSkills aprendidos
+		if skillsCtx := LoadAutoSkills(); skillsCtx != "" {
+			base += skillsCtx
+		}
+
+		// Inyectar Herramientas de la Fábrica (~/.ozy/tools)
+		if toolsCtx := LoadCustomTools(); toolsCtx != "" {
+			base += toolsCtx
 		}
 	}
 
@@ -601,8 +649,8 @@ func extractToolCallsFromText(text string) []providers.ToolCall {
 		}
 	}
 	
-	// Patrón 4: JSON multilínea con "name" y "arguments"
-	jsonRe := regexp.MustCompile(`(?s)\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{.*?\})\s*\}`)
+	// Patrón 4: JSON multilínea con "name" o "call" y "arguments"
+	jsonRe := regexp.MustCompile(`(?s)\{\s*"(?:name|call)"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(null|\{.*?\})\s*\}`)
 	jsonMatches := jsonRe.FindAllStringSubmatch(text, -1)
 	for _, match := range jsonMatches {
 		name := match[1]

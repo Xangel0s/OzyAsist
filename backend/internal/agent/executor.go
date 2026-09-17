@@ -232,6 +232,10 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execReadFile(ctx, tc, sandbox)
 	case "write_file":
 		return execWriteFile(ctx, tc, sandbox)
+	case "os_search_index":
+		return execOSSearchIndex(ctx, tc)
+	case "os_save_custom_tool":
+		return execOSSaveCustomTool(ctx, tc)
 	case "run_command":
 		return execRunCommand(ctx, tc, sandbox)
 	case "list_files":
@@ -1444,7 +1448,7 @@ func runOSCommandInternal(ctx context.Context, command, rawCwd string) (string, 
 		}
 	}
 
-	res, err := ExecuteShellInDir(ctx, "powershell", command, cwd)
+	res, healLogs, err := executeWithSelfHealing(ctx, command, cwd)
 	if err != nil {
 		return fmt.Sprintf("error ejecutando comando '%s': %v", command, err), false
 	}
@@ -1457,6 +1461,9 @@ func runOSCommandInternal(ctx context.Context, command, rawCwd string) (string, 
 	}
 
 	var sb strings.Builder
+	if healLogs != "" {
+		sb.WriteString(healLogs)
+	}
 	effectiveDir := cwd
 	if effectiveDir == "" {
 		effectiveDir, _ = os.Getwd()

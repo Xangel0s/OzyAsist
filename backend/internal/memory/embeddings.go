@@ -11,20 +11,30 @@ import (
 	"time"
 )
 
-const defaultBaseURL = "http://localhost:1234/v1"
+const defaultOllamaURL = "http://localhost:11434/v1"
+const defaultLMStudioURL = "http://localhost:1234/v1"
 
 var embedOnce sync.Once
 var embedClient *EmbeddingClient
 
 func GetEmbeddingClient() *EmbeddingClient {
 	embedOnce.Do(func() {
-		baseURL := os.Getenv("LMSTUDIO_URL")
+		baseURL := os.Getenv("OLLAMA_URL")
 		if baseURL == "" {
-			baseURL = defaultBaseURL
+			baseURL = os.Getenv("LMSTUDIO_URL")
+		}
+		if baseURL == "" {
+			// Por defecto intentamos conectar a Ollama local
+			baseURL = defaultOllamaURL
+		}
+		model := os.Getenv("EMBEDDING_MODEL")
+		if model == "" {
+			model = "nomic-embed-text"
 		}
 		embedClient = &EmbeddingClient{
 			baseURL: baseURL,
-			client:  &http.Client{Timeout: 2 * time.Second},
+			model:   model,
+			client:  &http.Client{Timeout: 3 * time.Second},
 		}
 	})
 	return embedClient
@@ -32,6 +42,7 @@ func GetEmbeddingClient() *EmbeddingClient {
 
 type EmbeddingClient struct {
 	baseURL string
+	model   string
 	client  *http.Client
 }
 
@@ -61,7 +72,7 @@ func (ec *EmbeddingClient) Embed(text string) ([]float64, error) {
 
 func (ec *EmbeddingClient) EmbedBatch(texts []string) ([][]float64, error) {
 	body := embedRequest{
-		Model: "text-embedding-nomic-embed-text-v1.5",
+		Model: ec.model,
 		Input: texts,
 	}
 	data, err := json.Marshal(body)

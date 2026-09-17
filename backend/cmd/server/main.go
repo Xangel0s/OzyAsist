@@ -15,7 +15,6 @@ import (
 	"github.com/ozyassist/backend/internal/api/ws"
 	"github.com/ozyassist/backend/internal/browser"
 	"github.com/ozyassist/backend/internal/connectors/google"
-	"github.com/ozyassist/backend/internal/daemon"
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/mcp"
 	"github.com/ozyassist/backend/internal/memory"
@@ -52,7 +51,7 @@ func main() {
 	}
 
 	providers.InitProviders()
-
+	memory.BuildSystemIndex()
 	// Inicializar Verificador y Auto-Reparación (Self-Healing)
 	verifier := agent.NewVerifier()
 	var defaultProv providers.Provider
@@ -175,27 +174,17 @@ func main() {
 		}
 	}()
 
-	// Inicializar y arrancar el demonio nativo (Wake Word, Tray, Hotkeys)
-	// La llamada a Start() bloqueará el hilo principal para el System Tray
-	onWake := func() {
-		log.Println("[Main] ¡Ozy ha despertado vía demonio nativo!")
-		// Enviar señal a la UI vía websocket para abrirse
-		ws.Broadcast([]byte(`{"type":"wake_ui"}`))
-	}
-	
-	nativeDaemon := daemon.NewDaemon(os.Getenv("PICOVOICE_ACCESS_KEY"), onWake)
-	
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	
 	go func() {
 		<-quit
-		log.Println("Apagando servidor y demonio...")
-		nativeDaemon.Stop()
+		log.Println("Apagando servidor...")
 		engine.Stop()
 		ws.ShutdownAll()
 		os.Exit(0)
 	}()
 
-	nativeDaemon.Start()
+	// Mantener el proceso principal activo
+	select {}
 }

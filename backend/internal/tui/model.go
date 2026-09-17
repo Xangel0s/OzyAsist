@@ -89,10 +89,10 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	sp.Spinner = spinner.Dot
 	sp.Style = SpinnerStyle
 
-	welcomeText := "⚡ OzyAssist TUI (Hermes Mode) activado. Control del SO y herramientas agénticas listos.\n💡 Escribe una instrucción, usa /help para comandos o /key groq para activar voz ('Hey Ozy')."
+	welcomeText := "🚀 ¡Hola! Bienvenido a OzyAssist CLI.\nUn asistente agéntico listo para ayudarte con tu sistema y herramientas.\n💡 Escribe una instrucción, usa /help para comandos o /key groq para activar voz ('Hey Ozy')."
 	initStatus := "Listo para actuar"
 	if voiceActive {
-		welcomeText = "⚡ OzyAssist TUI (Hermes Mode) activado. Control del SO y escucha de voz 'Hey Ozy' activos.\n💡 Escribe una instrucción, usa /help o habla directamente 'Hey Ozy'."
+		welcomeText = "🚀 ¡Hola! Bienvenido a OzyAssist CLI.\nControl del SO y escucha de voz 'Hey Ozy' activos.\n💡 Escribe una instrucción, usa /help o habla directamente 'Hey Ozy'."
 		initStatus = "Escuchando Wake Word ('Hey Ozy')..."
 	}
 

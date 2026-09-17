@@ -22,6 +22,7 @@ import (
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/db/models"
 	"github.com/ozyassist/backend/internal/mcp"
+	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/tui"
 	"github.com/ozyassist/backend/internal/voice"
@@ -124,6 +125,7 @@ func initCore() (providers.Provider, *models.Chat) {
 	_ = db.EnsureDefaultUser()
 
 	providers.InitProviders()
+	memory.BuildSystemIndex()
 	_ = mcp.DefaultRegistry.InitFromConfigFile(context.Background(), "")
 
 	prov := providers.GetDefaultOrFirstProvider()

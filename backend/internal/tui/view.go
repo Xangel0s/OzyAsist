@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -165,7 +166,7 @@ func (m Model) View() string {
 }
 
 func (m Model) renderHeader() string {
-	title := HeaderStyle.Render(" ⚡ OZYASSIST TUI ")
+	asciiLogo := lipgloss.NewStyle().Foreground(lipgloss.Color("#d1f107")).Bold(true).Render("   .··'¯'··.   \n  :  .-.  :  OZY\n  :  '-'  :  ASSIST\n   '··._.··'   ")
 
 	modelName := "desconocido"
 	if m.chat != nil && m.chat.Model != "" {
@@ -174,7 +175,6 @@ func (m Model) renderHeader() string {
 		modelName = m.provider.Name()
 	}
 
-	// Si el modelo tiene formato path (ej: deepseek/deepseek-chat), acortarlo en pantallas angostas
 	displayModel := modelName
 	if m.width > 0 && m.width < 95 && strings.Contains(displayModel, "/") {
 		parts := strings.Split(displayModel, "/")
@@ -214,11 +214,14 @@ func (m Model) renderHeader() string {
 		voiceTag = TagActiveStyle.Render(voiceText)
 	}
 
-	left := lipgloss.JoinHorizontal(lipgloss.Center, title, " ", modelTag, " ", permTag, " ", voiceTag)
+	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, modelTag, " ", permTag, " ", voiceTag)
+	
+	header := lipgloss.JoinVertical(lipgloss.Center, asciiLogo, statsLine)
+	
 	if m.width > 0 {
-		return lipgloss.NewStyle().MaxWidth(m.width).Render(left)
+		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(header)
 	}
-	return left
+	return header
 }
 
 func (m Model) renderConversation() string {
@@ -255,15 +258,38 @@ func (m Model) renderConversation() string {
 				if maxAssistantW < 20 {
 					maxAssistantW = 20
 				}
-				lines := wrapContent(cleaned, maxAssistantW)
-				for i, l := range lines {
-					if i > 0 {
-						sb.WriteString("       ")
+				
+				// Renderizar Markdown con Glamour
+				r, _ := glamour.NewTermRenderer(
+					glamour.WithAutoStyle(),
+					glamour.WithWordWrap(maxAssistantW),
+				)
+				rendered, err := r.Render(cleaned)
+				if err == nil {
+					// Eliminar salto de línea final extra de glamour
+					rendered = strings.TrimRight(rendered, "\r\n")
+					
+					// Añadir sangría para alinear con "⚡ OZY: "
+					lines := strings.Split(rendered, "\n")
+					for i, l := range lines {
+						if i > 0 {
+							sb.WriteString("       ")
+						}
+						sb.WriteString(l)
+						sb.WriteString("\n")
 					}
-					sb.WriteString(l)
+					sb.WriteString("\n")
+				} else {
+					lines := wrapContent(cleaned, maxAssistantW)
+					for i, l := range lines {
+						if i > 0 {
+							sb.WriteString("       ")
+						}
+						sb.WriteString(l)
+						sb.WriteString("\n")
+					}
 					sb.WriteString("\n")
 				}
-				sb.WriteString("\n")
 			}
 
 		case "system":
@@ -315,18 +341,41 @@ func (m Model) renderConversation() string {
 			if maxStreamW < 20 {
 				maxStreamW = 20
 			}
-			lines := wrapContent(cleaned, maxStreamW)
-			for i, l := range lines {
-				if i > 0 {
-					sb.WriteString("       ")
+			
+			// Renderizar Markdown con Glamour
+			r, _ := glamour.NewTermRenderer(
+				glamour.WithAutoStyle(),
+				glamour.WithWordWrap(maxStreamW),
+			)
+			rendered, err := r.Render(cleaned)
+			if err == nil {
+				rendered = strings.TrimRight(rendered, "\r\n")
+				lines := strings.Split(rendered, "\n")
+				for i, l := range lines {
+					if i > 0 {
+						sb.WriteString("       ")
+					}
+					sb.WriteString(l)
+					if i == len(lines)-1 {
+						sb.WriteString("▌")
+					}
+					sb.WriteString("\n")
 				}
-				sb.WriteString(l)
-				if i == len(lines)-1 {
-					sb.WriteString("▌")
+				sb.WriteString("\n")
+			} else {
+				lines := wrapContent(cleaned, maxStreamW)
+				for i, l := range lines {
+					if i > 0 {
+						sb.WriteString("       ")
+					}
+					sb.WriteString(l)
+					if i == len(lines)-1 {
+						sb.WriteString("▌")
+					}
+					sb.WriteString("\n")
 				}
 				sb.WriteString("\n")
 			}
-			sb.WriteString("\n")
 		} else {
 			sb.WriteString(MutedStyle.Render("⚡ OZY: (Razonando...) ▌\n\n"))
 		}

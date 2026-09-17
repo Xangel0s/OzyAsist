@@ -222,12 +222,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Manejo del spinner
-	if m.state != StateIdle {
-		var spinCmd tea.Cmd
-		m.spinner, spinCmd = m.spinner.Update(msg)
-		cmds = append(cmds, spinCmd)
-	}
+	// Manejo del spinner (siempre se actualiza para no romper el ciclo Tick)
+	var spinCmd tea.Cmd
+	m.spinner, spinCmd = m.spinner.Update(msg)
+	cmds = append(cmds, spinCmd)
 
 	// Manejo del input de texto cuando esté ocioso
 	if m.state == StateIdle {
@@ -237,8 +235,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Actualización del viewport de scroll
+	// Evitamos que las pulsaciones normales muevan el scroll
 	var vpCmd tea.Cmd
-	m.viewport, vpCmd = m.viewport.Update(msg)
+	isKeyMsg := false
+	var keyMsg tea.KeyMsg
+	if k, ok := msg.(tea.KeyMsg); ok {
+		isKeyMsg = true
+		keyMsg = k
+	}
+
+	if !isKeyMsg {
+		m.viewport, vpCmd = m.viewport.Update(msg)
+	} else if keyMsg.Type == tea.KeyPgUp || keyMsg.Type == tea.KeyPgDown || keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown {
+		m.viewport, vpCmd = m.viewport.Update(msg)
+	}
 	cmds = append(cmds, vpCmd)
 
 	return m, tea.Batch(cmds...)
@@ -513,8 +523,8 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 			icon := "⚪"
 			statusText := "Sin configurar"
 			if hasConfig {
-				icon = "🟢"
-				statusText = "Configurado"
+				icon = "🟡"
+				statusText = "Clave Añadida (sin validar)"
 			}
 			if p.id == currProv {
 				icon = "⭐ 🟢"

@@ -69,6 +69,8 @@ Thumbs.db
 # Environment
 .env
 .env.local
+**/.env
+backend/backend/
 
 # Logs
 *.log
