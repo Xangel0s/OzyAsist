@@ -236,6 +236,12 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSSearchIndex(ctx, tc)
 	case "os_save_custom_tool":
 		return execOSSaveCustomTool(ctx, tc)
+	case "os_prepare_staging":
+		return execOSPrepareStaging(ctx, tc)
+	case "os_commit_staging":
+		return execOSCommitStaging(ctx, tc)
+	case "os_backup_file":
+		return execOSBackupFile(ctx, tc)
 	case "run_command":
 		return execRunCommand(ctx, tc, sandbox)
 	case "list_files":
@@ -413,10 +419,16 @@ func execWriteFile(_ context.Context, tc providers.ToolCall, sandbox *Sandbox) (
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Sprintf("error creando directorio: %v", err), false
 	}
+	var backupMsg string
+	if fi, err := os.Stat(path); err == nil && !fi.IsDir() {
+		if bPath, bErr := AutoBackupFile(path); bErr == nil && bPath != "" {
+			backupMsg = fmt.Sprintf(" (Backup automático: %s)", filepath.Base(bPath))
+		}
+	}
 	if err := os.WriteFile(path, []byte(params.Content), 0644); err != nil {
 		return fmt.Sprintf("error escribiendo %s: %v", params.Path, err), false
 	}
-	return fmt.Sprintf("✓ Archivo escrito: %s (%d bytes)", params.Path, len(params.Content)), true
+	return fmt.Sprintf("✓ Archivo escrito: %s (%d bytes)%s", params.Path, len(params.Content), backupMsg), true
 }
 
 func execRunCommand(ctx context.Context, tc providers.ToolCall, sandbox *Sandbox) (string, bool) {
