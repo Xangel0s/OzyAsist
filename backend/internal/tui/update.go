@@ -50,6 +50,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.Type {
+		case tea.KeyEsc:
+			if m.state != StateIdle {
+				if m.loopCancel != nil {
+					m.loopCancel()
+				}
+				if m.loopSessionID != "" {
+					agent.CancelSession(m.loopSessionID)
+				}
+				m.loopCancel = nil
+				m.loopSessionID = ""
+				m.state = StateIdle
+				m.systemStatus = "Acción cancelada con tecla [Esc]"
+				msgText := "⚠️ Operación interrumpida con la tecla [Esc]."
+				if len(m.messageQueue) > 0 {
+					msgText += fmt.Sprintf(" (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para descartarlos).", len(m.messageQueue))
+				}
+				m.entries = append(m.entries, ChatEntry{
+					Role:    "system",
+					Content: msgText,
+				})
+				m.viewport.SetContent(m.renderConversation())
+				m.viewport.GotoBottom()
+				return m, nil
+			}
+
 		case tea.KeyCtrlC:
 			if m.state != StateIdle {
 				if m.loopCancel != nil {
@@ -62,9 +87,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loopSessionID = ""
 				m.state = StateIdle
 				m.systemStatus = "Acción cancelada por el usuario"
+				msgText := "⚠️ Operación interrumpida con Ctrl+C."
+				if len(m.messageQueue) > 0 {
+					msgText += fmt.Sprintf(" (Quedan %d mensajes en cola. Usa /queue o /clearqueue).", len(m.messageQueue))
+				}
 				m.entries = append(m.entries, ChatEntry{
 					Role:    "system",
-					Content: "⚠️ Operación interrumpida con Ctrl+C.",
+					Content: msgText,
 				})
 				m.viewport.SetContent(m.renderConversation())
 				m.viewport.GotoBottom()
@@ -89,18 +118,145 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case tea.KeyEnter:
-			if m.state != StateIdle {
-				// No enviar nuevo mensaje mientras el agente está actuando
-				return m, nil
-			}
-
 			input := strings.TrimSpace(m.textarea.Value())
 			if input == "" {
 				return m, nil
 			}
 
-			// Manejo de Comandos Slash
+			// Manejo de Comandos Slash prioritarios (disponibles siempre)
 			if strings.HasPrefix(input, "/") {
+				parts := strings.Fields(input)
+				slashCmd := strings.ToLower(parts[0])
+
+				// 1. Cancelación inmediata (/cancel, /stop, /abort, /cancelar, /parar)
+				if slashCmd == "/cancel" || slashCmd == "/stop" || slashCmd == "/abort" || slashCmd == "/cancelar" || slashCmd == "/parar" {
+					m.textarea.Reset()
+					clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"
+					if m.state != StateIdle {
+						if m.loopCancel != nil {
+							m.loopCancel()
+						}
+						if m.loopSessionID != "" {
+							agent.CancelSession(m.loopSessionID)
+						}
+						m.loopCancel = nil
+						m.loopSessionID = ""
+						m.state = StateIdle
+						m.systemStatus = "Petición cancelada por el usuario"
+						msgText := "⚠️ Petición cancelada con éxito."
+						if clearAll {
+							discarded := m.ClearQueue()
+							msgText += fmt.Sprintf(" Y se descartaron %d mensajes en cola.", discarded)
+						} else if len(m.messageQueue) > 0 {
+							msgText += fmt.Sprintf(" (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para vaciarla).", len(m.messageQueue))
+						}
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "system",
+							Content: msgText,
+						})
+					} else {
+						if clearAll || len(m.messageQueue) > 0 {
+							discarded := m.ClearQueue()
+							m.entries = append(m.entries, ChatEntry{
+								Role:    "system",
+								Content: fmt.Sprintf("🗑️ Se vació la cola de mensajes (%d descartados).", discarded),
+							})
+						} else {
+							m.entries = append(m.entries, ChatEntry{
+								Role:    "system",
+								Content: "ℹ️ No hay ninguna petición activa ni mensajes en cola.",
+							})
+						}
+					}
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, nil
+				}
+
+				// 2. Envío directo / steer (/now, /steer, /send, /ya, /direct)
+				if slashCmd == "/now" || slashCmd == "/steer" || slashCmd == "/send" || slashCmd == "/ya" || slashCmd == "/direct" {
+					m.textarea.Reset()
+					if len(parts) < 2 {
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "system",
+							Content: "ℹ️ Uso: /now <orden> — Cancela la tarea actual y ejecuta la nueva orden inmediatamente.",
+						})
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+						return m, nil
+					}
+					directPrompt := strings.TrimSpace(strings.TrimPrefix(input, parts[0]))
+					if m.state != StateIdle {
+						if m.loopCancel != nil {
+							m.loopCancel()
+						}
+						if m.loopSessionID != "" {
+							agent.CancelSession(m.loopSessionID)
+						}
+						m.loopCancel = nil
+						m.loopSessionID = ""
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "system",
+							Content: "⚡ Tarea anterior interrumpida. Ejecutando nueva orden directamente...",
+						})
+					}
+					m.promptHistory = append(m.promptHistory, directPrompt)
+					m.historyIndex = len(m.promptHistory)
+					m.entries = append(m.entries, ChatEntry{
+						Role:    "user",
+						Content: directPrompt,
+					})
+					m.state = StateThinking
+					m.systemStatus = "Procesando razonamiento agéntico..."
+					m.currentStream = ""
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, m.startAgentTurn(directPrompt)
+				}
+
+				// 3. Inspección de cola (/queue, /cola)
+				if slashCmd == "/queue" || slashCmd == "/cola" {
+					m.textarea.Reset()
+					if len(m.messageQueue) == 0 {
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "system",
+							Content: "ℹ️ La cola de mensajes está vacía.",
+						})
+					} else {
+						var sb strings.Builder
+						sb.WriteString(fmt.Sprintf("📥 Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
+						for i, q := range m.messageQueue {
+							vTag := ""
+							if q.IsVoice {
+								vTag = "🎙️ [Voz] "
+							}
+							sb.WriteString(fmt.Sprintf("  %d. %s\"%s\"\n", i+1, vTag, q.Prompt))
+						}
+						sb.WriteString("💡 Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "system",
+							Content: sb.String(),
+						})
+					}
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, nil
+				}
+
+				// 4. Vaciar la cola (/clearqueue, /dropqueue, /vaciarcola)
+				if slashCmd == "/clearqueue" || slashCmd == "/dropqueue" || slashCmd == "/vaciarcola" {
+					m.textarea.Reset()
+					discarded := m.ClearQueue()
+					m.entries = append(m.entries, ChatEntry{
+						Role:    "system",
+						Content: fmt.Sprintf("🗑️ Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded),
+					})
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, nil
+				}
+
+				// 5. Otros comandos slash (/help, /provider, /key, /tools, etc.)
 				cmdOutput := m.handleSlashCommand(input)
 				m.textarea.Reset()
 				if cmdOutput == "QUIT" {
@@ -117,7 +273,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// Registro de historial y entrada de usuario
+			// Si el agente está ocupado y no es un comando slash, encolar el mensaje
+			if m.state != StateIdle {
+				m.promptHistory = append(m.promptHistory, input)
+				m.historyIndex = len(m.promptHistory)
+				qPos := m.EnqueuePrompt(input, false)
+				m.textarea.Reset()
+				m.entries = append(m.entries, ChatEntry{
+					Role:    "system",
+					Content: fmt.Sprintf("📥 Mensaje añadido a la cola [#%d]: \"%s\"\n(Se ejecutará automáticamente al finalizar la tarea actual. Usa /now <orden> para ejecutar de inmediato o /cancel para cancelar la actual).", qPos, input),
+				})
+				m.viewport.SetContent(m.renderConversation())
+				m.viewport.GotoBottom()
+				return m, nil
+			}
+
+			// Registro de historial y entrada normal de usuario (StateIdle)
 			m.promptHistory = append(m.promptHistory, input)
 			m.historyIndex = len(m.promptHistory)
 			m.entries = append(m.entries, ChatEntry{
@@ -200,6 +371,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
 
+			// Si hay mensajes en cola, desencolar el siguiente y procesarlo automáticamente
+			if nextPrompt, ok := m.DequeuePrompt(); ok {
+				roleContent := nextPrompt.Prompt
+				if nextPrompt.IsVoice {
+					roleContent = "🎙️ " + nextPrompt.Prompt
+				}
+				m.entries = append(m.entries, ChatEntry{
+					Role:    "user",
+					Content: roleContent,
+				})
+				m.state = StateThinking
+				m.systemStatus = fmt.Sprintf("Procesando orden encolada (restantes: %d)...", len(m.messageQueue))
+				m.viewport.SetContent(m.renderConversation())
+				m.viewport.GotoBottom()
+				if nextPrompt.IsVoice {
+					return m, m.startAgentTurnVoice(nextPrompt.Prompt)
+				}
+				return m, m.startAgentTurn(nextPrompt.Prompt)
+			}
+
 		case "error":
 			m.entries = append(m.entries, ChatEntry{
 				Role:    "system",
@@ -211,6 +402,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.systemStatus = "Error en la ejecución"
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
+
+			// Si hay mensajes en cola tras un error, continuar con el siguiente
+			if nextPrompt, ok := m.DequeuePrompt(); ok {
+				roleContent := nextPrompt.Prompt
+				if nextPrompt.IsVoice {
+					roleContent = "🎙️ " + nextPrompt.Prompt
+				}
+				m.entries = append(m.entries, ChatEntry{
+					Role:    "user",
+					Content: roleContent,
+				})
+				m.state = StateThinking
+				m.systemStatus = fmt.Sprintf("Procesando orden encolada tras error (restantes: %d)...", len(m.messageQueue))
+				m.viewport.SetContent(m.renderConversation())
+				m.viewport.GotoBottom()
+				if nextPrompt.IsVoice {
+					return m, m.startAgentTurnVoice(nextPrompt.Prompt)
+				}
+				return m, m.startAgentTurn(nextPrompt.Prompt)
+			}
 		}
 
 	case loopStartedMsg:
@@ -229,18 +440,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 
 	case VoiceCommandMsg:
-		if m.state != StateIdle {
-			m.entries = append(m.entries, ChatEntry{
-				Role:    "system",
-				Content: fmt.Sprintf("⚠️ Orden de voz omitida ('%s'): Ozy está procesando otra tarea.", msg.Command),
-			})
-			m.viewport.SetContent(m.renderConversation())
-			m.viewport.GotoBottom()
+		prompt := strings.TrimSpace(msg.Command)
+		if prompt == "" {
 			return m, nil
 		}
 
-		prompt := strings.TrimSpace(msg.Command)
-		if prompt == "" {
+		if m.state != StateIdle {
+			m.promptHistory = append(m.promptHistory, prompt)
+			m.historyIndex = len(m.promptHistory)
+			qPos := m.EnqueuePrompt(prompt, true)
+			m.entries = append(m.entries, ChatEntry{
+				Role:    "system",
+				Content: fmt.Sprintf("📥 Orden de voz añadida a la cola [#%d]: \"%s\" (se procesará automáticamente al terminar la tarea actual).", qPos, prompt),
+			})
+			m.viewport.SetContent(m.renderConversation())
+			m.viewport.GotoBottom()
 			return m, nil
 		}
 
@@ -272,12 +486,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.spinner, spinCmd = m.spinner.Update(msg)
 	cmds = append(cmds, spinCmd)
 
-	// Manejo del input de texto cuando esté ocioso
-	if m.state == StateIdle {
-		var taCmd tea.Cmd
-		m.textarea, taCmd = m.textarea.Update(msg)
-		cmds = append(cmds, taCmd)
-	}
+	// Manejo del input de texto (siempre activo para permitir escribir órdenes en cola o comandos)
+	var taCmd tea.Cmd
+	m.textarea, taCmd = m.textarea.Update(msg)
+	cmds = append(cmds, taCmd)
 
 	// Actualización del viewport de scroll
 	// Evitamos que las pulsaciones normales muevan el scroll
@@ -384,6 +596,10 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 	switch cmd {
 	case "/help":
 		return `📌 Comandos disponibles en OzyAssist TUI:
+  /cancel [all]     - Cancela la petición activa en curso (o 'all' para vaciar cola)
+  /now <orden>      - Interrumpe la tarea actual y ejecuta la orden inmediatamente
+  /queue, /cola     - Consulta los mensajes pendientes en la cola de espera
+  /clearqueue       - Vacía la cola de mensajes pendientes
   /provider [nom]   - Consulta o cambia el proveedor LLM activo (cohere, groq, openai, etc.)
   /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic) o URL local
   /groq [key]       - Auto-configura Groq desde portapapeles o abre Chrome autenticado para obtenerla
@@ -394,7 +610,56 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /organize [dir]   - Ejecuta la organización rápida de una carpeta
   /clear            - Limpia el historial de la pantalla (Ctrl+L)
   /perm [modo]      - Cambia nivel de permisos: autonomous | supervised
-  /exit, /quit      - Cierra la aplicación (Ctrl+C)`
+  /exit, /quit      - Cierra la aplicación (Ctrl+C)
+💡 Atajos: [Esc] o [Ctrl+C] para cancelar tarea • [Enter] encola si Ozy está ocupado`
+
+	case "/cancel", "/stop", "/abort", "/cancelar", "/parar":
+		clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"
+		if m.state != StateIdle {
+			if m.loopCancel != nil {
+				m.loopCancel()
+			}
+			if m.loopSessionID != "" {
+				agent.CancelSession(m.loopSessionID)
+			}
+			m.loopCancel = nil
+			m.loopSessionID = ""
+			m.state = StateIdle
+			m.systemStatus = "Petición cancelada por el usuario"
+			if clearAll {
+				discarded := m.ClearQueue()
+				return fmt.Sprintf("⚠️ Petición activa cancelada y %d mensajes en cola descartados.", discarded)
+			}
+			if len(m.messageQueue) > 0 {
+				return fmt.Sprintf("⚠️ Petición cancelada. (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para vaciarla).", len(m.messageQueue))
+			}
+			return "⚠️ Petición cancelada con éxito."
+		}
+		if clearAll || len(m.messageQueue) > 0 {
+			discarded := m.ClearQueue()
+			return fmt.Sprintf("🗑️ Cola de mensajes vaciada (%d descartados).", discarded)
+		}
+		return "ℹ️ No hay ninguna petición activa ni mensajes en cola."
+
+	case "/queue", "/cola":
+		if len(m.messageQueue) == 0 {
+			return "ℹ️ La cola de mensajes está vacía."
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("📥 Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
+		for i, q := range m.messageQueue {
+			vTag := ""
+			if q.IsVoice {
+				vTag = "🎙️ [Voz] "
+			}
+			sb.WriteString(fmt.Sprintf("  %d. %s\"%s\"\n", i+1, vTag, q.Prompt))
+		}
+		sb.WriteString("💡 Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
+		return sb.String()
+
+	case "/clearqueue", "/dropqueue", "/vaciarcola":
+		discarded := m.ClearQueue()
+		return fmt.Sprintf("🗑️ Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded)
 
 	case "/groq":
 		targetKey := ""

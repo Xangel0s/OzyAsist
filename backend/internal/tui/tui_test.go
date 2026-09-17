@@ -130,4 +130,139 @@ func TestWrapContent_PreservesIndentation(t *testing.T) {
 	}
 }
 
+func TestMessageQueue_EnqueueAndDequeue(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	if m.QueueLen() != 0 {
+		t.Errorf("Expected empty queue initially, got %d", m.QueueLen())
+	}
+
+	m.EnqueuePrompt("primera tarea", false)
+	m.EnqueuePrompt("segunda tarea", true)
+	if m.QueueLen() != 2 {
+		t.Fatalf("Expected queue length 2, got %d", m.QueueLen())
+	}
+
+	item1, ok1 := m.DequeuePrompt()
+	if !ok1 || item1.Prompt != "primera tarea" || item1.IsVoice {
+		t.Errorf("Unexpected item1: %+v", item1)
+	}
+
+	item2, ok2 := m.DequeuePrompt()
+	if !ok2 || item2.Prompt != "segunda tarea" || !item2.IsVoice {
+		t.Errorf("Unexpected item2: %+v", item2)
+	}
+
+	_, ok3 := m.DequeuePrompt()
+	if ok3 {
+		t.Errorf("Expected empty dequeue to return false")
+	}
+
+	m.EnqueuePrompt("tarea 3", false)
+	m.EnqueuePrompt("tarea 4", false)
+	cleared := m.ClearQueue()
+	if cleared != 2 || m.QueueLen() != 0 {
+		t.Errorf("Expected 2 cleared items, got %d (len %d)", cleared, m.QueueLen())
+	}
+}
+
+func TestMessageQueue_SlashCommands(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+
+	// Test /queue when empty
+	outEmpty := m.handleSlashCommand("/queue")
+	if outEmpty != "ℹ️ La cola de mensajes está vacía." {
+		t.Errorf("Unexpected /queue empty output: %s", outEmpty)
+	}
+
+	// Enqueue items
+	m.EnqueuePrompt("analizar logs", false)
+	m.EnqueuePrompt("ejecutar backup", true)
+
+	outList := m.handleSlashCommand("/queue")
+	if outList == "" || len(m.messageQueue) != 2 {
+		t.Errorf("Expected non-empty queue list with 2 items, got: %s", outList)
+	}
+
+	// Clear queue
+	outClear := m.handleSlashCommand("/clearqueue")
+	if m.QueueLen() != 0 {
+		t.Errorf("Expected queue len 0 after /clearqueue, got %d (output: %s)", m.QueueLen(), outClear)
+	}
+
+	// Test /cancel when idle
+	outCancelIdle := m.handleSlashCommand("/cancel")
+	if outCancelIdle != "ℹ️ No hay ninguna petición activa ni mensajes en cola." {
+		t.Errorf("Unexpected /cancel idle output: %s", outCancelIdle)
+	}
+}
+
+func TestMessageQueue_KeyEscCancelsActiveState(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateExecutingTool
+	m.loopSessionID = "dummy-session"
+
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model := newM.(Model)
+
+	if model.state != StateIdle {
+		t.Errorf("Expected state to be StateIdle after Esc, got %v", model.state)
+	}
+	if model.loopSessionID != "" {
+		t.Errorf("Expected loopSessionID to be cleared, got %s", model.loopSessionID)
+	}
+}
+
+func TestMessageQueue_KeyEnterEnqueuesWhenBusy(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateThinking
+	m.textarea.SetValue("tarea secundaria mientras piensa")
+
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := newM.(Model)
+
+	if cmd != nil {
+		t.Errorf("Expected no command dispatched immediately when enqueuing")
+	}
+	if model.QueueLen() != 1 {
+		t.Fatalf("Expected 1 item in queue, got %d", model.QueueLen())
+	}
+	item, _ := model.DequeuePrompt()
+	if item.Prompt != "tarea secundaria mientras piensa" {
+		t.Errorf("Expected queued prompt 'tarea secundaria mientras piensa', got '%s'", item.Prompt)
+	}
+}
+
+func TestMessageQueue_VoiceCommandEnqueuesWhenBusy(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateStreaming
+
+	newM, _ := m.Update(VoiceCommandMsg{Command: "apaga la música"})
+	model := newM.(Model)
+
+	if model.QueueLen() != 1 {
+		t.Fatalf("Expected 1 item in queue for voice command, got %d", model.QueueLen())
+	}
+	item, _ := model.DequeuePrompt()
+	if item.Prompt != "apaga la música" || !item.IsVoice {
+		t.Errorf("Expected queued voice item 'apaga la música' with IsVoice true, got %+v", item)
+	}
+}
+
+func TestMessageQueue_DirectSendInterruptsAndStarts(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateExecutingTool
+	m.textarea.SetValue("/now detén todo y revisa la memoria")
+
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model := newM.(Model)
+
+	if cmd == nil {
+		t.Errorf("Expected cmd to be non-nil when /now starts a turn immediately")
+	}
+	if model.state != StateThinking {
+		t.Errorf("Expected state to be StateThinking after /now, got %v", model.state)
+	}
+}
+
+
 

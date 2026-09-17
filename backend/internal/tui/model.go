@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -53,6 +54,13 @@ type VoiceStatusMsg struct {
 	Status    string
 }
 
+// QueuedPrompt representa una orden encolada mientras el agente está ocupado.
+type QueuedPrompt struct {
+	Prompt  string
+	IsVoice bool
+	AddedAt time.Time
+}
+
 type Model struct {
 	state           UIState
 	viewport        viewport.Model
@@ -61,6 +69,7 @@ type Model struct {
 	entries         []ChatEntry
 	promptHistory   []string
 	historyIndex    int
+	messageQueue    []QueuedPrompt
 	currentStream   string
 	currentThinking string
 	showThinking    bool
@@ -129,4 +138,36 @@ func (m Model) Init() tea.Cmd {
 		textarea.Blink,
 		m.spinner.Tick,
 	)
+}
+
+// EnqueuePrompt añade un prompt a la cola de espera y retorna la nueva longitud.
+func (m *Model) EnqueuePrompt(prompt string, isVoice bool) int {
+	m.messageQueue = append(m.messageQueue, QueuedPrompt{
+		Prompt:  prompt,
+		IsVoice: isVoice,
+		AddedAt: time.Now(),
+	})
+	return len(m.messageQueue)
+}
+
+// DequeuePrompt extrae el primer prompt en cola (FIFO).
+func (m *Model) DequeuePrompt() (QueuedPrompt, bool) {
+	if len(m.messageQueue) == 0 {
+		return QueuedPrompt{}, false
+	}
+	item := m.messageQueue[0]
+	m.messageQueue = m.messageQueue[1:]
+	return item, true
+}
+
+// ClearQueue descarta todos los mensajes en cola y retorna la cantidad descartada.
+func (m *Model) ClearQueue() int {
+	count := len(m.messageQueue)
+	m.messageQueue = nil
+	return count
+}
+
+// QueueLen retorna la cantidad de mensajes pendientes en cola.
+func (m *Model) QueueLen() int {
+	return len(m.messageQueue)
 }

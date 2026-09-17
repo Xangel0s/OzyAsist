@@ -17,6 +17,7 @@ var (
 	ColorWarning   = lipgloss.Color("#f39c12")
 	ColorError     = lipgloss.Color("#e74c3c")
 	ColorAccent    = lipgloss.Color("#00d2d3")
+	ColorQueue     = lipgloss.Color("#f1c40f") // Amber/Yellow for queue indication
 
 	// Header Styles
 	HeaderStyle = lipgloss.NewStyle().
@@ -34,6 +35,12 @@ var (
 			Bold(true).
 			Foreground(ColorPrimary).
 			Background(ColorContainer).
+			Padding(0, 1)
+
+	QueueBadgeStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#181e00")).
+			Background(ColorQueue).
 			Padding(0, 1)
 
 	// Chat & Roles

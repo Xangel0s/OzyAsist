@@ -127,6 +127,26 @@ func handleChatMessage(client *Client, msg clientMessage) {
 		return
 	}
 
+	// Soporte para comandos de cancelación y envío directo
+	trimmed := strings.TrimSpace(msg.Content)
+	if trimmed == "/cancel" || trimmed == "/stop" {
+		agent.CancelChat(msg.ChatID)
+		CancelStream(msg.ChatID)
+		writeJSON(client, serverMessage{
+			Type:    "agent:completed",
+			Content: "⚠️ Petición cancelada por el usuario.",
+		})
+		return
+	}
+	if strings.HasPrefix(trimmed, "/now ") || strings.HasPrefix(trimmed, "/steer ") {
+		agent.CancelChat(msg.ChatID)
+		CancelStream(msg.ChatID)
+		parts := strings.SplitN(trimmed, " ", 2)
+		if len(parts) > 1 {
+			msg.Content = strings.TrimSpace(parts[1])
+		}
+	}
+
 	// Persistir mensaje del usuario
 	userMsg := &models.Message{
 		ID:        uuid.NewString(),
@@ -382,6 +402,7 @@ Identidad y Capacidades Nativas:
 }
 
 func CancelStream(chatID string) {
+	agent.CancelChat(chatID)
 	activeStreamsMu.Lock()
 	defer activeStreamsMu.Unlock()
 	for _, s := range activeStreams {

@@ -74,7 +74,8 @@ type LoopSession struct {
 }
 
 var (
-	activeSessions   sync.Map // sessionID -> *LoopSession
+	activeSessions     sync.Map // sessionID -> *LoopSession
+	activeChatSessions sync.Map // chatID -> sessionID
 )
 
 // StartAgentLoop arranca el ReAct Loop en una goroutine dedicada y devuelve sessionID.
@@ -85,10 +86,16 @@ func StartAgentLoop(ctx context.Context, params AgentLoopParams) string {
 
 	session := &LoopSession{Cancel: cancel}
 	activeSessions.Store(sessionID, session)
+	if params.Chat != nil && params.Chat.ID != "" {
+		activeChatSessions.Store(params.Chat.ID, sessionID)
+	}
 
 	go func() {
 		defer func() {
 			activeSessions.Delete(sessionID)
+			if params.Chat != nil && params.Chat.ID != "" {
+				activeChatSessions.Delete(params.Chat.ID)
+			}
 			cancel()
 		}()
 		runReActLoop(loopCtx, sessionID, session, params)
@@ -102,6 +109,15 @@ func CancelSession(sessionID string) {
 	if v, ok := activeSessions.Load(sessionID); ok {
 		v.(*LoopSession).Cancel()
 	}
+}
+
+// CancelChat cancela cualquier sesión agéntica activa asociada a un chatID.
+func CancelChat(chatID string) bool {
+	if sessID, ok := activeChatSessions.Load(chatID); ok {
+		CancelSession(sessID.(string))
+		return true
+	}
+	return false
 }
 
 // RespondApproval responde a una solicitud de aprobación de herramienta pendiente.

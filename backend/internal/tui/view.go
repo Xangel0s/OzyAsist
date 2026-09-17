@@ -214,7 +214,12 @@ func (m Model) renderHeader() string {
 		voiceTag = TagActiveStyle.Render(voiceText)
 	}
 
-	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, modelTag, " ", permTag, " ", voiceTag)
+	tags := []string{modelTag, " ", permTag, " ", voiceTag}
+	if len(m.messageQueue) > 0 {
+		queueText := fmt.Sprintf(" 📥 Cola: %d ", len(m.messageQueue))
+		tags = append(tags, " ", QueueBadgeStyle.Render(queueText))
+	}
+	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, tags...)
 	
 	header := lipgloss.JoinVertical(lipgloss.Center, asciiLogo, statsLine)
 	
@@ -431,10 +436,13 @@ func (m Model) renderConversation() string {
 func (m Model) renderFooter() string {
 	var sb strings.Builder
 
-	// Línea de estado con spinner si está procesando
+	// Línea de estado con spinner y contador de cola si aplica
 	statusLine := m.systemStatus
 	if m.state != StateIdle {
 		statusLine = fmt.Sprintf("%s %s", m.spinner.View(), m.systemStatus)
+	}
+	if len(m.messageQueue) > 0 {
+		statusLine = fmt.Sprintf("%s  •  📥 %d en cola", statusLine, len(m.messageQueue))
 	}
 	maxStatusW := m.width - 4
 	if maxStatusW > 10 && len([]rune(statusLine)) > maxStatusW {
@@ -444,18 +452,30 @@ func (m Model) renderFooter() string {
 	sb.WriteString(StatusBarStyle.Render(statusLine))
 	sb.WriteString("\n")
 
-	// Caja de texto con borde neon
+	// Caja de texto con borde neon o ámbar (si está encolando órdenes)
 	borderStyle := InputBorderStyle
 	if m.state != StateIdle {
-		borderStyle = InputInactiveBorderStyle
+		borderStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorQueue)
 	}
 	sb.WriteString(borderStyle.Render(m.textarea.View()))
 	sb.WriteString("\n")
 
-	// Hints de atajos
-	hintsText := "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [Ctrl+T] Pensamiento  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
-	if m.width > 0 && m.width < 85 {
-		hintsText = "  [Enter] Enviar  •  [Ctrl+T] Pensamiento  •  [/help] Ayuda"
+	// Hints de atajos contextuales
+	var hintsText string
+	if m.state != StateIdle {
+		hintsText = "  [Enter] Encolar  •  [/now <orden>] Enviar directo  •  [/cancel | Esc] Cancelar  •  [/queue] Ver cola"
+		if m.width > 0 && m.width < 95 {
+			hintsText = "  [Enter] Encolar  •  [/now <orden>] Directo  •  [Esc] Cancelar"
+		}
+	} else if len(m.messageQueue) > 0 {
+		hintsText = fmt.Sprintf("  [Enter] Enviar  •  📥 %d en cola (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
+	} else {
+		hintsText = "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [Ctrl+T] Pensamiento  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
+		if m.width > 0 && m.width < 85 {
+			hintsText = "  [Enter] Enviar  •  [Ctrl+T] Pensamiento  •  [/help] Ayuda"
+		}
 	}
 	hints := MutedStyle.Render(hintsText)
 	sb.WriteString(hints)
