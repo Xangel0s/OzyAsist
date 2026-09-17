@@ -26,6 +26,7 @@ const (
 type ChatEntry struct {
 	Role        string // user, assistant, system, tool
 	Content     string
+	Thinking    string // hilo de pensamiento del modelo
 	ToolName    string
 	ToolInput   string
 	ToolSuccess bool
@@ -57,6 +58,8 @@ type Model struct {
 	promptHistory   []string
 	historyIndex    int
 	currentStream   string
+	currentThinking string
+	showThinking    bool
 	activeToolName  string
 	activeToolInput string
 

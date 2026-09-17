@@ -65,6 +65,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetContent(m.renderConversation())
 			return m, nil
 
+		case tea.KeyCtrlT:
+			m.showThinking = !m.showThinking
+			if m.showThinking {
+				m.systemStatus = "💭 Hilo de pensamiento: VISIBLE (Presiona Ctrl+T para ocultar)"
+			} else {
+				m.systemStatus = "💭 Hilo de pensamiento: PLEGADO (Presiona Ctrl+T para desplegar)"
+			}
+			m.viewport.SetContent(m.renderConversation())
+			m.viewport.GotoBottom()
+			return m, nil
+
 		case tea.KeyEnter:
 			if m.state != StateIdle {
 				// No enviar nuevo mensaje mientras el agente está actuando
@@ -116,6 +127,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentEventMsg:
 		evt := agent.AgentEvent(msg)
 		switch evt.Type {
+		case "message:thinking", "agent:thinking":
+			m.currentThinking += evt.Content
+			if m.showThinking {
+				m.viewport.SetContent(m.renderConversation())
+				m.viewport.GotoBottom()
+			}
+
 		case "message:delta":
 			m.state = StateStreaming
 			m.currentStream += evt.Content
@@ -151,12 +169,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				content = cleanAssistantText(evt.Content)
 			}
 			if content != "" {
+				thinking := strings.TrimSpace(m.currentThinking)
+				if thinking == "" {
+					thinking = strings.TrimSpace(evt.Thinking)
+				}
 				m.entries = append(m.entries, ChatEntry{
-					Role:    "assistant",
-					Content: content,
+					Role:     "assistant",
+					Content:  content,
+					Thinking: thinking,
 				})
 			}
 			m.currentStream = ""
+			m.currentThinking = ""
 			m.state = StateIdle
 			m.systemStatus = "Listo para actuar"
 			m.viewport.SetContent(m.renderConversation())
@@ -404,6 +428,13 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 			}
 		}
 		return sb.String()
+
+	case "/thinking", "/thought":
+		m.showThinking = !m.showThinking
+		if m.showThinking {
+			return "💭 Hilo de pensamiento: VISIBLE y desplegado. (Presiona Ctrl+T o /thinking para ocultar)"
+		}
+		return "💭 Hilo de pensamiento: PLEGADO y oculto. (Presiona Ctrl+T o /thinking para desplegar)"
 
 	case "/mcp":
 		if len(parts) > 1 && strings.ToLower(parts[1]) == "reload" {

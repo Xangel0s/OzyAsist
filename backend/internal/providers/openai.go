@@ -69,10 +69,12 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	}
 
 	body := map[string]any{
-		"model":          model,
-		"messages":       toOpenAIMessages(messages),
-		"stream":         true,
-		"stream_options": map[string]bool{"include_usage": false},
+		"model":    model,
+		"messages": toOpenAIMessages(messages),
+		"stream":   true,
+	}
+	if strings.Contains(p.cfg.baseURL, "api.openai.com") {
+		body["stream_options"] = map[string]bool{"include_usage": false}
 	}
 	if opts.Temperature != 0 {
 		body["temperature"] = opts.Temperature
@@ -235,9 +237,12 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 			Choices []struct {
 				Index int `json:"index"`
 				Delta struct {
-					Role      string `json:"role"`
-					Content   string `json:"content"`
-					ToolCalls []struct {
+					Role             string `json:"role"`
+					Content          string `json:"content"`
+					ReasoningContent string `json:"reasoning_content"`
+					Reasoning        string `json:"reasoning"`
+					Thought          string `json:"thought"`
+					ToolCalls        []struct {
 						Index    int    `json:"index"`
 						ID       string `json:"id"`
 						Type     string `json:"type"`
@@ -256,6 +261,18 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 		}
 
 		for _, choice := range sse.Choices {
+			// Pensamiento / Razonamiento (DeepSeek R1, OpenAI o1, Cohere, etc.)
+			thought := choice.Delta.ReasoningContent
+			if thought == "" {
+				thought = choice.Delta.Reasoning
+			}
+			if thought == "" {
+				thought = choice.Delta.Thought
+			}
+			if thought != "" {
+				ch <- StreamChunk{Type: "thinking", Content: thought}
+			}
+
 			// Texto en streaming
 			if choice.Delta.Content != "" {
 				ch <- StreamChunk{Type: "text", Content: choice.Delta.Content}
@@ -277,31 +294,27 @@ func (p *OpenAIProvider) readStream(ctx context.Context, ch chan<- StreamChunk, 
 				acc.args += tc.Function.Arguments
 			}
 
-			// finish_reason="tool_calls" → emitir tool calls completos
-			if choice.FinishReason == "tool_calls" {
-				for _, acc := range toolAccum {
-					var inputRaw json.RawMessage
-					if acc.args != "" {
-						inputRaw = json.RawMessage(acc.args)
-					} else {
-						inputRaw = json.RawMessage(`{}`)
+			// Si finish_reason viene seteado (sea 'tool_calls', 'stop', 'COMPLETE', etc.)
+			if choice.FinishReason != "" {
+				if len(toolAccum) > 0 {
+					for _, acc := range toolAccum {
+						var inputRaw json.RawMessage
+						if acc.args != "" {
+							inputRaw = json.RawMessage(acc.args)
+						} else {
+							inputRaw = json.RawMessage(`{}`)
+						}
+						ch <- StreamChunk{
+							Type: "tool_call",
+							ToolCall: &ToolCall{
+								ID:    acc.id,
+								Name:  acc.name,
+								Input: inputRaw,
+							},
+						}
 					}
-					ch <- StreamChunk{
-						Type: "tool_call",
-						ToolCall: &ToolCall{
-							ID:    acc.id,
-							Name:  acc.name,
-							Input: inputRaw,
-						},
-					}
+					toolAccum = make(map[int]*tcAccum)
 				}
-				toolAccum = make(map[int]*tcAccum)
-				ch <- StreamChunk{Type: "done"}
-				doneEmitted = true
-				return
-			}
-
-			if choice.FinishReason == "stop" || choice.FinishReason == "length" {
 				ch <- StreamChunk{Type: "done"}
 				doneEmitted = true
 				return

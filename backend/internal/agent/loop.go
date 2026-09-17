@@ -39,6 +39,7 @@ type AgentEvent struct {
 	ToolOutput  string `json:"tool_output,omitempty"`
 	ToolSuccess bool   `json:"tool_success,omitempty"`
 	DurationMs  int64  `json:"duration_ms,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`
 	// agent:completed
 	TaskID string `json:"task_id,omitempty"`
 	Turns  int    `json:"turns,omitempty"`
@@ -191,6 +192,7 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 		// --- Consumir el stream del LLM en este turno ---
 		var turnText string
+		var turnThinking string
 		var turnToolCalls []providers.ToolCall
 		var textChunks []string
 
@@ -200,6 +202,9 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				return
 			}
 			switch chunk.Type {
+			case "thinking":
+				turnThinking += chunk.Content
+				emit(AgentEvent{Type: "agent:thinking", Content: chunk.Content})
 			case "text":
 				turnText += chunk.Content
 				textChunks = append(textChunks, chunk.Content)
@@ -210,6 +215,17 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			case "error":
 				emit(AgentEvent{Type: "error", Error: chunk.Content})
 				return
+			}
+		}
+
+		// Si el modelo incluye etiquetas <think>...</think> en el texto principal
+		if strings.Contains(turnText, "<think>") && strings.Contains(turnText, "</think>") {
+			start := strings.Index(turnText, "<think>")
+			end := strings.Index(turnText, "</think>")
+			if end > start {
+				extractedThought := turnText[start+7 : end]
+				turnThinking += strings.TrimSpace(extractedThought)
+				turnText = strings.TrimSpace(turnText[:start] + turnText[end+8:])
 			}
 		}
 
@@ -250,9 +266,15 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				continue
 			}
 
+			// Si hubo llamadas a herramientas y el LLM no emitió texto final explicativo
+			if strings.TrimSpace(finalContent) == "" && len(allToolCalls) > 0 {
+				finalContent = "✓ He completado la acción solicitada."
+				emit(AgentEvent{Type: "message:delta", Content: finalContent})
+			}
+
 			emit(AgentEvent{Type: "state:sync", State: "idle"})
 			msgID := persistAgentMessage(params, taskID, finalContent, allToolCalls)
-			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: turn + 1, Content: finalContent})
+			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: turn + 1, Content: finalContent, Thinking: turnThinking})
 			
 			// --- Auto-Skill Evaluation ---
 			if !params.VoiceMode && len(allToolCalls) > 0 {

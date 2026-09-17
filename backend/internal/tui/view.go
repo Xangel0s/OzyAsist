@@ -251,6 +251,28 @@ func (m Model) renderConversation() string {
 			sb.WriteString("\n")
 
 		case "assistant":
+			// Renderizar pensamiento (Thinking / Chain of Thought) si existe
+			if entry.Thinking != "" {
+				if m.showThinking {
+					sb.WriteString(MutedStyle.Render("💭 [Pensamiento / Razonamiento — Presiona Ctrl+T para plegar]:\n"))
+					thinkLines := strings.Split(strings.TrimSpace(entry.Thinking), "\n")
+					maxThinkW := convWidth - 8
+					if maxThinkW < 20 {
+						maxThinkW = 20
+					}
+					for _, tl := range thinkLines {
+						wrapped := wrapLine(tl, maxThinkW)
+						for _, wl := range wrapped {
+							sb.WriteString(MutedStyle.Render("│ " + wl))
+							sb.WriteString("\n")
+						}
+					}
+					sb.WriteString("\n")
+				} else {
+					sb.WriteString(MutedStyle.Render("💭 [Pensamiento oculto — Presiona Ctrl+T para desplegar]\n\n"))
+				}
+			}
+
 			cleaned := cleanAssistantText(entry.Content)
 			if cleaned != "" {
 				sb.WriteString(AssistantStyle.Render("⚡ OZY: "))
@@ -431,9 +453,9 @@ func (m Model) renderFooter() string {
 	sb.WriteString("\n")
 
 	// Hints de atajos
-	hintsText := "  [Enter] Enviar  •  [Ctrl+C] Cancelar / Salir  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
-	if m.width > 0 && m.width < 80 {
-		hintsText = "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [/help] Ayuda"
+	hintsText := "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [Ctrl+T] Pensamiento  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
+	if m.width > 0 && m.width < 85 {
+		hintsText = "  [Enter] Enviar  •  [Ctrl+T] Pensamiento  •  [/help] Ayuda"
 	}
 	hints := MutedStyle.Render(hintsText)
 	sb.WriteString(hints)
