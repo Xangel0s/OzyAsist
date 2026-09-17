@@ -5,13 +5,18 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/agent"
 	"github.com/ozyassist/backend/internal/browser"
+	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/db/models"
 	"github.com/ozyassist/backend/internal/mcp"
+	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
 )
@@ -46,8 +51,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
-			if m.state != StateIdle && m.loopCancel != nil {
-				m.loopCancel()
+			if m.state != StateIdle {
+				if m.loopCancel != nil {
+					m.loopCancel()
+				}
+				if m.loopSessionID != "" {
+					agent.CancelSession(m.loopSessionID)
+				}
+				m.loopCancel = nil
+				m.loopSessionID = ""
 				m.state = StateIdle
 				m.systemStatus = "Acción cancelada por el usuario"
 				m.entries = append(m.entries, ChatEntry{
@@ -181,6 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.currentStream = ""
 			m.currentThinking = ""
+			m.loopCancel = nil
+			m.loopSessionID = ""
 			m.state = StateIdle
 			m.systemStatus = "Listo para actuar"
 			m.viewport.SetContent(m.renderConversation())
@@ -191,11 +205,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Role:    "system",
 				Content: fmt.Sprintf("❌ Error: %s", evt.Error),
 			})
+			m.loopCancel = nil
+			m.loopSessionID = ""
 			m.state = StateIdle
 			m.systemStatus = "Error en la ejecución"
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
 		}
+
+	case loopStartedMsg:
+		m.loopSessionID = msg.sessionID
+		m.loopCancel = msg.cancel
+		return m, nil
 
 	case errMsg:
 		m.entries = append(m.entries, ChatEntry{
@@ -280,8 +301,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) startAgentTurn(prompt string) tea.Cmd {
 	return func() tea.Msg {
+		if m.chat != nil && m.chat.ID != "" {
+			userMsg := &models.Message{
+				ID:        uuid.NewString(),
+				ChatID:    m.chat.ID,
+				Role:      "user",
+				Content:   prompt,
+				CreatedAt: time.Now(),
+			}
+			_ = db.CreateMessage(userMsg)
+			memory.StoreChatMessage(m.chat.UserID, m.chat.ProjectID, m.chat.ID, "user", prompt)
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
-		m.loopCancel = cancel
 
 		params := agent.AgentLoopParams{
 			Provider:        m.provider,
@@ -298,15 +330,28 @@ func (m *Model) startAgentTurn(prompt string) tea.Cmd {
 		}
 
 		sessionID := agent.StartAgentLoop(ctx, params)
-		m.loopSessionID = sessionID
-		return nil
+		return loopStartedMsg{
+			sessionID: sessionID,
+			cancel:    cancel,
+		}
 	}
 }
 
 func (m *Model) startAgentTurnVoice(prompt string) tea.Cmd {
 	return func() tea.Msg {
+		if m.chat != nil && m.chat.ID != "" {
+			userMsg := &models.Message{
+				ID:        uuid.NewString(),
+				ChatID:    m.chat.ID,
+				Role:      "user",
+				Content:   prompt,
+				CreatedAt: time.Now(),
+			}
+			_ = db.CreateMessage(userMsg)
+			memory.StoreChatMessage(m.chat.UserID, m.chat.ProjectID, m.chat.ID, "user", prompt)
+		}
+
 		ctx, cancel := context.WithCancel(context.Background())
-		m.loopCancel = cancel
 
 		params := agent.AgentLoopParams{
 			Provider:        m.provider,
@@ -322,8 +367,10 @@ func (m *Model) startAgentTurnVoice(prompt string) tea.Cmd {
 		}
 
 		sessionID := agent.StartAgentLoop(ctx, params)
-		m.loopSessionID = sessionID
-		return nil
+		return loopStartedMsg{
+			sessionID: sessionID,
+			cancel:    cancel,
+		}
 	}
 }
 

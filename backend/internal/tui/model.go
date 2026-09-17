@@ -35,6 +35,10 @@ type ChatEntry struct {
 
 // Custom Bubble Tea Messages
 type agentEventMsg agent.AgentEvent
+type loopStartedMsg struct {
+	sessionID string
+	cancel    context.CancelFunc
+}
 type loopFinishedMsg struct{}
 type errMsg struct{ err error }
 
