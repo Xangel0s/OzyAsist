@@ -512,3 +512,67 @@ func TestReActLoop_ToolsExecution(t *testing.T) {
 		t.Fatalf("se esperaba rechazo por path traversal, se obtuvo: %v, %s", travOk, travOut)
 	}
 }
+
+func TestSanitizeHistoryRoles(t *testing.T) {
+	// Caso 1: Asistente huérfano al inicio (debe ser descartado)
+	msgs := []providers.Message{
+		{Role: "system", Content: "sys"},
+		{Role: "assistant", Content: "asistente huerfano"},
+		{Role: "user", Content: "hola"},
+	}
+	res := sanitizeHistoryRoles(msgs)
+	if len(res) != 2 || res[1].Role != "user" || res[1].Content != "hola" {
+		t.Fatalf("Esperaba que se descartara el asistente huerfano, obtuve: %+v", res)
+	}
+
+	// Caso 2: Mensajes consecutivos del mismo rol (deben fusionarse)
+	msgs2 := []providers.Message{
+		{Role: "system", Content: "sys"},
+		{Role: "user", Content: "primero"},
+		{Role: "user", Content: "segundo"},
+	}
+	res2 := sanitizeHistoryRoles(msgs2)
+	if len(res2) != 2 || !strings.Contains(res2[1].Content, "primero") || !strings.Contains(res2[1].Content, "segundo") {
+		t.Fatalf("Esperaba fusion de mensajes de usuario consecutivos, obtuve: %+v", res2)
+	}
+}
+
+func TestExtractToolCallsFromText_KnownToolsOnly(t *testing.T) {
+	// Tool válida registrada
+	validText := `Voy a revisar los archivos: <tool_call>{"name": "list_files", "arguments": {"pattern": "*.go"}}</tool_call>`
+	calls := extractToolCallsFromText(validText)
+	if len(calls) != 1 || calls[0].Name != "list_files" {
+		t.Fatalf("Esperaba 1 llamada a list_files, obtuve: %+v", calls)
+	}
+
+	// Tool falsa o no registrada (debe ser ignorada para evitar errores o bucles)
+	fakeText := `Aquí hay un ejemplo JSON: <tool_call>{"name": "invented_tool_xyz", "arguments": {"x": 1}}</tool_call>`
+	fakeCalls := extractToolCallsFromText(fakeText)
+	if len(fakeCalls) != 0 {
+		t.Fatalf("Esperaba 0 llamadas para herramienta inexistente, obtuve: %+v", fakeCalls)
+	}
+}
+
+func TestCheckPendingTaskRequirements_ConversationalExclusion(t *testing.T) {
+	// Pregunta conversacional sobre correo (no debe exigir os_draft_email)
+	question := "¿Cómo configuro mi correo en OzyAssist?"
+	prompt := checkPendingTaskRequirements(question, nil)
+	if prompt != "" {
+		t.Fatalf("Pregunta conversacional no debió exigir os_draft_email, obtuve: %s", prompt)
+	}
+
+	// Orden explícita con verbo de acción (debe exigir os_draft_email)
+	action := "Redacta un correo para cliente@empresa.com con el informe"
+	actionPrompt := checkPendingTaskRequirements(action, nil)
+	if actionPrompt == "" || !strings.Contains(actionPrompt, "os_draft_email") {
+		t.Fatalf("Orden de acción debió exigir os_draft_email, obtuve: %s", actionPrompt)
+	}
+}
+
+func TestBuildAgentSystemPrompt_IncludesTriad(t *testing.T) {
+	prompt := BuildSystemPromptForTest(AgentLoopParams{})
+	if !strings.Contains(prompt, "CHARC") || !strings.Contains(prompt, "NINE") {
+		t.Fatalf("System prompt debe incluir a los subagentes CHARC y NINE, obtuve: %s", prompt)
+	}
+}
+
