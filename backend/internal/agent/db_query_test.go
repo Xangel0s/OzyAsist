@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestQueryDB_SafeSelectAndBlocking(t *testing.T) {
@@ -13,7 +15,7 @@ func TestQueryDB_SafeSelectAndBlocking(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "test.db")
 
 	// Crear DB de prueba con SQLite
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("error abriendo db: %v", err)
 	}

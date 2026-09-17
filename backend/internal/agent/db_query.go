@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
 )
@@ -76,7 +76,7 @@ func ExecuteSafeQuery(ctx context.Context, dbPath, query string, maxRows int) (s
 	}
 
 	dsn := fmt.Sprintf("file:%s?mode=ro", filepath.ToSlash(resolvedPath))
-	db, err := sql.Open("sqlite3", dsn)
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return "", fmt.Errorf("error abriendo conexión SQLite en modo lectura: %v", err)
 	}
