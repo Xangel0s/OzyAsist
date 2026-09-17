@@ -165,17 +165,22 @@ func ResolveUserPath(input string) string {
 	// 8. Expansión de variables de entorno de Windows (%USERPROFILE%, %TEMP%, etc.)
 	clean = os.ExpandEnv(clean)
 
-	// 9. Si es una ruta relativa o un nombre simple (ej: "crmgeofal"):
+	// 9. Si es una ruta relativa o un nombre simple (ej: "crmgeofal", "archivo.xlsx"):
 	if !filepath.IsAbs(clean) && !isWindowsDrivePath(clean) {
 		// A. Verificar si existe respecto al directorio actual (CWD)
-		if abs, err := filepath.Abs(clean); err == nil {
-			if _, err := os.Stat(abs); err == nil {
-				return abs
+		//    Solo aceptar si el CWD NO es dentro del directorio del servidor (evita
+		//    resolver rutas del proceso Go como rutas de usuario).
+		cwd, _ := os.Getwd()
+		cwdIsServerDir := strings.Contains(strings.ToLower(cwd), strings.ToLower("Ozyasist"))
+		if !cwdIsServerDir {
+			if abs, err := filepath.Abs(clean); err == nil {
+				if _, err := os.Stat(abs); err == nil {
+					return abs
+				}
 			}
 		}
 
-		// A.1 Si el CWD ya termina con el primer componente de clean (ej: CWD es 'backend' y path es 'backend/data/...')
-		cwd, _ := os.Getwd()
+		// A.1 Si el CWD ya termina con el primer componente de clean
 		cwdBase := strings.ToLower(filepath.Base(cwd))
 		lowerClean := strings.ToLower(clean)
 		if strings.HasPrefix(lowerClean, cwdBase+"/") || strings.HasPrefix(lowerClean, cwdBase+`\`) {
@@ -187,11 +192,13 @@ func ResolveUserPath(input string) string {
 			}
 		}
 
-		// B. Búsqueda inteligente en carpetas comunes del usuario (Documents, Projects, Desktop, etc.)
+		// B. Búsqueda inteligente en carpetas comunes del usuario.
+		//    El orden importa: Desktop primero (archivos de trabajo del usuario),
+		//    luego Documents, Projects, raíz del perfil y Downloads.
 		commonDirs := []string{
+			filepath.Join(userProfile, "Desktop", clean),
 			filepath.Join(userProfile, "Documents", clean),
 			filepath.Join(userProfile, "Projects", clean),
-			filepath.Join(userProfile, "Desktop", clean),
 			filepath.Join(userProfile, clean),
 			filepath.Join(userProfile, "Downloads", clean),
 		}
@@ -201,9 +208,9 @@ func ResolveUserPath(input string) string {
 			}
 		}
 
-		if abs, err := filepath.Abs(clean); err == nil {
-			return abs
-		}
+		// C. Fallback: si no existe en ningún lado, asumir Documents como
+		//    ubicación predeterminada (más seguro que CWD del servidor).
+		return filepath.Join(userProfile, "Documents", clean)
 	}
 
 	return filepath.Clean(clean)
