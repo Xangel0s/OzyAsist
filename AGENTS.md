@@ -1,33 +1,50 @@
 # AGENTS.md — OzyAssist Guidelines & Instructions
 
 ## Project Overview
-OzyAssist is an open-source AI desktop/code/cowork assistant inspired by Claude Desktop, Manus, and Claude Code. It features a Go backend with SQLite, WebSocket streaming, task execution capabilities, local multi-profile security with 6-digit PIN, and a React + Vite + TypeScript frontend with unified chat, tool execution, and rich artifact rendering.
+OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows inspirado en Claude Desktop, Manus y Claude Code. Cuenta con un núcleo en Go de alto rendimiento, arquitectura Zero-Docker con SQLite en Go puro (`modernc.org/sqlite`), memoria híbrida en RAM, terminal con bucle de auto-reparación (*Self-Healing*), interfaz de consola TUI reactiva en Bubble Tea con sistema de colas, y soporte para un ecosistema multi-proveedor (Mistral AI, KiloCode Gateway, Cohere, Groq, OpenAI, Anthropic, DeepSeek y modelos locales).
 
 ## Architecture & Tech Stack
-- **Backend**: Go (Gin / gorilla/websocket / SQLite / Qdrant optional / local LLM or API providers)
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Zustand state management.
-- **Desktop Wrapper**: Tauri (optional for desktop build) / Web mode.
+- **Core / Backend**: Go (Bubble Tea TUI / Gin REST / gorilla/websocket / pure-Go SQLite / local RAM embeddings).
+- **Zero-Docker Policy**: No Docker containers. Pure-Go SQLite driver, in-memory caching, and local vector search.
+- **Interfaces**:
+  - `cmd/ozy`: CLI / TUI interactiva basada en Bubble Tea con streaming, pensamiento colapsable (`Ctrl+T`), colas de mensajes y atajos rápidos.
+  - `cmd/server`: Servidor HTTP y WebSocket para integraciones cliente y streaming reactivo.
+  - `cmd/ozyctl`: Herramienta de utilidades y administración.
+- **Cognitive Triad (Single-LLM Architecture)**:
+  - **OZY**: Ejecutor de acciones y llamadas a herramientas del sistema/MCP.
+  - **CHARC**: Auditor de calidad que valida precondiciones y audita resultados antes de confirmarlos.
+  - **NINE**: Estratega cognitivo que descompone tareas complejas y sintetiza respuestas finales.
+- **Self-Healing Loop**:
+  - Intercepción de `stderr` tras `os_run_command`.
+  - Detección de dependencias ausentes (ej. `ModuleNotFoundError`) y auto-instalación silenciosa (`pip install <pkg>`).
+  - Hasta 3 reintentos autónomos sin intervención del usuario.
+- **Message Queuing & Prioritization**:
+  - Encolado de mensajes entrantes cuando el agente está ocupado (`📥 Cola: N`).
+  - Cancelación rápida con `Esc` o `/cancel`.
+  - Envío prioritario con interrupción inmediata vía `/now <orden>`.
+  - Consulta y limpieza de cola vía `/queue` y `/clearqueue`.
+- **Smart Path Resolver**:
+  - Resolución inteligente de rutas de usuario: `Desktop` prioritario para archivos de trabajo del usuario, `Documents` para proyectos y repositorios.
+  - Protección estricta: nunca resolver rutas del usuario hacia el directorio de trabajo del servidor (`CWD`).
 
 ## Development & Execution Commands
-- **Backend**: `cd backend && go run cmd/server/main.go`
-- **Frontend**: `cd frontend && npm run dev`
+- **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`
+- **Compilar Binario**: `cd backend && go build -o ozy.exe ./cmd/ozy/.`
+- **Servidor Web**: `cd backend && go run cmd/server/main.go`
 - **Tests**:
-  - Backend: `cd backend && go test ./...`
-  - Frontend: `cd frontend && npm run test`
+  - Proveedores: `cd backend && go test ./internal/providers/... -v`
+  - Sistema & Paths: `cd backend && go test ./internal/system/... -v`
+  - Agente & Tríada: `cd backend && go test ./internal/agent/... -v`
+  - TUI & Colas: `cd backend && go test ./internal/tui/... -v`
+  - Suite completa: `cd backend && go test ./internal/...`
 
-## UI Architecture & Claude Desktop Alignment
-- **Navigation & Layout**:
-  - `Sidebar.tsx`: Features top brand lime `+ New session` button (`#d1f107` / `⌘N`), unified navigation (`Inicio`, `Proyectos`, `Artefactos`, `Personalizar`), collapsible recent history, and bottom user profile card with 6-digit PIN security.
-  - `Personalizar`: Triggers `SettingsModal` directly for centralized management of Skills, Connectors, Plugins, and LLM Providers.
-- **Settings Modal & Ecosystem**:
-  - `SettingsModal.tsx`: Full settings dialog with 8 categories, MCP Connector creation modal, Skill Upload modal, Inline `SKILL.md` editor, and Marketplace Directory modal.
-  - **LLM Providers**: Supports OpenRouter, OpenAI, Anthropic, DeepSeek, and Ollama local host URL with dynamic backend validation.
-- **Brand Theme Colors**:
-  - Primary Brand Color: Vibrant Electric Neon Lime `#d1f107` (`bg-[#d1f107] text-[#181e00] font-bold`).
-  - Dark Surface Colors: Surface Dim `#131313`, Surface Container `#1e1e1e` / `#222222`.
+## Brand Theme Colors
+- Primary Brand Color: Vibrant Electric Neon Lime `#d1f107` (`bg-[#d1f107] text-[#181e00] font-bold`).
+- Dark Surface Colors: Surface Dim `#131313`, Surface Container `#1e1e1e` / `#222222`.
+- Queue Indicator Color: Warm Amber `#f1c40f`.
 
 ## Code Principles & Rules
-1. Follow SOLID and DRY principles.
-2. Ensure clear error handling, logging, and state synchronization.
-3. Validate user inputs and ensure secure path operations (prevent path traversal).
-4. Maintain responsive, clean UI with fully wired interactive elements and clear state feedback.
+1. **SOLID & DRY**: Código modular, desacoplado y reutilizable.
+2. **Robust Error Handling**: Registro claro de errores y recuperación sin caídas del proceso.
+3. **Security & Path Safety**: Prevenir path traversal, validar rutas contra carpetas del sistema y ejecutar SQLite en modo solo lectura para consultas exploratorias.
+4. **Zero-Docker Constraint**: Mantener la dependencia en librerías Go puras (`modernc.org/sqlite`) sin exigir CGO ni herramientas externas.
