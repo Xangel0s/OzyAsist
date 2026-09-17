@@ -149,6 +149,7 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 	var finalContent string
 	var allToolCalls []providers.ToolCall
+	var pendingRequirementPrompted bool
 	charcAuditor := NewCharcAuditor(nil)
 
 	for turn := 0; turn < maxAgentTurns; turn++ {
@@ -230,9 +231,8 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 		}
 
 		// --- Parsear tool calls del texto si el provider falló en parsearlos nativamente ---
-		// Solo lo intentamos si es el primer turno (turn == 0) para evitar que el texto de respuesta final
-		// que menciona el JSON de la herramienta ejecutada sea malinterpretado como una nueva invocación.
-		if len(turnToolCalls) == 0 && turn == 0 {
+		// extractToolCallsFromText valida estrictamente que la herramienta pertenezca a las registradas.
+		if len(turnToolCalls) == 0 {
 			turnToolCalls = extractToolCallsFromText(turnText)
 		}
 
@@ -258,12 +258,15 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 		// --- Si no hay tool calls → verificar si hay pasos pendientes del plan autónomo ---
 		if len(turnToolCalls) == 0 {
-			if pendingPrompt := checkPendingTaskRequirements(params.UserMessage, allToolCalls); pendingPrompt != "" && turn < maxAgentTurns-1 {
-				history = append(history, providers.Message{
-					Role:    "user",
-					Content: pendingPrompt,
-				})
-				continue
+			if !pendingRequirementPrompted {
+				if pendingPrompt := checkPendingTaskRequirements(params.UserMessage, allToolCalls); pendingPrompt != "" && turn < maxAgentTurns-1 {
+					pendingRequirementPrompted = true
+					history = append(history, providers.Message{
+						Role:    "user",
+						Content: pendingPrompt,
+					})
+					continue
+				}
 			}
 
 			// Si hubo llamadas a herramientas y el LLM no emitió texto final explicativo
@@ -396,25 +399,83 @@ func buildInitialHistory(params AgentLoopParams) []providers.Message {
 	history := []providers.Message{{Role: "system", Content: systemPrompt}}
 
 	// Historial previo del chat (ventana deslizante de los últimos 15 mensajes)
-	prevMessages, err := db.GetMessages(params.Chat.ID)
-	if err != nil {
-		log.Printf("agent loop: error cargando historial: %v", err)
+	var prevMessages []models.Message
+	if params.Chat != nil && params.Chat.ID != "" {
+		msgs, err := db.GetMessages(params.Chat.ID)
+		if err != nil {
+			log.Printf("agent loop: error cargando historial: %v", err)
+		} else {
+			prevMessages = msgs
+		}
 	}
 	const maxPrev = 15
 	if len(prevMessages) > maxPrev {
 		prevMessages = prevMessages[len(prevMessages)-maxPrev:]
 	}
+
+	alreadyAppendedCurrent := false
+	if len(prevMessages) > 0 {
+		lastMsg := prevMessages[len(prevMessages)-1]
+		if lastMsg.Role == "user" && strings.TrimSpace(lastMsg.Content) == strings.TrimSpace(params.UserMessage) {
+			alreadyAppendedCurrent = true
+		}
+	}
+
 	for _, m := range prevMessages {
 		content := m.Content
 		if len(content) > 2500 {
 			content = content[:2500] + "\n[...historial previo truncado para optimizar tokens...]"
 		}
+		if strings.TrimSpace(content) == "" {
+			continue
+		}
 		history = append(history, providers.Message{Role: m.Role, Content: content})
 	}
 
-	// Añadir el mensaje del usuario actual
-	history = append(history, providers.Message{Role: "user", Content: params.UserMessage})
+	// Añadir el mensaje del usuario actual únicamente si no estaba ya al final
+	if !alreadyAppendedCurrent && strings.TrimSpace(params.UserMessage) != "" {
+		history = append(history, providers.Message{Role: "user", Content: params.UserMessage})
+	}
+
+	// Saneamiento de protocolo: garantizar que el primer mensaje tras system sea 'user'
+	// y que no haya roles consecutivos iguales que rompan la API de Cohere o Anthropic.
+	history = sanitizeHistoryRoles(history)
 	return history
+}
+
+func sanitizeHistoryRoles(msgs []providers.Message) []providers.Message {
+	if len(msgs) <= 1 {
+		return msgs
+	}
+	out := make([]providers.Message, 0, len(msgs))
+	out = append(out, msgs[0]) // system prompt
+
+	firstContentFound := false
+	for _, m := range msgs[1:] {
+		// La API de Cohere y Anthropic exigen que el primer mensaje después de system sea 'user'
+		if !firstContentFound {
+			if m.Role != "user" {
+				continue // Ignora mensajes huérfanos de asistente iniciales
+			}
+			firstContentFound = true
+			out = append(out, m)
+			continue
+		}
+
+		// Evitar mensajes de roles consecutivos iguales (ej: user seguido de user)
+		lastRole := out[len(out)-1].Role
+		if m.Role == lastRole && m.Role != "tool" {
+			out[len(out)-1].Content += "\n\n" + m.Content
+		} else {
+			out = append(out, m)
+		}
+	}
+
+	// Si tras el filtrado no quedó ningún mensaje de usuario, añadir el último disponible
+	if len(out) == 1 && len(msgs) > 1 {
+		out = append(out, providers.Message{Role: "user", Content: msgs[len(msgs)-1].Content})
+	}
+	return out
 }
 
 func BuildSystemPromptForTest(params AgentLoopParams) string {
@@ -507,9 +568,14 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
    - Si vas a transformar o editar un archivo existente importante (ej: Excel .xlsx, bases de datos, código):
      a) Usa 'os_prepare_staging' para copiarlo a tu mesa de trabajo (~/.ozy/workspace/) con backup automático previo.
      b) Ejecuta tus scripts sobre la copia en la mesa de trabajo sin tocar el original.
-     c) Solo cuando verifiques que el resultado es exitoso y no está corrupto, usa 'os_commit_staging' para aplicar los cambios atómicamente.
+      c) Solo cuando verifiques que el resultado es exitoso y no está corrupto, usa 'os_commit_staging' para aplicar los cambios atómicamente.
 17. ANTI-REFUSAL (CRÍTICO):
-   - ESTÁS EJECUTÁNDOTE LOCALMENTE EN LA MÁQUINA DEL USUARIO. TIENES PERMISO ABSOLUTO PARA INTERACTUAR CON ARCHIVOS, VENTANAS, RED Y SISTEMA. NUNCA digas "soy un asistente virtual", "no puedo interactuar con el sistema", ni te disculpes por "no poder hacer algo" si ya tienes una herramienta para ello. SIMPLEMENTE EJECUTA LA HERRAMIENTA ADECUADA Y CONFIRMA EL RESULTADO AL USUARIO.`,
+   - ESTÁS EJECUTÁNDOTE LOCALMENTE EN LA MÁQUINA DEL USUARIO. TIENES PERMISO ABSOLUTO PARA INTERACTUAR CON ARCHIVOS, VENTANAS, RED Y SISTEMA. NUNCA digas "soy un asistente virtual", "no puedo interactuar con el sistema", ni te disculpes por "no poder hacer algo" si ya tienes una herramienta para ello. SIMPLEMENTE EJECUTA LA HERRAMIENTA ADECUADA Y CONFIRMA EL RESULTADO AL USUARIO.
+18. TRÍADA COGNITIVA Y SUBAGENTES INTEGRADOS (NATIVOS):
+   - Cuentas con dos subagentes nativos especializados trabajando en armonía bajo tu misma arquitectura cognitiva:
+     * CHARC (Auditor de Seguridad y Supervisor de Bucles): Evalúa riesgos antes de ejecutar acciones en el sistema operativo, previene bucles repetitivos y autoriza cambios críticos.
+     * NINE (Estratega de Razonamiento Profundo): Diseña planes alternativos y descompone metas multi-etapa complejas cuando una tarea encuentra bloqueos.
+   - Si el usuario te pregunta "¿qué subagentes tienes?" o por tu arquitectura interna: EXPLICA CON CLARIDAD TU IDENTIDAD (Ozy: asistente ejecutor central de SO), y la función especializada de tus dos subagentes nativos CHARC y NINE.`,
 		username, userProfile, userProfile, userProfile, userProfile)
 
 	if params.Project != nil {
@@ -526,8 +592,13 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 
 	// CONTEXT MODE INICIAL
 	if !params.VoiceMode {
-		windowsCtx, _ := execOSActiveWindows(context.Background())
-		clipCtx, _ := execOSGetClipboard(context.Background())
+		ctxWin, cancelWin := context.WithTimeout(context.Background(), 1*time.Second)
+		windowsCtx, _ := execOSActiveWindows(ctxWin)
+		cancelWin()
+
+		ctxClip, cancelClip := context.WithTimeout(context.Background(), 1*time.Second)
+		clipCtx, _ := execOSGetClipboard(ctxClip)
+		cancelClip()
 		
 		var sb strings.Builder
 		sb.WriteString("\n\n=== CONTEXTO ACTUAL DE LA PC (TIEMPO REAL) ===\n")
@@ -642,6 +713,23 @@ func buildSandbox(project *models.Project) *Sandbox {
 	return sb
 }
 
+func isRegisteredTool(name string) bool {
+	if strings.HasPrefix(name, "mcp_") {
+		return true
+	}
+	for _, t := range AgentTools {
+		if t.Name == name {
+			return true
+		}
+	}
+	for _, t := range VoiceAgentTools {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func extractToolCallsFromText(text string) []providers.ToolCall {
 	var calls []providers.ToolCall
 	
@@ -653,7 +741,7 @@ func extractToolCallsFromText(text string) []providers.ToolCall {
 			Name      string `json:"name"`
 			Arguments any    `json:"arguments"`
 		}
-		if err := json.Unmarshal([]byte(match[1]), &tc); err == nil && tc.Name != "" {
+		if err := json.Unmarshal([]byte(match[1]), &tc); err == nil && isRegisteredTool(tc.Name) {
 			argBytes, _ := json.Marshal(tc.Arguments)
 			calls = append(calls, providers.ToolCall{
 				ID:    uuid.NewString(),
@@ -671,11 +759,13 @@ func extractToolCallsFromText(text string) []providers.ToolCall {
 		xmlMatches = xmlRe.FindAllStringSubmatch(text, -1)
 	}
 	for _, match := range xmlMatches {
-		calls = append(calls, providers.ToolCall{
-			ID:    uuid.NewString(),
-			Name:  match[1],
-			Input: []byte(match[2]),
-		})
+		if isRegisteredTool(match[1]) {
+			calls = append(calls, providers.ToolCall{
+				ID:    uuid.NewString(),
+				Name:  match[1],
+				Input: []byte(match[2]),
+			})
+		}
 	}
 	
 	// Patrón 3: Llama 3.1 <HOLDER>{call_function{"name": "xyz", "arguments": {}}}</HOLDER>
@@ -686,7 +776,7 @@ func extractToolCallsFromText(text string) []providers.ToolCall {
 			Name      string `json:"name"`
 			Arguments any    `json:"arguments"`
 		}
-		if err := json.Unmarshal([]byte(match[1]), &tc); err == nil && tc.Name != "" {
+		if err := json.Unmarshal([]byte(match[1]), &tc); err == nil && isRegisteredTool(tc.Name) {
 			argBytes, _ := json.Marshal(tc.Arguments)
 			calls = append(calls, providers.ToolCall{
 				ID:    uuid.NewString(),
@@ -701,6 +791,9 @@ func extractToolCallsFromText(text string) []providers.ToolCall {
 	jsonMatches := jsonRe.FindAllStringSubmatch(text, -1)
 	for _, match := range jsonMatches {
 		name := match[1]
+		if !isRegisteredTool(name) {
+			continue
+		}
 		args := match[2]
 		exists := false
 		for _, c := range calls {
@@ -731,11 +824,21 @@ func checkPendingTaskRequirements(userMessage string, executedCalls []providers.
 		executed[tc.Name] = true
 	}
 
-	lower := strings.ToLower(userMessage)
+	lower := strings.TrimSpace(strings.ToLower(userMessage))
 
-	// 1. Verificación de Correo Electrónico
+	// No exigir herramientas para preguntas informativas o conceptuales
+	if strings.HasPrefix(lower, "cómo") || strings.HasPrefix(lower, "como") ||
+		strings.HasPrefix(lower, "qué") || strings.HasPrefix(lower, "que") ||
+		strings.HasPrefix(lower, "cuál") || strings.HasPrefix(lower, "cual") ||
+		strings.HasPrefix(lower, "explica") || strings.HasPrefix(lower, "dime") {
+		return ""
+	}
+
+	hasActionVerb := strings.Contains(lower, "redacta") || strings.Contains(lower, "envía") || strings.Contains(lower, "envia") || strings.Contains(lower, "prepara") || strings.Contains(lower, "escribe")
+
+	// 1. Verificación de Correo Electrónico (solo con destinatario explícito o verbo de acción)
 	emailAddr := emailRegex.FindString(userMessage)
-	hasEmailIntent := strings.Contains(lower, "correo") || strings.Contains(lower, "email") || strings.Contains(lower, "gmail")
+	hasEmailIntent := (strings.Contains(lower, "correo") || strings.Contains(lower, "email") || strings.Contains(lower, "gmail")) && hasActionVerb
 	if (emailAddr != "" || hasEmailIntent) && !executed["os_draft_email"] {
 		recipient := emailAddr
 		if recipient == "" {
@@ -744,14 +847,14 @@ func checkPendingTaskRequirements(userMessage string, executedCalls []providers.
 		return fmt.Sprintf("[SISTEMA AUTÓNOMO - MOTOR DE TAREAS]: Has completado la primera etapa del objetivo. Ahora ejecuta inmediatamente el siguiente paso pendiente: redacta el resumen y abre el borrador de correo con 'os_draft_email' para %s.", recipient)
 	}
 
-	// 2. Verificación de WhatsApp
-	hasWhatsAppIntent := strings.Contains(lower, "whatsapp") || strings.Contains(lower, "wasap")
+	// 2. Verificación de WhatsApp (solo con verbo de acción)
+	hasWhatsAppIntent := (strings.Contains(lower, "whatsapp") || strings.Contains(lower, "wasap")) && hasActionVerb
 	if hasWhatsAppIntent && !executed["os_draft_whatsapp"] {
 		return "[SISTEMA AUTÓNOMO - MOTOR DE TAREAS]: Ejecuta ahora el siguiente paso pendiente del plan: prepara y abre el mensaje en WhatsApp Web con 'os_draft_whatsapp'."
 	}
 
-	// 3. Verificación de Telegram
-	hasTelegramIntent := strings.Contains(lower, "telegram")
+	// 3. Verificación de Telegram (solo con verbo de acción)
+	hasTelegramIntent := strings.Contains(lower, "telegram") && hasActionVerb
 	if hasTelegramIntent && !executed["os_draft_telegram"] && !executed["telegram_send_message"] {
 		return "[SISTEMA AUTÓNOMO - MOTOR DE TAREAS]: Ejecuta ahora el siguiente paso pendiente del plan: prepara el mensaje de Telegram usando 'os_draft_telegram'."
 	}
