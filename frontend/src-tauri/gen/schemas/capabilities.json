@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Permisos predeterminados de Ozy Desktop","local":true,"windows":["main"],"permissions":["core:default","opener:default","dialog:default"]}}
