@@ -148,6 +148,7 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 	var finalContent string
 	var allToolCalls []providers.ToolCall
+	charcAuditor := NewCharcAuditor(nil)
 
 	for turn := 0; turn < maxAgentTurns; turn++ {
 		if ctx.Err() != nil {
@@ -303,6 +304,25 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				emit(AgentEvent{Type: "tool:result", ToolID: tc.ID, ToolOutput: toolResult, ToolSuccess: false})
 				history = appendToolResult(history, tc.ID, toolResult)
 				continue
+			}
+
+			// --- Auditoría CHARC (Seguridad y Loop Breaker Heurístico) ---
+			taskStep := &models.TaskStep{
+				ID:         tc.ID,
+				StepOrder:  turn + 1,
+				ActionType: step.ActionType,
+				Payload:    string(tc.Input),
+			}
+			charcDecision := charcAuditor.AuditPreExecution(ctx, models.AgentTask{ID: taskID, Title: params.UserMessage}, taskStep)
+			if charcDecision.EscalateToNine {
+				nineAdvice := FormulateNineIntervention(ctx, params.Provider, params.UserMessage, tc.Name, string(tc.Input), charcDecision.Reason)
+				emit(AgentEvent{Type: "agent:thinking", Content: nineAdvice})
+				log.Printf("[loop:charc->nine] Intervención de Nine activada: %s", nineAdvice)
+				history = appendToolResult(history, tc.ID, nineAdvice)
+				continue
+			}
+			if charcDecision.RequiresPIN || charcDecision.RiskLevel == RiskLevelCritical {
+				auth.RequiresConfirmation = true
 			}
 
 			// --- Si requiere aprobación del usuario → suspender loop ---
