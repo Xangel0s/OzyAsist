@@ -601,7 +601,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /queue, /cola     - Consulta los mensajes pendientes en la cola de espera
   /clearqueue       - Vacía la cola de mensajes pendientes
   /provider [nom]   - Consulta o cambia el proveedor LLM activo (cohere, groq, openai, etc.)
-  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic) o URL local
+  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic, mistral) o URL local
   /groq [key]       - Auto-configura Groq desde portapapeles o abre Chrome autenticado para obtenerla
   /voice            - Alterna la escucha activa de voz ("Hey Ozy")
   /model [nombre]   - Consulta o cambia el proveedor/modelo actual
@@ -846,6 +846,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 			{"openrouter", "OpenRouter", "Multi-proveedor / DeepSeek / Claude / Llama", "deepseek/deepseek-chat"},
 			{"anthropic", "Anthropic", "Claude 3.5 Sonnet", "claude-3-5-sonnet-20241022"},
 			{"deepseek", "DeepSeek", "DeepSeek-V3 / R1 nativo", "deepseek-chat"},
+			{"mistral", "Mistral AI", "mistral-large, codestral, mixtral-8x22b", "mistral-large-latest"},
 			{"lmstudio", "LM Studio / Local", "Modelos locales vía HTTP", "local-model"},
 			{"ollama", "Ollama", "Modelos locales vía Ollama API", "local-model"},
 		}
@@ -982,6 +983,7 @@ O con OpenAI Whisper:
   /key openrouter <tu-api-key>
   /key deepseek <tu-api-key>
   /key anthropic <tu-api-key>
+  /key mistral <tu-api-key>     (mistral-large-latest, codestral, etc.)
   /key local http://localhost:1234 (para LM Studio u Ollama)`
 		}
 		targetProv := strings.ToLower(parts[1])
@@ -1063,6 +1065,29 @@ O con OpenAI Whisper:
 			return fmt.Sprintf("✓ Endpoint local actualizado y guardado: %s", keyVal)
 		}
 
+		if targetProv == "mistral" {
+			_ = providers.SaveConfigKey("MISTRAL_API_KEY", keyVal)
+			_ = os.Setenv("MISTRAL_API_KEY", keyVal)
+			providers.RegisterProviderKey("mistral", keyVal)
+			if p, err := providers.Get("mistral"); err == nil {
+				m.provider = p
+				if m.chat != nil {
+					m.chat.Provider = "mistral"
+					if len(p.Models()) > 0 {
+						m.chat.Model = p.Models()[0]
+					}
+				}
+			}
+			modelName := "mistral-large-latest"
+			if m.chat != nil && m.chat.Model != "" {
+				modelName = m.chat.Model
+			}
+			return fmt.Sprintf("🌪️ Proveedor 'mistral' configurado y activado (Modelo: %s).\n"+
+				"✓ Clave guardada en .env\n"+
+				"💡 Modelos disponibles: mistral-large-latest, codestral-latest, open-mixtral-8x22b\n"+
+				"   Cambia modelo con: /model mistral-large-latest", modelName)
+		}
+
 		providers.RegisterProviderKey(targetProv, keyVal)
 		_ = providers.SaveConfigKey(strings.ToUpper(targetProv)+"_API_KEY", keyVal)
 		if p, err := providers.Get(targetProv); err == nil {
@@ -1077,7 +1102,7 @@ O con OpenAI Whisper:
 			}
 			return fmt.Sprintf("✓ Proveedor '%s' configurado y guardado en .env (Modelo: %s).", targetProv, modelName)
 		}
-		return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, local", targetProv)
+		return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, mistral, local", targetProv)
 
 	case "/exit", "/quit":
 		return "QUIT"
