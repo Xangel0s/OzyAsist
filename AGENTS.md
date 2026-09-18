@@ -10,27 +10,37 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - `cmd/ozy`: CLI / TUI interactiva basada en Bubble Tea con streaming, pensamiento colapsable (`Ctrl+T`), colas de mensajes y atajos rápidos.
   - `cmd/server`: Servidor HTTP y WebSocket para integraciones cliente y streaming reactivo.
   - `cmd/ozyctl`: Herramienta de utilidades y administración.
-- **Cognitive Triad (Single-LLM Architecture)**:
+- **Cognitive Architecture & Subagents**:
   - **OZY**: Ejecutor de acciones y llamadas a herramientas del sistema/MCP.
   - **CHARC**: Auditor de calidad que valida precondiciones y audita resultados antes de confirmarlos.
   - **NINE**: Estratega cognitivo que descompone tareas complejas y sintetiza respuestas finales.
+  - **DREAMER**: Subagente cognitivo asíncrono para consolidación de memoria continua, deduplicación y auto-refinado del perfil de usuario (`users.profile_md`).
+- **Hybrid In-Memory KV Cache**:
+  - Motor de caché clave-valor en RAM pura (`MemoryKVStore`) con expiración por TTL y recolección automática.
+  - Conector opcional a Redis (`RedisKVStore`) con protocolo RESP nativo en Go puro si se define `REDIS_URL` o `REDIS_ADDR`.
+  - Fallback transparente y silencioso a RAM en caso de desconexión o entorno Zero-Docker.
+- **Universal Host Path Discovery & In-Memory Index**:
+  - Escaneo BFS de bajo impacto (profundidad 3) de unidades del host (`C:`, `D:`, etc.) omitiendo carpetas pesadas (`node_modules`, `.git`, etc.).
+  - Detección autónoma de proyectos mediante marcadores (`.git`, `go.mod`, `package.json`, `Cargo.toml`, etc.).
+  - Mapa invertido de tokens en memoria RAM para resolución de rutas y proyectos en microsegundos sin requerir embeddings densos ni Ollama.
+  - Inyección dinámica de la topología real de proyectos del host en el System Prompt.
 - **Self-Healing Loop**:
   - Intercepción de `stderr` tras `os_run_command`.
   - Detección de dependencias ausentes (ej. `ModuleNotFoundError`) y auto-instalación silenciosa (`pip install <pkg>`).
   - Hasta 3 reintentos autónomos sin intervención del usuario.
 - **Message Queuing & Prioritization**:
-  - Encolado de mensajes entrantes cuando el agente está ocupado (`📥 Cola: N`).
+  - Encolado de mensajes entrantes cuando el agente está ocupado (`[COLA] N mensajes`).
   - Cancelación rápida con `Esc` o `/cancel`.
   - Envío prioritario con interrupción inmediata vía `/now <orden>`.
   - Consulta y limpieza de cola vía `/queue` y `/clearqueue`.
 - **User Profile & Continuous Memory (Auto-Learning)**:
-  - Ficha de perfil persistente en SQLite (`users.profile_md`), inyectada automáticamente en el System Prompt.
+  - Ficha de perfil persistente en SQLite (`users.profile_md`), inyectada automáticamente en el System Prompt con caché en RAM.
   - Memoria continua en `user_memories` con motor de búsqueda semántica y FTS5 BM25.
   - Auto-aprendizaje en segundo plano tras cada turno con `FactExtractor.ExtractAndPersistAsync`.
   - Herramientas nativas del agente: `remember_fact`, `search_memory`, `update_user_profile`.
-  - Comandos TUI sobrios y sin emojis: `/profile`, `/memories`, `/remember <hecho>`.
+  - Comandos TUI sobrios y sin emojis: `/profile`, `/memories`, `/remember <hecho>`, `/dream`, `/paths`, `/scan`.
 - **Smart Path Resolver**:
-  - Resolución inteligente de rutas de usuario: `Desktop` prioritario para archivos de trabajo del usuario, `Documents` para proyectos y repositorios.
+  - Resolución inteligente de rutas de usuario en microsegundos consultando el registro en RAM antes del disco.
   - Protección estricta: nunca resolver rutas del usuario hacia el directorio de trabajo del servidor (`CWD`).
 
 ## Development & Execution Commands
