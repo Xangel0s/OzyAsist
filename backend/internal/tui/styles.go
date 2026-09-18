@@ -48,13 +48,13 @@ var (
 	// Chat & Roles
 	UserStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(ColorPrimary)
+			Foreground(lipgloss.Color("#888888"))
 
 	UserBoxStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#171915")).
+			Background(lipgloss.Color("#161616")).
 			BorderLeft(true).
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderLeftForeground(lipgloss.Color("#4a4a4a")).
+			BorderLeftForeground(lipgloss.Color("#444444")).
 			Padding(0, 1)
 
 	AssistantStyle = lipgloss.NewStyle().

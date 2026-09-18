@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1342,30 +1343,30 @@ func TestChat_CleanupEmptySessions(t *testing.T) {
 	}
 }
 
-func TestThinking_DefaultVisible(t *testing.T) {
+func TestThinking_DefaultCollapsed(t *testing.T) {
 	m := InitialModel(nil, nil, false)
 	m.state = StateIdle
-	if !m.showThinking {
-		t.Errorf("Expected showThinking to be true by default, got false")
+	if m.showThinking {
+		t.Errorf("Expected showThinking to be false (collapsed) by default, got true")
 	}
 
-	// Probar alternado con Ctrl+T
+	// Probar alternado con Ctrl+T para desplegar
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
 	model := newM.(Model)
-	if model.showThinking {
-		t.Errorf("Expected showThinking to be false after Ctrl+T, got true")
+	if !model.showThinking {
+		t.Errorf("Expected showThinking to be true after Ctrl+T, got false")
 	}
-	if !strings.Contains(model.systemStatus, "Plegado") {
-		t.Errorf("Expected systemStatus to contain 'Plegado', got %q", model.systemStatus)
+	if !strings.Contains(model.systemStatus, "Desplegado") {
+		t.Errorf("Expected systemStatus to contain 'Desplegado', got %q", model.systemStatus)
 	}
 
-	// Probar comando /thinking
+	// Probar comando /thinking para volver a plegar
 	out := model.handleSlashCommand("/thinking")
-	if !strings.Contains(out, "desplegado") {
-		t.Errorf("Expected /thinking to report desplegado, got: %s", out)
+	if !strings.Contains(out, "plegado") {
+		t.Errorf("Expected /thinking to report plegado, got: %s", out)
 	}
-	if !model.showThinking {
-		t.Errorf("Expected showThinking true after /thinking, got false")
+	if model.showThinking {
+		t.Errorf("Expected showThinking false after /thinking, got true")
 	}
 }
 
@@ -1435,3 +1436,123 @@ func TestPlayground_ParseAndRender(t *testing.T) {
 		t.Errorf("Unexpected collapsed tool rendering: %s", collapsed)
 	}
 }
+
+// TestSidebar_ToggleAndRender verifica el alternado de la ventana lateral de contexto con Ctrl+B
+// y la correcta generación de métricas de telemetría (RAM, Tokens, Contexto).
+func TestSidebar_ToggleAndRender(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateIdle
+	m.width = 120
+	m.height = 40
+	m.ready = true
+
+	// showSidebar inicia en true por defecto
+	if !m.showSidebar {
+		t.Fatalf("showSidebar debería ser true por defecto")
+	}
+
+	// Render de la barra lateral
+	sidebarRender := m.renderSidebar(34, 30)
+	if !strings.Contains(sidebarRender, "CONTEXTO & TELEMETRÍA") {
+		t.Errorf("renderSidebar debe contener el encabezado CONTEXTO & TELEMETRÍA, got:\n%s", sidebarRender)
+	}
+	if !strings.Contains(sidebarRender, "TOKENS") {
+		t.Errorf("renderSidebar debe contener la sección TOKENS")
+	}
+	if !strings.Contains(sidebarRender, "MEMORIA RAM") {
+		t.Errorf("renderSidebar debe contener la sección MEMORIA RAM")
+	}
+
+	// Alternar con Ctrl+B: debe ocultarse
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	model := newM.(Model)
+	if model.showSidebar {
+		t.Errorf("showSidebar debería ser false tras Ctrl+B")
+	}
+	if !strings.Contains(model.systemStatus, "Oculta") {
+		t.Errorf("systemStatus debería indicar 'Oculta', got %q", model.systemStatus)
+	}
+
+	// Alternar nuevamente con Ctrl+B: debe mostrarse
+	newM2, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	model2 := newM2.(Model)
+	if !model2.showSidebar {
+		t.Errorf("showSidebar debería ser true tras segundo Ctrl+B")
+	}
+	if !strings.Contains(model2.systemStatus, "Visible") {
+		t.Errorf("systemStatus debería indicar 'Visible', got %q", model2.systemStatus)
+	}
+
+	// Probar slash command /context
+	out := model2.handleSlashCommand("/context")
+	if !strings.Contains(out, "OCULTA") {
+		t.Errorf("expected /context toggle output to report OCULTA, got: %s", out)
+	}
+}
+
+// TestMemoryManager_NavigationAndCRUD verifica la pantalla de gestión de memoria:
+// renderizado, agregado con 'a', borrado con 'd' y confirmación con 's'.
+func TestMemoryManager_NavigationAndCRUD(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_memmgr.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	memory.InitContinuousMemory(db.DB, nil)
+	store := memory.DefaultStore()
+	ctx := context.Background()
+	if err := store.UpsertFact(ctx, db.DefaultUserID(), memory.CategoryPreference, "Prefiere respuestas concisas y sin emojis", 1.0); err != nil {
+		t.Fatalf("UpsertFact 1 error: %v", err)
+	}
+	if err := store.UpsertFact(ctx, db.DefaultUserID(), memory.CategoryStack, "Backend en Go 1.22 con SQLite puro", 1.0); err != nil {
+		t.Fatalf("UpsertFact 2 error: %v", err)
+	}
+
+	facts, _ := store.GetAllFacts(ctx, db.DefaultUserID())
+
+	m := InitialModel(nil, nil, false)
+	m.state = StateMemoryManager
+	m.width = 120
+	m.height = 40
+	m.memoriesList = facts
+	m.ready = true
+
+	view := m.renderMemoryManagerView()
+	if !strings.Contains(view, "GESTOR INTERACTIVO DE MEMORIAS") {
+		t.Errorf("renderMemoryManagerView debe incluir el título, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Prefiere respuestas concisas") {
+		t.Errorf("renderMemoryManagerView debe listar el hecho guardado")
+	}
+
+	// Probar navegación abajo
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	mUpdated := updated.(Model)
+	if mUpdated.memoryIndex != 1 {
+		t.Errorf("memoryIndex tras KeyDown debe ser 1, got %d", mUpdated.memoryIndex)
+	}
+
+	// Probar tecla 'd' para activar confirmación de borrado
+	updatedDel, _ := mUpdated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	mDel := updatedDel.(Model)
+	if mDel.memoryConfirmDelete == "" {
+		t.Fatalf("memoryConfirmDelete debería tener un ID tras presionar 'd'")
+	}
+
+	// Probar tecla 's' para confirmar eliminación
+	updatedConfirm, _ := mDel.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("s")})
+	mConfirmed := updatedConfirm.(Model)
+	if mConfirmed.memoryConfirmDelete != "" {
+		t.Errorf("memoryConfirmDelete debería haberse limpiado tras confirmación")
+	}
+
+	// Probar comando /forget con índice numérico
+	forgetOut := m.handleSlashCommand("/forget 1")
+	if !strings.Contains(forgetOut, "eliminado con éxito") {
+		t.Errorf("expected /forget 1 success, got: %s", forgetOut)
+	}
+}
+

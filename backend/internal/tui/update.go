@@ -31,6 +31,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+
+		chatW := msg.Width
+		if m.showSidebar && msg.Width >= 70 {
+			sidebarW := 34
+			if msg.Width < 95 {
+				sidebarW = 26
+			}
+			chatW = msg.Width - sidebarW - 1
+			if chatW < 35 {
+				chatW = 35
+			}
+		}
+
 		taWidth := msg.Width - 14
 		if taWidth < 20 {
 			taWidth = 20
@@ -46,11 +59,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, vpHeight)
+			m.viewport = viewport.New(chatW, vpHeight)
 			m.viewport.SetContent(m.renderConversation())
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
+			m.viewport.Width = chatW
 			m.viewport.Height = vpHeight
 			m.viewport.SetContent(m.renderConversation())
 		}
@@ -283,6 +296,163 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			default:
 				var cmd tea.Cmd
 				m.historySearchInput, cmd = m.historySearchInput.Update(msg)
+				return m, cmd
+			}
+		}
+
+		if m.state == StateMemoryManager {
+			// Si hay confirmación de borrado activa, solo procesar confirmación s/n/Esc
+			if m.memoryConfirmDelete != "" {
+				switch msg.Type {
+				case tea.KeyEsc:
+					m.memoryConfirmDelete = ""
+					return m, nil
+				case tea.KeyRunes:
+					switch string(msg.Runes) {
+					case "s", "S", "y", "Y":
+						store := memory.DefaultStore()
+						if store == nil && db.DB != nil {
+							store = memory.NewStore(db.DB)
+						}
+						if store != nil {
+							ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
+							_ = store.DeleteFact(ctxDel, m.memoryConfirmDelete)
+							cancelDel()
+
+							ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+							facts, _ := store.GetAllFacts(ctxMem, db.DefaultUserID())
+							cancelMem()
+							m.memoriesList = facts
+						}
+						m.memoryConfirmDelete = ""
+						if m.memoryIndex >= len(m.memoriesList) {
+							m.memoryIndex = max(0, len(m.memoriesList)-1)
+						}
+						return m, nil
+					case "n", "N":
+						m.memoryConfirmDelete = ""
+						return m, nil
+					}
+				case tea.KeyCtrlC:
+					return m, tea.Quit
+				}
+				return m, nil
+			}
+
+			// Si está agregando nuevo recuerdo
+			if m.memoryAddingNew {
+				switch msg.Type {
+				case tea.KeyEsc:
+					m.memoryAddingNew = false
+					m.memoryNewInput.Reset()
+					m.memorySearchInput.Focus()
+					return m, textinput.Blink
+				case tea.KeyEnter:
+					val := strings.TrimSpace(m.memoryNewInput.Value())
+					if val != "" {
+						store := memory.DefaultStore()
+						if store == nil && db.DB != nil {
+							store = memory.NewStore(db.DB)
+						}
+						if store != nil {
+							ctxAdd, cancelAdd := context.WithTimeout(context.Background(), 2*time.Second)
+							_ = store.UpsertFact(ctxAdd, db.DefaultUserID(), memory.CategoryPreference, val, 1.0)
+							cancelAdd()
+
+							ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+							facts, _ := store.GetAllFacts(ctxMem, db.DefaultUserID())
+							cancelMem()
+							m.memoriesList = facts
+						}
+					}
+					m.memoryAddingNew = false
+					m.memoryNewInput.Reset()
+					m.memorySearchInput.Focus()
+					return m, textinput.Blink
+				case tea.KeyCtrlC:
+					return m, tea.Quit
+				default:
+					var cmd tea.Cmd
+					m.memoryNewInput, cmd = m.memoryNewInput.Update(msg)
+					return m, cmd
+				}
+			}
+
+			// Filtro de recuerdos actual
+			query := strings.ToLower(strings.TrimSpace(m.memorySearchInput.Value()))
+			var filtered []memory.FactMemory
+			for _, f := range m.memoriesList {
+				if query == "" || strings.Contains(strings.ToLower(f.Content), query) || strings.Contains(strings.ToLower(string(f.Category)), query) {
+					filtered = append(filtered, f)
+				}
+			}
+
+			switch msg.Type {
+			case tea.KeyUp:
+				m.memoryIndex--
+				if m.memoryIndex < 0 {
+					m.memoryIndex = max(0, len(filtered)-1)
+				}
+				return m, nil
+
+			case tea.KeyDown:
+				m.memoryIndex++
+				if m.memoryIndex >= len(filtered) {
+					m.memoryIndex = 0
+				}
+				return m, nil
+
+			case tea.KeyEsc:
+				if m.memorySearchInput.Value() != "" {
+					m.memorySearchInput.Reset()
+					m.memoryIndex = 0
+					return m, nil
+				}
+				if m.chat != nil {
+					m.state = StateIdle
+					m.textarea.Focus()
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				}
+				m.state = StateStartMenu
+				return m, nil
+
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+
+			case tea.KeyRunes:
+				s := string(msg.Runes)
+				// Si el buscador está vacío
+				if m.memorySearchInput.Value() == "" {
+					if s == "a" || s == "A" {
+						m.memoryAddingNew = true
+						m.memoryNewInput.Reset()
+						m.memoryNewInput.Focus()
+						return m, textinput.Blink
+					}
+					if (s == "d" || s == "D") && len(filtered) > 0 && m.memoryIndex < len(filtered) {
+						m.memoryConfirmDelete = filtered[m.memoryIndex].ID
+						return m, nil
+					}
+				}
+
+				var cmd tea.Cmd
+				m.memorySearchInput, cmd = m.memorySearchInput.Update(msg)
+				m.memoryIndex = 0
+				return m, cmd
+
+			case tea.KeyBackspace, tea.KeyDelete:
+				var cmd tea.Cmd
+				m.memorySearchInput, cmd = m.memorySearchInput.Update(msg)
+				m.memoryIndex = 0
+				return m, cmd
+
+			default:
+				var cmd tea.Cmd
+				m.memorySearchInput, cmd = m.memorySearchInput.Update(msg)
 				return m, cmd
 			}
 		}
@@ -685,6 +855,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.systemStatus = "Hilo de ejecución: Plegado (solo respuestas)"
 			}
+			m.viewport.SetContent(m.renderConversation())
+			m.viewport.GotoBottom()
+			return m, nil
+
+		case tea.KeyCtrlB:
+			m.showSidebar = !m.showSidebar
+			if m.showSidebar {
+				m.systemStatus = "Ventana de contexto: Visible"
+			} else {
+				m.systemStatus = "Ventana de contexto: Oculta"
+			}
+			chatW := m.width
+			if m.showSidebar && m.width >= 70 {
+				sidebarW := 34
+				if m.width < 95 {
+					sidebarW = 26
+				}
+				chatW = m.width - sidebarW - 1
+				if chatW < 35 {
+					chatW = 35
+				}
+			}
+			m.viewport.Width = chatW
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
 			return m, nil
@@ -1433,7 +1626,11 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /menu, /inicio    - Abre el menú interactivo retro de inicio
   /profile [texto]  - Consulta o actualiza la ficha del perfil de usuario
   /memories         - Consulta los hechos y preferencias aprendidas en memoria continua
+  /memmgr           - Abre el gestor visual interactivo de memorias
   /remember <hecho> - Registra manualmente un hecho técnico o regla persistente
+  /forget <num|id>  - Elimina un hecho de la memoria continua
+  /forgetall        - Vacía todos los recuerdos continuos
+  /context, /sidebar- Alterna la ventana lateral de telemetría y contexto (Ctrl+B)
   /dream            - Ejecuta el subagente DREAMER para consolidar memoria y actualizar perfil
   /paths, /rutas    - Lista proyectos, repositorios y rutas indexadas en memoria RAM
   /scan             - Fuerza un escaneo universal de rutas y proyectos en segundo plano
@@ -1452,7 +1649,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /new              - Crea una nueva sesión de chat limpia sin salir al menú
   /history          - Abre el historial de conversaciones guardadas
   /exit, /quit      - Cierra la aplicación (Ctrl+C)
-Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] encola si Ozy está ocupado`
+Atajos: [Ctrl+B] alternar contexto • [Ctrl+T] alternar pensamiento • [Esc] cancelar tarea`
 
 	case "/menu", "/inicio", "/start":
 		m.state = StateStartMenu
@@ -1500,6 +1697,26 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		return "[PERFIL] Perfil de usuario actualizado y persistido con exito."
 
 	case "/memories", "/memoria", "/recuerdos":
+		if len(parts) > 1 && (parts[1] == "gui" || parts[1] == "gestor" || parts[1] == "ui") {
+			store := memory.DefaultStore()
+			if store == nil && db.DB != nil {
+				store = memory.NewStore(db.DB)
+			}
+			if store != nil {
+				ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+				facts, _ := store.GetAllFacts(ctxMem, db.DefaultUserID())
+				cancelMem()
+				m.memoriesList = facts
+			}
+			m.memoryIndex = 0
+			m.memoryConfirmDelete = ""
+			m.memoryAddingNew = false
+			m.memorySearchInput.Reset()
+			m.memorySearchInput.Focus()
+			m.state = StateMemoryManager
+			m.textarea.Blur()
+			return ""
+		}
 		store := memory.DefaultStore()
 		if store == nil && db.DB != nil {
 			store = memory.NewStore(db.DB)
@@ -1519,7 +1736,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			sb.WriteString(fmt.Sprintf("  %d. [%s] %s (relevancia: %.0f%%, consultas: %d)\n",
 				i+1, strings.ToUpper(string(f.Category)), f.Content, f.Confidence*100, f.AccessCount))
 		}
-		sb.WriteString("\nUsa /remember <hecho> para registrar un nuevo detalle tecnico o preferencia.")
+		sb.WriteString("\nUsa /remember <hecho> para agregar, /forget <num> para eliminar, o /memmgr para el gestor interactivo.")
 		return sb.String()
 
 	case "/remember", "/recordar":
@@ -1549,6 +1766,89 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		}
 		dreamer.DreamAsync(context.Background(), db.DefaultUserID(), nil)
 		return "[DREAMING] Proceso de consolidacion de memoria continua iniciado en segundo plano por el subagente DREAMER."
+
+	case "/forget", "/olvidar":
+		if len(parts) < 2 {
+			return "[MEMORIA] Uso: /forget <número | ID de recuerdo>\nEjemplo: /forget 1\nPara ver la lista usa /memories o el Gestor de Memorias en el menú principal."
+		}
+		target := strings.TrimSpace(parts[1])
+		store := memory.DefaultStore()
+		if store == nil && db.DB != nil {
+			store = memory.NewStore(db.DB)
+		}
+		if store == nil {
+			return "[MEMORIA] Almacen de memoria no disponible."
+		}
+		ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+		facts, err := store.GetRecentFacts(ctxMem, db.DefaultUserID(), 100)
+		cancelMem()
+		if err != nil || len(facts) == 0 {
+			return "[MEMORIA] No hay recuerdos registrados para eliminar."
+		}
+
+		var factIDToDelete string
+		var num int
+		if _, err := fmt.Sscanf(target, "%d", &num); err == nil && num >= 1 && num <= len(facts) {
+			factIDToDelete = facts[num-1].ID
+		} else {
+			for _, f := range facts {
+				if f.ID == target || strings.HasPrefix(f.ID, target) {
+					factIDToDelete = f.ID
+					break
+				}
+			}
+		}
+
+		if factIDToDelete == "" {
+			return fmt.Sprintf("[MEMORIA] No se encontró ningún recuerdo con identificador %q.", target)
+		}
+
+		ctxDel, cancelDel := context.WithTimeout(context.Background(), 2*time.Second)
+		errDel := store.DeleteFact(ctxDel, factIDToDelete)
+		cancelDel()
+		if errDel != nil {
+			return fmt.Sprintf("[MEMORIA] Error al eliminar recuerdo: %v", errDel)
+		}
+		return fmt.Sprintf("[MEMORIA] Recuerdo [%s] eliminado con éxito.", factIDToDelete)
+
+	case "/forgetall", "/olvidartodo":
+		if db.DB == nil {
+			return "[MEMORIA] Base de datos no disponible."
+		}
+		ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+		_, err := db.DB.ExecContext(ctxMem, "DELETE FROM user_memories WHERE user_id = ?;", db.DefaultUserID())
+		cancelMem()
+		if err != nil {
+			return fmt.Sprintf("[MEMORIA] Error al vaciar recuerdos: %v", err)
+		}
+		return "[MEMORIA] Se han eliminado todos los recuerdos de la memoria continua."
+
+	case "/context", "/sidebar", "/panel":
+		m.showSidebar = !m.showSidebar
+		if m.showSidebar {
+			return "[CONTEXTO] Ventana de contexto lateral ACTIVADA (Ctrl+B para alternar)."
+		}
+		return "[CONTEXTO] Ventana de contexto lateral OCULTA (Ctrl+B para alternar)."
+
+	case "/memmgr", "/gestormemoria":
+		store := memory.DefaultStore()
+		if store == nil && db.DB != nil {
+			store = memory.NewStore(db.DB)
+		}
+		if store != nil {
+			ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+			facts, _ := store.GetAllFacts(ctxMem, db.DefaultUserID())
+			cancelMem()
+			m.memoriesList = facts
+		}
+		m.memoryIndex = 0
+		m.memoryConfirmDelete = ""
+		m.memoryAddingNew = false
+		m.memorySearchInput.Reset()
+		m.memorySearchInput.Focus()
+		m.state = StateMemoryManager
+		m.textarea.Blur()
+		return ""
 
 	case "/paths", "/rutas", "/proyectos":
 		reg := system.DefaultPathRegistry()

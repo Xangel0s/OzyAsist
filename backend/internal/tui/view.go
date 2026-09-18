@@ -175,6 +175,9 @@ func (m Model) View() string {
 	if m.state == StateChatHistory {
 		return m.renderChatHistoryView()
 	}
+	if m.state == StateMemoryManager {
+		return m.renderMemoryManagerView()
+	}
 
 	var sb strings.Builder
 
@@ -182,9 +185,28 @@ func (m Model) View() string {
 	sb.WriteString(m.renderHeader())
 	sb.WriteString("\n")
 
-	// 2. Historial de conversación (Viewport)
-	sb.WriteString(m.viewport.View())
-	sb.WriteString("\n")
+	// 2. Historial de conversación (Viewport) o Vista Dividida con Sidebar (Zona Amarilla)
+	if m.showSidebar && m.width >= 70 {
+		sidebarW := 34
+		if m.width < 95 {
+			sidebarW = 26
+		}
+		chatW := m.width - sidebarW - 1
+		if chatW < 35 {
+			chatW = 35
+		}
+
+		vpView := m.viewport.View()
+		sidebarView := m.renderSidebar(sidebarW, m.viewport.Height)
+		sep := lipgloss.NewStyle().Foreground(ColorDim).Render("│")
+
+		content := lipgloss.JoinHorizontal(lipgloss.Top, vpView, sep, sidebarView)
+		sb.WriteString(content)
+		sb.WriteString("\n")
+	} else {
+		sb.WriteString(m.viewport.View())
+		sb.WriteString("\n")
+	}
 
 	// 3. Footer inferior (Status + Input box + Info modelo + Hints)
 	sb.WriteString(m.renderFooter())
@@ -319,6 +341,16 @@ func (m Model) renderConversation() string {
 	if convWidth <= 0 {
 		convWidth = 80
 	}
+	if m.showSidebar && m.width >= 70 {
+		sidebarW := 34
+		if m.width < 95 {
+			sidebarW = 26
+		}
+		convWidth = m.width - sidebarW - 1
+		if convWidth < 35 {
+			convWidth = 35
+		}
+	}
 
 	var sb strings.Builder
 
@@ -343,13 +375,9 @@ func (m Model) renderConversation() string {
 			sb.WriteString("\n\n")
 
 		case "assistant":
-			// Renderizar pensamiento (Thinking / Chain of Thought) si existe
-			if entry.Thinking != "" {
-				if m.showThinking {
-					sb.WriteString(renderThinkingBlock(entry.Thinking, false, "", convWidth))
-				} else {
-					sb.WriteString(MutedStyle.Render("· [Razonamiento plegado · Presiona Ctrl+T para desplegar]\n\n"))
-				}
+			// Renderizar pensamiento (Thinking / Chain of Thought) si existe y está desplegado
+			if entry.Thinking != "" && m.showThinking {
+				sb.WriteString(renderThinkingBlock(entry.Thinking, false, "", convWidth))
 			}
 
 			cleaned := cleanAssistantText(entry.Content)
@@ -367,13 +395,13 @@ func (m Model) renderConversation() string {
 				rendered, err := r.Render(cleaned)
 				if err == nil {
 					rendered = strings.TrimRight(rendered, "\r\n")
-					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rendered)
+					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("O Ozy:"), rendered)
 					sb.WriteString(boxStyle.Render(cardText))
 					sb.WriteString("\n\n")
 				} else {
 					lines := wrapContent(cleaned, maxAssistantW)
 					rawText := strings.Join(lines, "\n")
-					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rawText)
+					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("O Ozy:"), rawText)
 					sb.WriteString(boxStyle.Render(cardText))
 					sb.WriteString("\n\n")
 				}
@@ -401,21 +429,16 @@ func (m Model) renderConversation() string {
 			sb.WriteString("\n")
 
 		case "tool":
+			// Solo renderizar el playground si el hilo de ejecución está desplegado
 			if m.showThinking {
 				sb.WriteString(renderPlaygroundTool(entry.ToolName, entry.ToolInput, entry.Content, entry.ToolSuccess, entry.DurationMs, convWidth))
-			} else {
-				sb.WriteString(renderCollapsedTool(entry.ToolName, entry.ToolInput, entry.ToolSuccess, entry.DurationMs))
 			}
 		}
 	}
 
-	// Si hay una herramienta ejecutándose en este momento
-	if m.activeToolName != "" {
-		if m.showThinking {
-			sb.WriteString(renderActiveToolProgress(m.activeToolName, m.activeToolInput, m.spinner.View(), convWidth))
-		} else {
-			sb.WriteString(renderCollapsedActiveTool(m.activeToolName, m.spinner.View()))
-		}
+	// Si hay una herramienta ejecutándose en este momento (solo visible si el hilo está desplegado)
+	if m.activeToolName != "" && m.showThinking {
+		sb.WriteString(renderActiveToolProgress(m.activeToolName, m.activeToolInput, m.spinner.View(), convWidth))
 	}
 
 	// Si hay pensamiento en tiempo real mientras el modelo razona
@@ -440,13 +463,13 @@ func (m Model) renderConversation() string {
 			rendered, err := r.Render(cleaned)
 			if err == nil {
 				rendered = strings.TrimRight(rendered, "\r\n") + "▌"
-				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rendered)
+				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("O Ozy:"), rendered)
 				sb.WriteString(boxStyle.Render(cardText))
 				sb.WriteString("\n\n")
 			} else {
 				lines := wrapContent(cleaned, maxStreamW)
 				rawText := strings.Join(lines, "\n") + "▌"
-				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rawText)
+				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("O Ozy:"), rawText)
 				sb.WriteString(boxStyle.Render(cardText))
 				sb.WriteString("\n\n")
 			}
@@ -731,9 +754,9 @@ func (m Model) renderFooter() string {
 	} else if m.activeCard != nil {
 		hintsText = " [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
 	} else {
-		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Hilo de Ejecución  •  [/help] Comandos"
-		if m.width > 0 && m.width < 85 {
-			hintsText = " [Enter] Enviar  •  [Esc] Menú  •  [/help] Ayuda"
+		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú  •  [Ctrl+B] Contexto  •  [Ctrl+T] Hilo Ejec.  •  [/help] Ayuda"
+		if m.width > 0 && m.width < 95 {
+			hintsText = " [Enter] Enviar  •  [Ctrl+B] Contexto  •  [Esc] Menú  •  [/help] Ayuda"
 		}
 	}
 

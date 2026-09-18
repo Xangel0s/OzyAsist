@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/agent"
 	"github.com/ozyassist/backend/internal/db/models"
+	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 )
 
@@ -24,7 +25,8 @@ const (
 	StateAPIKeySelect
 	StateAPIKeyInput
 	StateProfileEdit
-	StateChatHistory // Pantalla de historial de conversaciones
+	StateChatHistory   // Pantalla de historial de conversaciones
+	StateMemoryManager // Pantalla de gestión interactiva de recuerdos
 	StateIdle
 	StateThinking
 	StateExecutingTool
@@ -101,6 +103,7 @@ type Model struct {
 	currentStream   string
 	currentThinking string
 	showThinking    bool
+	showSidebar     bool // Panel lateral de telemetría y contexto en vivo (Ctrl+B)
 	activeToolName  string
 	activeToolInput string
 
@@ -109,6 +112,14 @@ type Model struct {
 	chatHistoryIndex      int           // Fila seleccionada en la pantalla de historial
 	historyConfirmDelete  string        // ID del chat pendiente de confirmación de borrado ("" = ninguno)
 	historySearchInput    textinput.Model // Input para filtrar en tiempo real el historial
+
+	// Gestor de memorias
+	memoriesList          []memory.FactMemory // Lista de recuerdos cargada desde SQLite
+	memoryIndex           int                 // Fila seleccionada en la lista de recuerdos
+	memoryConfirmDelete   string              // ID del recuerdo pendiente de confirmación de borrado ("" = ninguno)
+	memorySearchInput     textinput.Model     // Input para filtrar en tiempo real los recuerdos
+	memoryNewInput        textinput.Model     // Input interactivo para agregar un nuevo recuerdo
+	memoryAddingNew       bool                // Si el input de nuevo recuerdo está activo
 
 	provider        providers.Provider
 	chat            *models.Chat
@@ -167,6 +178,18 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 
 	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nEscribe libremente tu instrucción o consulta para comenzar."
 
+	// Input para búsqueda en memorias
+	memSearchTi := textinput.New()
+	memSearchTi.Placeholder = "Buscar recuerdos por categoría o contenido..."
+	memSearchTi.Prompt = "❯ "
+	memSearchTi.CharLimit = 128
+
+	// Input interactivo para nuevo recuerdo
+	memNewTi := textinput.New()
+	memNewTi.Placeholder = "Escribe un hecho o preferencia a recordar..."
+	memNewTi.Prompt = "❯ "
+	memNewTi.CharLimit = 512
+
 	m := Model{
 		state:              StateStartMenu,
 		menuIndex:          0,
@@ -176,13 +199,16 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 		apiKeyInput:        keyTi,
 		profileInput:       profTi,
 		historySearchInput: searchTi,
+		memorySearchInput:  memSearchTi,
+		memoryNewInput:     memNewTi,
 		spinner:            sp,
 		provider:           prov,
 		chat:               chat,
 		permissionLevel:    "autonomous",
 		voiceEnabled:       voiceActive,
 		systemStatus:       initStatus,
-		showThinking:       true,
+		showThinking:       false, // Plegado por defecto para máxima limpieza visual
+		showSidebar:        true,  // Panel lateral de telemetría y contexto activo por defecto
 		promptHistoryIndex: -1,
 		activeCard:         nil,
 		entries: []ChatEntry{
