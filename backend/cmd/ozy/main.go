@@ -129,6 +129,21 @@ func initCore() (providers.Provider, *models.Chat) {
 	_ = mcp.DefaultRegistry.InitFromConfigFile(context.Background(), "")
 
 	prov := providers.GetDefaultOrFirstProvider()
+	if db.DB != nil {
+		memory.InitContinuousMemory(db.DB, prov)
+
+		// Inicializar perfil base si aún no existe
+		if u, err := db.GetUser(db.DefaultUserID()); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) == "" {
+			defaultProfile := `# Perfil del Usuario
+- Rol: Ingeniero de Software / Desarrollador Lead
+- Entorno: Windows Workstation
+- Proyectos clave: crmgeofal, ozyassist, cotizador, Peru-flack
+- Stack habitual: Go (Zero-Docker, SQLite puro WAL), React/TypeScript, Python
+- Preferencias de trabajo: Código limpio (KISS, SOLID, DRY), verificación rigurosa, no inventar rutas
+`
+			_ = db.UpdateUserProfile(db.DefaultUserID(), defaultProfile)
+		}
+	}
 
 	var activeChat *models.Chat
 	chats, err := db.ListChats()
@@ -279,21 +294,21 @@ func runExec(prov providers.Provider, _ *models.Chat, prompt string) {
 				fmt.Print(evt.Content)
 
 			case "tool:call":
-				fmt.Printf("\n⚙️  [HERRAMIENTA] %s\n   Parámetros: %s\n", evt.ToolName, evt.ToolInput)
+				fmt.Printf("\n[HERRAMIENTA] %s\n  Parametros: %s\n", evt.ToolName, evt.ToolInput)
 
 			case "tool:result":
-				status := "✓ Éxito"
+				status := "[OK]"
 				if !evt.ToolSuccess {
-					status = "✗ Error"
+					status = "[ERROR]"
 				}
-				fmt.Printf("   Resultado (%s): %s\n\n", status, strings.TrimSpace(evt.ToolOutput))
+				fmt.Printf("  Resultado %s: %s\n\n", status, strings.TrimSpace(evt.ToolOutput))
 
 			case "agent:completed":
-				fmt.Println("\n\n✓ Tarea completada con éxito.")
+				fmt.Println("\n\n[OK] Tarea completada con exito.")
 				wg.Done()
 
 			case "error":
-				fmt.Printf("\n❌ Error: %s\n", evt.Error)
+				fmt.Printf("\n[ERROR] %s\n", evt.Error)
 				wg.Done()
 			}
 		},
