@@ -324,6 +324,33 @@ func DeleteChat(chatID string) error {
 	return tx.Commit()
 }
 
+// CountMessagesByChat retorna la cantidad de mensajes guardados en un chat específico.
+func CountMessagesByChat(chatID string) (int, error) {
+	if DB == nil {
+		return 0, nil
+	}
+	var count int
+	err := DB.QueryRow("SELECT COUNT(*) FROM messages WHERE chat_id = ?", chatID).Scan(&count)
+	return count, err
+}
+
+// CleanupEmptyChats elimina de SQLite todos los chats que no tengan ningún mensaje asociado,
+// evitando la acumulación de sesiones vacías o huérfanas. Si excludeChatID no está vacío,
+// preserva dicho chat aunque esté temporalmente vacío (ej: la sesión recién creada en uso).
+func CleanupEmptyChats(excludeChatID string) error {
+	if DB == nil {
+		return nil
+	}
+	query := "DELETE FROM chats WHERE id NOT IN (SELECT DISTINCT chat_id FROM messages)"
+	if excludeChatID != "" {
+		query += " AND id != ?"
+		_, err := DB.Exec(query, excludeChatID)
+		return err
+	}
+	_, err := DB.Exec(query)
+	return err
+}
+
 func CreateMessage(m *models.Message) error {
 	_, err := DB.Exec(
 		`INSERT INTO messages (id, chat_id, role, content, attachments_json, tool_calls_json, created_at)

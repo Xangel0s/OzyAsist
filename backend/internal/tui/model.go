@@ -108,6 +108,7 @@ type Model struct {
 	historyChats          []models.Chat // Lista de chats cargada desde SQLite
 	chatHistoryIndex      int           // Fila seleccionada en la pantalla de historial
 	historyConfirmDelete  string        // ID del chat pendiente de confirmación de borrado ("" = ninguno)
+	historySearchInput    textinput.Model // Input para filtrar en tiempo real el historial
 
 	provider        providers.Provider
 	chat            *models.Chat
@@ -121,7 +122,7 @@ type Model struct {
 
 	loopSessionID   string
 	loopCancel      context.CancelFunc
-	activeCard      *InteractiveCard // Tarjeta interactiva actualmente en foco para selección
+	activeCard      *InteractiveCard // Tarjeta interactiva actualmente en foco para selección (opcional)
 }
 
 func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) Model {
@@ -153,47 +154,40 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	profTi.Prompt = "❯ "
 	profTi.CharLimit = 1024
 
+	// Input para búsqueda en historial de conversaciones
+	searchTi := textinput.New()
+	searchTi.Placeholder = "Buscar por tema, código o proveedor..."
+	searchTi.Prompt = "❯ "
+	searchTi.CharLimit = 128
+
 	initStatus := "Listo para actuar"
 	if voiceActive {
 		initStatus = "Escuchando Wake Word ('Hey Ozy')..."
 	}
 
-	welcomeCard := &InteractiveCard{
-		Title: "Plan Inicial",
-		Tabs:  []string{"Prioridad", "Acciones", "Configurar"},
-		Question: "¿Qué objetivo o tarea deseas priorizar para comenzar?",
-		Options: []string{
-			"1. Explorar y ordenar proyectos locales",
-			"2. Consultar mapa de rutas y memoria en RAM (/paths)",
-			"3. Configurar API Keys o alternar proveedores (/menu)",
-			"4. Escribir una instrucción libre en el chat...",
-		},
-		SelectedIndex: 0,
-	}
-
-	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nPuedes elegir una prioridad con las flechas [↑/↓] o escribir libremente tu orden."
+	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nEscribe libremente tu instrucción o consulta para comenzar."
 
 	m := Model{
-		state:           StateStartMenu,
-		menuIndex:       0,
-		settingsIndex:   0,
-		settingsNotice:  "",
-		textarea:        ta,
-		apiKeyInput:     keyTi,
-		profileInput:    profTi,
-		spinner:         sp,
-		provider:        prov,
-		chat:            chat,
-		permissionLevel: "autonomous",
-		voiceEnabled:    voiceActive,
-		systemStatus:    initStatus,
+		state:              StateStartMenu,
+		menuIndex:          0,
+		settingsIndex:      0,
+		settingsNotice:     "",
+		textarea:           ta,
+		apiKeyInput:        keyTi,
+		profileInput:       profTi,
+		historySearchInput: searchTi,
+		spinner:            sp,
+		provider:           prov,
+		chat:               chat,
+		permissionLevel:    "autonomous",
+		voiceEnabled:       voiceActive,
+		systemStatus:       initStatus,
 		promptHistoryIndex: -1,
-		activeCard:      welcomeCard,
+		activeCard:         nil,
 		entries: []ChatEntry{
 			{
 				Role:    "assistant",
 				Content: welcomeContent,
-				Card:    welcomeCard,
 			},
 		},
 	}

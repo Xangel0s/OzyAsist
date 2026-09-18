@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/db/models"
 	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
@@ -906,9 +908,29 @@ func TestInteractiveCard_NavigationAndSelection(t *testing.T) {
 	m.ready = true
 	m.state = StateIdle
 
-	// 1. Verificar que el card inicial existe
+	// Tarjeta de prueba interactiva
+	card := &InteractiveCard{
+		Title:    "Plan Inicial",
+		Tabs:     []string{"Prioridad", "Acciones", "Configurar"},
+		Question: "¿Qué objetivo o tarea deseas priorizar para comenzar?",
+		Options: []string{
+			"1. Explorar y ordenar proyectos locales",
+			"2. Consultar mapa de rutas y memoria en RAM (/paths)",
+			"3. Configurar API Keys o alternar proveedores (/menu)",
+			"4. Escribir una instrucción libre en el chat...",
+		},
+		SelectedIndex: 0,
+	}
+	m.activeCard = card
+	m.entries = append(m.entries, ChatEntry{
+		Role:    "assistant",
+		Content: "Mensaje con tarjeta interactiva",
+		Card:    card,
+	})
+
+	// 1. Verificar que el card existe
 	if m.activeCard == nil {
-		t.Fatalf("se esperaba activeCard inicializado en StateIdle")
+		t.Fatalf("se esperaba activeCard asignado")
 	}
 	if len(m.activeCard.Options) == 0 {
 		t.Fatalf("activeCard debe tener opciones")
@@ -965,13 +987,24 @@ func TestHeader_ReferenceStyleLayout(t *testing.T) {
 	m.ready = true
 
 	header := m.renderHeader()
-	if !strings.Contains(header, "OzyAssist:") {
-		t.Fatalf("header debe incluir título de OzyAssist al estilo de referencia: %s", header)
+	// Debe contener el código de sesión (#) y la línea divisoria continua (─)
+	if !strings.Contains(header, "#") || !strings.Contains(header, "─") {
+		t.Fatalf("header debe incluir código de sesión (#) y línea divisoria gris (─): %s", header)
 	}
 	for _, r := range header {
 		if r >= 0x1F300 && r <= 0x1F9FF {
 			t.Fatalf("header contiene emojis: %U", r)
 		}
+	}
+
+	// Con un tema real en el chat
+	m.chat = &models.Chat{
+		ID:   "abcdef12-3456",
+		Name: "Exploración de proyectos",
+	}
+	headerWithTopic := m.renderHeader()
+	if !strings.Contains(headerWithTopic, "#abcdef12") || !strings.Contains(headerWithTopic, "Exploración de proyectos") {
+		t.Fatalf("header con tema debe incluir código y tema: %s", headerWithTopic)
 	}
 }
 
@@ -1178,4 +1211,121 @@ func TestSlashNew_CreatesNewChat(t *testing.T) {
 	}
 }
 
+// TestChatHistory_SearchFilter valida el filtrado en vivo por texto en el historial.
+func TestChatHistory_SearchFilter(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateChatHistory
+	m.width = 120
+	m.height = 40
+	m.ready = true
 
+	// Crear lista de chats en memoria
+	m.historyChats = []models.Chat{
+		{ID: "c1111111-aaaa", Name: "Configurar Groq y Mistral", Provider: "groq"},
+		{ID: "c2222222-bbbb", Name: "Refactorizar backend en Go", Provider: "cohere"},
+		{ID: "c3333333-cccc", Name: "Corregir bug de sockets", Provider: "groq"},
+	}
+
+	// Sin filtro deben aparecer los 3
+	filteredAll := m.getFilteredHistoryChats()
+	if len(filteredAll) != 3 {
+		t.Fatalf("esperaba 3 chats sin filtro, obtenido: %d", len(filteredAll))
+	}
+
+	// Filtrar por 'backend'
+	m.historySearchInput.SetValue("backend")
+	filteredBackend := m.getFilteredHistoryChats()
+	if len(filteredBackend) != 1 || filteredBackend[0].ID != "c2222222-bbbb" {
+		t.Fatalf("esperaba 1 chat con filtro 'backend', obtenido: %d", len(filteredBackend))
+	}
+
+	// Filtrar por proveedor 'groq'
+	m.historySearchInput.SetValue("groq")
+	filteredGroq := m.getFilteredHistoryChats()
+	if len(filteredGroq) != 2 {
+		t.Fatalf("esperaba 2 chats con filtro 'groq', obtenido: %d", len(filteredGroq))
+	}
+
+	// Verificar renderizado del buscador
+	view := m.renderChatHistoryView()
+	if !strings.Contains(view, "BUSCAR") {
+		t.Errorf("renderChatHistoryView debe incluir el indicador de búsqueda BUSCAR")
+	}
+}
+
+// TestChat_AutoTopicNaming valida la extracción del tema para nombrar la sesión.
+func TestChat_AutoTopicNaming(t *testing.T) {
+	cases := []struct {
+		prompt   string
+		expected string
+	}{
+		{"ordena mis carpetas de descargas", "Ordena mis carpetas de descargas"},
+		{"/now analiza el rendimiento de la CPU", "Analiza el rendimiento de la CPU"},
+		{"¿cuál es el estado de la memoria RAM?\notra linea ignorada", "¿cuál es el estado de la memoria RAM?"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		topic := extractChatTopic(tc.prompt)
+		if topic != tc.expected {
+			t.Errorf("para prompt '%s' esperaba topic '%s', obtenido: '%s'", tc.prompt, tc.expected, topic)
+		}
+	}
+}
+
+// TestChat_CleanupEmptySessions valida que las sesiones sin mensajes se eliminan.
+func TestChat_CleanupEmptySessions(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_cleanup.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	now := time.Now()
+	// Crear chat vacío (0 mensajes)
+	emptyChat := &models.Chat{
+		ID:        "empty-chat-001",
+		UserID:    db.DefaultUserID(),
+		Name:      "Sesion Vacia",
+		Mode:      "chat",
+		CreatedAt: now,
+	}
+	if err := db.CreateChat(emptyChat); err != nil {
+		t.Fatalf("CreateChat emptyChat: %v", err)
+	}
+
+	// Crear chat con mensajes
+	activeChat := &models.Chat{
+		ID:        "active-chat-002",
+		UserID:    db.DefaultUserID(),
+		Name:      "Sesion Con Mensajes",
+		Mode:      "chat",
+		CreatedAt: now,
+	}
+	if err := db.CreateChat(activeChat); err != nil {
+		t.Fatalf("CreateChat activeChat: %v", err)
+	}
+	if err := db.CreateMessage(&models.Message{
+		ID:              "msg-001",
+		ChatID:          activeChat.ID,
+		Role:            "user",
+		Content:         "Hola Ozy",
+		AttachmentsJSON: "[]",
+		ToolCallsJSON:   "[]",
+		CreatedAt:       now,
+	}); err != nil {
+		t.Fatalf("CreateMessage: %v", err)
+	}
+
+	// Ejecutar CleanupEmptyChats
+	if err := db.CleanupEmptyChats(""); err != nil {
+		t.Fatalf("CleanupEmptyChats falló: %v", err)
+	}
+
+	chats, _ := db.ListChats()
+	if len(chats) != 1 || chats[0].ID != activeChat.ID {
+		t.Fatalf("esperaba únicamente 1 chat activo con mensajes, obtenido: %d", len(chats))
+	}
+}

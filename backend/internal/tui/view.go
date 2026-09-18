@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/db/models"
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
 )
@@ -203,26 +204,54 @@ func (m Model) renderHeader() string {
 		convWidth = 80
 	}
 
-	leftTitle := TopHeaderTitleStyle.Render("OzyAssist: Plan & Workspace")
-	if m.chat != nil && m.chat.Name != "" && m.chat.Name != "TUI Session" {
-		leftTitle = TopHeaderTitleStyle.Render(fmt.Sprintf("OzyAssist: %s", m.chat.Name))
-	}
-
 	sessionHash := "d850815e"
 	if m.chat != nil && len(m.chat.ID) >= 8 {
 		sessionHash = m.chat.ID[:8]
 	} else if m.loopSessionID != "" && len(m.loopSessionID) >= 8 {
 		sessionHash = m.loopSessionID[:8]
 	}
-	rightMeta := TopHeaderMetaStyle.Render(sessionHash)
 
-	spaceCount := convWidth - lipgloss.Width(leftTitle) - lipgloss.Width(rightMeta) - 2
+	codeTag := lipgloss.NewStyle().Foreground(ColorMuted).Bold(true).Render("#" + sessionHash)
+
+	// Verificar si hay un tema real hablado en la conversación
+	hasRealTopic := m.chat != nil && m.chat.Name != "" &&
+		m.chat.Name != "TUI Session" &&
+		m.chat.Name != "Nueva Sesion" &&
+		!strings.HasPrefix(m.chat.Name, "Sesion ")
+
+	var leftPart string
+	if hasRealTopic {
+		topicText := m.chat.Name
+		if len(topicText) > 45 {
+			topicText = topicText[:42] + "..."
+		}
+		topicLabel := lipgloss.NewStyle().Foreground(ColorText).Bold(false).Render(topicText)
+		sep := lipgloss.NewStyle().Foreground(lipgloss.Color("#444444")).Render("·")
+		leftPart = fmt.Sprintf(" %s %s %s", codeTag, sep, topicLabel)
+	} else {
+		leftPart = fmt.Sprintf(" %s", codeTag)
+	}
+
+	// Metadatos de la derecha: proveedor/modelo sutil
+	rightInfo := ""
+	if m.provider != nil {
+		rightInfo = m.provider.Name()
+		if m.chat != nil && m.chat.Model != "" {
+			rightInfo += ":" + m.chat.Model
+		}
+	}
+	rightPart := lipgloss.NewStyle().Foreground(ColorDim).Render(rightInfo + " ")
+
+	spaceCount := convWidth - lipgloss.Width(leftPart) - lipgloss.Width(rightPart)
 	if spaceCount < 1 {
 		spaceCount = 1
 	}
-	headerLine := fmt.Sprintf(" %s%s%s", leftTitle, strings.Repeat(" ", spaceCount), rightMeta)
+	topLine := fmt.Sprintf("%s%s%s", leftPart, strings.Repeat(" ", spaceCount), rightPart)
 
-	return headerLine
+	// Línea divisoria gris/oscura continua
+	divider := lipgloss.NewStyle().Foreground(lipgloss.Color("#2a2a2a")).Render(strings.Repeat("─", convWidth))
+
+	return topLine + "\n" + divider
 }
 
 func (m Model) renderInteractiveCard(card *InteractiveCard, convWidth int) string {
@@ -1321,9 +1350,28 @@ func (m Model) renderProfileEditView() string {
 	return sb.String()
 }
 
-// renderChatHistoryView renderiza la pantalla de historial de conversaciones navegable.
-// Muestra sesiones guardadas en SQLite con fecha, título y número de mensajes.
-// Permite reanudar, eliminar o crear una nueva sesión.
+// getFilteredHistoryChats retorna las sesiones filtradas por el término de búsqueda actual
+func (m Model) getFilteredHistoryChats() []models.Chat {
+	term := strings.ToLower(strings.TrimSpace(m.historySearchInput.Value()))
+	if term == "" {
+		return m.historyChats
+	}
+	var filtered []models.Chat
+	for _, c := range m.historyChats {
+		matchID := strings.Contains(strings.ToLower(c.ID), term)
+		matchName := strings.Contains(strings.ToLower(c.Name), term)
+		matchProv := strings.Contains(strings.ToLower(c.Provider), term)
+		matchModel := strings.Contains(strings.ToLower(c.Model), term)
+		if matchID || matchName || matchProv || matchModel {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// renderChatHistoryView renderiza la pantalla de historial de conversaciones navegable con buscador interactivo.
+// Muestra sesiones guardadas en SQLite con fecha, código y tema si existe.
+// Permite filtrar en tiempo real, reanudar, eliminar o crear una nueva sesión.
 func (m Model) renderChatHistoryView() string {
 	convWidth := m.width
 	if convWidth <= 0 {
@@ -1340,7 +1388,7 @@ func (m Model) renderChatHistoryView() string {
 	var sb strings.Builder
 	sb.WriteString("\n")
 
-	// Título superior
+	// Título superior minimalista
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
 		titleStyle.Render("OZYASIST >> HISTORIAL DE CONVERSACIONES // ZERO-DOCKER KERNEL v2.6"),
@@ -1357,11 +1405,23 @@ func (m Model) renderChatHistoryView() string {
 	listHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [SESIONES GUARDADAS] ──")
 	listSb.WriteString(listHeader + "\n\n")
 
-	// Entradas fijas al final de la lista de chats reales
+	// Barra de búsqueda en vivo
+	searchBadge := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(" BUSCAR ")
+	searchBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorBorder).
+		Padding(0, 1).
+		Width(innerWidth - 8).
+		Render(fmt.Sprintf("%s %s", searchBadge, m.historySearchInput.View()))
+	listSb.WriteString(searchBox + "\n\n")
+
+	filtered := m.getFilteredHistoryChats()
+
+	// Entradas fijas al final de la lista de chats filtrados
 	const extraNew = "[ NUEVA CONVERSACION ]"
 	const extraBack = "[ VOLVER AL MENU PRINCIPAL ]"
 
-	totalItems := len(m.historyChats) + 2 // chats + nueva + volver
+	totalItems := len(filtered) + 2 // chats filtrados + nueva + volver
 
 	for i := 0; i < totalItems; i++ {
 		selected := i == m.chatHistoryIndex
@@ -1369,22 +1429,30 @@ func (m Model) renderChatHistoryView() string {
 		var label string
 		var sublabel string
 
-		if i < len(m.historyChats) {
-			c := m.historyChats[i]
+		if i < len(filtered) {
+			c := filtered[i]
 			dateStr := c.CreatedAt.Format("02 Jan 15:04")
-			name := c.Name
-			if name == "" || name == "TUI Session" {
-				name = "Sesion " + c.ID[:8]
+			shortID := c.ID
+			if len(shortID) >= 8 {
+				shortID = shortID[:8]
 			}
-			if len(name) > 38 {
-				name = name[:35] + "..."
+			hasRealTopic := c.Name != "" && c.Name != "TUI Session" && c.Name != "Nueva Sesion" && !strings.HasPrefix(c.Name, "Sesion ")
+
+			if hasRealTopic {
+				name := c.Name
+				if len(name) > 36 {
+					name = name[:33] + "..."
+				}
+				label = fmt.Sprintf("[%s]  #%s · %s", dateStr, shortID, name)
+			} else {
+				label = fmt.Sprintf("[%s]  #%s", dateStr, shortID)
 			}
-			label = fmt.Sprintf("[%s]  %s", dateStr, name)
-			sublabel = fmt.Sprintf("     ID: %s  |  Proveedor: %s", c.ID[:8], c.Provider)
+
+			sublabel = fmt.Sprintf("     ID: %s  |  Proveedor: %s", shortID, c.Provider)
 			if c.Model != "" {
 				sublabel += "  |  Modelo: " + c.Model
 			}
-		} else if i == len(m.historyChats) {
+		} else if i == len(filtered) {
 			label = extraNew
 			sublabel = "     Inicia una nueva conversacion limpia"
 		} else {
@@ -1394,8 +1462,8 @@ func (m Model) renderChatHistoryView() string {
 
 		if selected {
 			// Verificar si este item está pendiente de confirmación de borrado
-			isConfirmingDelete := i < len(m.historyChats) &&
-				m.historyConfirmDelete == m.historyChats[i].ID
+			isConfirmingDelete := i < len(filtered) &&
+				m.historyConfirmDelete == filtered[i].ID
 
 			cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
 			labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary)
@@ -1423,10 +1491,14 @@ func (m Model) renderChatHistoryView() string {
 		}
 	}
 
-	if totalItems == 2 {
-		// Sólo las entradas fijas (no hay chats guardados aún)
-		emptyMsg := lipgloss.NewStyle().Foreground(ColorMuted).Render("   Sin sesiones previas registradas en la base de datos.")
-		listSb.WriteString(emptyMsg + "\n\n")
+	if len(filtered) == 0 {
+		if len(m.historyChats) == 0 {
+			emptyMsg := lipgloss.NewStyle().Foreground(ColorMuted).Render("   Sin sesiones previas registradas en la base de datos.")
+			listSb.WriteString(emptyMsg + "\n\n")
+		} else {
+			emptyMsg := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("   No se encontraron conversaciones que coincidan con \"%s\".", m.historySearchInput.Value()))
+			listSb.WriteString(emptyMsg + "\n\n")
+		}
 	}
 
 	rendered := border.Render(listSb.String())
@@ -1438,7 +1510,7 @@ func (m Model) renderChatHistoryView() string {
 	if m.historyConfirmDelete != "" {
 		hintStr = " [s] Confirmar Eliminacion  •  [n / Esc] Cancelar "
 	} else {
-		hintStr = " [↑ / ↓] Navegar  •  [Enter] Abrir / Seleccionar  •  [d] Eliminar sesion  •  [Esc] Volver "
+		hintStr = " [Escribe] Filtrar  •  [↑ / ↓] Navegar  •  [Enter] Abrir  •  [d] Eliminar  •  [Esc] Limpiar / Volver "
 	}
 	hints2 := lipgloss.NewStyle().Foreground(ColorMuted).Render(hintStr)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints2))

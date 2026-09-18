@@ -156,6 +156,9 @@ func initCore() (providers.Provider, *models.Chat) {
 		}
 	}
 
+	// Limpiar chats huérfanos sin mensajes antes de iniciar
+	_ = db.CleanupEmptyChats("")
+
 	var activeChat *models.Chat
 	chats, err := db.ListChats()
 	if err == nil && len(chats) > 0 {
@@ -164,7 +167,7 @@ func initCore() (providers.Provider, *models.Chat) {
 		activeChat = &models.Chat{
 			ID:        uuid.NewString(),
 			UserID:    db.DefaultUserID(),
-			Name:      "TUI Session",
+			Name:      "", // Sin tema inicial; el identificador visual será su código #shortID
 			Mode:      "chat",
 			CreatedAt: time.Now(),
 		}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
@@ -81,6 +82,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, textarea.Blink
 				case 1:
 					// Historial de conversaciones
+					_ = db.CleanupEmptyChats("")
 					chats, err := db.ListChats()
 					if err != nil {
 						chats = nil
@@ -88,8 +90,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.historyChats = chats
 					m.chatHistoryIndex = 0
 					m.historyConfirmDelete = ""
+					m.historySearchInput.Reset()
+					m.historySearchInput.Focus()
 					m.state = StateChatHistory
-					return m, nil
+					return m, textinput.Blink
 				case 2:
 					m.state = StateSettingsMenu
 					m.settingsIndex = 0
@@ -125,6 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, textarea.Blink
 				case "2":
+					_ = db.CleanupEmptyChats("")
 					chats, err := db.ListChats()
 					if err != nil {
 						chats = nil
@@ -132,8 +137,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.historyChats = chats
 					m.chatHistoryIndex = 0
 					m.historyConfirmDelete = ""
+					m.historySearchInput.Reset()
+					m.historySearchInput.Focus()
 					m.state = StateChatHistory
-					return m, nil
+					return m, textinput.Blink
 				case "3":
 					m.menuIndex = 2
 					m.state = StateSettingsMenu
@@ -148,10 +155,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.state == StateChatHistory {
-			// totalItems = len(historyChats) + 2 (NUEVA + VOLVER)
-			totalItems := len(m.historyChats) + 2
+			filtered := m.getFilteredHistoryChats()
+			totalItems := len(filtered) + 2
 
-			// Si hay confirmación de borrado activa, solo procesar s/n/Esc
+			// Si hay confirmación de borrado activa, solo procesar confirmación s/n/Esc
 			if m.historyConfirmDelete != "" {
 				switch msg.Type {
 				case tea.KeyEsc:
@@ -161,11 +168,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					switch string(msg.Runes) {
 					case "s", "S", "y", "Y":
 						if err := db.DeleteChat(m.historyConfirmDelete); err == nil {
-							// Recargar lista sin el chat eliminado
+							_ = db.CleanupEmptyChats("")
 							chats, _ := db.ListChats()
 							m.historyChats = chats
-							if m.chatHistoryIndex >= len(m.historyChats)+2 {
-								m.chatHistoryIndex = max(0, len(m.historyChats)+1)
+							filteredNow := m.getFilteredHistoryChats()
+							if m.chatHistoryIndex >= len(filteredNow)+2 {
+								m.chatHistoryIndex = max(0, len(filteredNow)+1)
 							}
 						}
 						m.historyConfirmDelete = ""
@@ -180,7 +188,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// Navegación normal
 			switch msg.Type {
 			case tea.KeyUp:
 				m.chatHistoryIndex--
@@ -188,24 +195,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.chatHistoryIndex = totalItems - 1
 				}
 				return m, nil
+
 			case tea.KeyDown:
 				m.chatHistoryIndex++
 				if m.chatHistoryIndex >= totalItems {
 					m.chatHistoryIndex = 0
 				}
 				return m, nil
+
 			case tea.KeyEsc:
+				if m.historySearchInput.Value() != "" {
+					m.historySearchInput.Reset()
+					m.chatHistoryIndex = 0
+					return m, nil
+				}
 				m.state = StateStartMenu
 				return m, nil
+
 			case tea.KeyCtrlC:
 				return m, tea.Quit
+
 			case tea.KeyEnter:
 				idx := m.chatHistoryIndex
-				if idx < len(m.historyChats) {
-					// Reanudar sesión existente
-					selected := m.historyChats[idx]
+				if idx < len(filtered) {
+					// Reanudar sesión seleccionada
+					selected := filtered[idx]
 					m.chat = &selected
-					// Cargar mensajes históricos
 					msgs, err := db.GetMessages(selected.ID)
 					m.entries = nil
 					if err == nil {
@@ -220,7 +235,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							})
 						}
 					}
-					// Actualizar proveedor si cambió
 					if m.provider != nil {
 						m.chat.Provider = m.provider.Name()
 						if len(m.provider.Models()) > 0 && m.chat.Model == "" {
@@ -236,40 +250,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.viewport.GotoBottom()
 					}
 					return m, textarea.Blink
-				} else if idx == len(m.historyChats) {
-					// Nueva conversación
+				} else if idx == len(filtered) {
+					// Nueva conversación limpia
 					return m.handleNewChat()
 				} else {
 					// Volver al menú principal
 					m.state = StateStartMenu
 					return m, nil
 				}
+
 			case tea.KeyRunes:
-				switch string(msg.Runes) {
-				case "k", "w":
-					m.chatHistoryIndex--
-					if m.chatHistoryIndex < 0 {
-						m.chatHistoryIndex = totalItems - 1
+				s := string(msg.Runes)
+				// Si el buscador está vacío y se presiona 'd' o 'D', activar eliminación
+				if m.historySearchInput.Value() == "" && (s == "d" || s == "D") {
+					if m.chatHistoryIndex < len(filtered) {
+						m.historyConfirmDelete = filtered[m.chatHistoryIndex].ID
 					}
-					return m, nil
-				case "j", "s":
-					m.chatHistoryIndex++
-					if m.chatHistoryIndex >= totalItems {
-						m.chatHistoryIndex = 0
-					}
-					return m, nil
-				case "d", "D":
-					// Solicitar confirmación de borrado (solo para chats reales, no entradas fijas)
-					if m.chatHistoryIndex < len(m.historyChats) {
-						m.historyConfirmDelete = m.historyChats[m.chatHistoryIndex].ID
-					}
-					return m, nil
-				case "q", "Q":
-					m.state = StateStartMenu
 					return m, nil
 				}
+				// Escribir en el buscador interactivo
+				var cmd tea.Cmd
+				m.historySearchInput, cmd = m.historySearchInput.Update(msg)
+				m.chatHistoryIndex = 0
+				return m, cmd
+
+			case tea.KeyBackspace, tea.KeyDelete:
+				var cmd tea.Cmd
+				m.historySearchInput, cmd = m.historySearchInput.Update(msg)
+				m.chatHistoryIndex = 0
+				return m, cmd
+
+			default:
+				var cmd tea.Cmd
+				m.historySearchInput, cmd = m.historySearchInput.Update(msg)
+				return m, cmd
 			}
-			return m, nil
 		}
 
 		if m.state == StateSettingsMenu {
@@ -587,6 +602,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// En reposo (StateIdle), si el campo de texto está vacío, regresar al Menú Principal
 			if strings.TrimSpace(m.textarea.Value()) == "" {
+				if m.chat != nil && m.chat.ID != "" {
+					count, _ := db.CountMessagesByChat(m.chat.ID)
+					if count == 0 {
+						_ = db.DeleteChat(m.chat.ID)
+					}
+				}
+				_ = db.CleanupEmptyChats("")
+
 				m.state = StateStartMenu
 				m.settingsNotice = ""
 				m.activeCard = nil
@@ -1110,7 +1133,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				row := msg.Y - 8
 				if row >= 0 {
 					idx := row / 2
-					totalItems := len(m.historyChats) + 2
+					totalItems := len(m.getFilteredHistoryChats()) + 2
 					if idx >= 0 && idx < totalItems {
 						m.chatHistoryIndex = idx
 					}
@@ -1306,6 +1329,15 @@ func (m *Model) startAgentTurn(prompt string) tea.Cmd {
 			}
 			_ = db.CreateMessage(userMsg)
 			memory.StoreChatMessage(m.chat.UserID, m.chat.ProjectID, m.chat.ID, "user", prompt)
+
+			// Si el chat no tiene un tema personalizado asignado, titularlo automáticamente con el tema del mensaje
+			if m.chat.Name == "" || m.chat.Name == "TUI Session" || m.chat.Name == "Nueva Sesion" || strings.HasPrefix(m.chat.Name, "Sesion ") {
+				topic := extractChatTopic(prompt)
+				if topic != "" {
+					m.chat.Name = topic
+					_ = db.UpdateChat(m.chat)
+				}
+			}
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -1344,6 +1376,15 @@ func (m *Model) startAgentTurnVoice(prompt string) tea.Cmd {
 			}
 			_ = db.CreateMessage(userMsg)
 			memory.StoreChatMessage(m.chat.UserID, m.chat.ProjectID, m.chat.ID, "user", prompt)
+
+			// Si el chat no tiene un tema personalizado asignado, titularlo automáticamente con el tema del mensaje
+			if m.chat.Name == "" || m.chat.Name == "TUI Session" || m.chat.Name == "Nueva Sesion" || strings.HasPrefix(m.chat.Name, "Sesion ") {
+				topic := extractChatTopic(prompt)
+				if topic != "" {
+					m.chat.Name = topic
+					_ = db.UpdateChat(m.chat)
+				}
+			}
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -1415,6 +1456,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		return "[NUEVO CHAT] Sesión nueva creada. Escribe tu primera instrucción."
 
 	case "/history", "/historial", "/chats":
+		_ = db.CleanupEmptyChats("")
 		chats, err := db.ListChats()
 		if err != nil {
 			chats = nil
@@ -1422,6 +1464,8 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		m.historyChats = chats
 		m.chatHistoryIndex = 0
 		m.historyConfirmDelete = ""
+		m.historySearchInput.Reset()
+		m.historySearchInput.Focus()
 		m.state = StateChatHistory
 		m.textarea.Blur()
 		return ""
@@ -2097,11 +2141,21 @@ func SendVoiceStatus(listening bool, status string) {
 
 // handleNewChat crea una nueva sesión de chat en SQLite, limpia el historial
 // en pantalla con un mensaje de bienvenida y activa el estado Idle listo para escribir.
+// Si el chat anterior no contenía ningún mensaje, se elimina de la base de datos.
 func (m Model) handleNewChat() (tea.Model, tea.Cmd) {
+	// Limpiar sesión anterior si estaba vacía
+	if m.chat != nil && m.chat.ID != "" {
+		count, _ := db.CountMessagesByChat(m.chat.ID)
+		if count == 0 {
+			_ = db.DeleteChat(m.chat.ID)
+		}
+	}
+	_ = db.CleanupEmptyChats("")
+
 	newChat := &models.Chat{
 		ID:        uuid.NewString(),
 		UserID:    db.DefaultUserID(),
-		Name:      "Nueva Sesion",
+		Name:      "", // Inicialmente sin tema; el código (#shortID) se muestra hasta que se hable
 		Mode:      "chat",
 		CreatedAt: time.Now(),
 	}
@@ -2114,7 +2168,7 @@ func (m Model) handleNewChat() (tea.Model, tea.Cmd) {
 	_ = db.CreateChat(newChat)
 	m.chat = newChat
 
-	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nPuedes elegir una prioridad con las flechas [↑/↓] o escribir libremente tu orden."
+	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nEscribe libremente tu instrucción o consulta para comenzar."
 
 	m.entries = []ChatEntry{
 		{
@@ -2133,6 +2187,35 @@ func (m Model) handleNewChat() (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 	}
 	return m, textarea.Blink
+}
+
+// extractChatTopic extrae un tema conciso del primer mensaje del usuario para titular la sesión
+func extractChatTopic(prompt string) string {
+	cleaned := strings.TrimSpace(prompt)
+	if cleaned == "" {
+		return ""
+	}
+	// Si es comando slash con argumento (ej: /now haz tal cosa), tomar el argumento
+	if strings.HasPrefix(cleaned, "/") {
+		fields := strings.Fields(cleaned)
+		if len(fields) > 1 {
+			cleaned = strings.TrimSpace(strings.TrimPrefix(cleaned, fields[0]))
+		}
+	}
+	// Tomar la primera línea si hay saltos de línea
+	if idx := strings.IndexByte(cleaned, '\n'); idx != -1 {
+		cleaned = strings.TrimSpace(cleaned[:idx])
+	}
+	if len(cleaned) == 0 {
+		return ""
+	}
+	// Capitalizar la primera letra
+	runes := []rune(cleaned)
+	runes[0] = unicode.ToUpper(runes[0])
+	if len(runes) > 40 {
+		return string(runes[:37]) + "..."
+	}
+	return string(runes)
 }
 
 // max retorna el mayor de dos enteros.
