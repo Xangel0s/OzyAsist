@@ -142,6 +142,37 @@ func (s *Store) GetRecentFacts(ctx context.Context, userID string, limit int) ([
 	return facts, nil
 }
 
+// GetAllFacts recupera todos los hechos persistidos para un usuario
+func (s *Store) GetAllFacts(ctx context.Context, userID string) ([]FactMemory, error) {
+	query := `
+	SELECT id, user_id, category, content, confidence, access_count, last_recalled_at, created_at
+	FROM user_memories
+	WHERE user_id = ?
+	ORDER BY created_at ASC;`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var facts []FactMemory
+	for rows.Next() {
+		var f FactMemory
+		if err := rows.Scan(&f.ID, &f.UserID, &f.Category, &f.Content, &f.Confidence, &f.AccessCount, &f.LastRecalledAt, &f.CreatedAt); err == nil {
+			facts = append(facts, f)
+		}
+	}
+	return facts, nil
+}
+
+// DeleteFact elimina un hecho de la memoria continua por su identificador único
+func (s *Store) DeleteFact(ctx context.Context, factID string) error {
+	query := `DELETE FROM user_memories WHERE id = ?;`
+	_, err := s.db.ExecContext(ctx, query, factID)
+	return err
+}
+
 func sanitizeFTSQuery(raw string) string {
 	words := strings.Fields(raw)
 	var valid []string
