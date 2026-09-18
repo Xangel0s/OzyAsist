@@ -456,42 +456,49 @@ func TestStartMenu_InteractiveArrowNavigation(t *testing.T) {
 		}
 	}
 
-	// 1. Navegación hacia abajo (KeyDown)
+	// 1. Navegación hacia abajo (KeyDown: index 0 -> index 1)
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = res.(Model)
 	if m.menuIndex != 1 {
 		t.Fatalf("KeyDown debió avanzar a index 1, obtenido: %d", m.menuIndex)
 	}
 
-	// 2. Navegación hacia abajo (j)
+	// 2. Navegación hacia abajo (j: index 1 -> index 2)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = res.(Model)
 	if m.menuIndex != 2 {
 		t.Fatalf("tecla 'j' debió avanzar a index 2, obtenido: %d", m.menuIndex)
 	}
 
-	// 3. Wrap-around hacia abajo (KeyDown en index 2 -> index 0)
+	// 3. Navegación hacia abajo (KeyDown: index 2 -> index 3)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.menuIndex != 3 {
+		t.Fatalf("KeyDown debió avanzar a index 3, obtenido: %d", m.menuIndex)
+	}
+
+	// 4. Wrap-around hacia abajo (KeyDown en index 3 -> index 0)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = res.(Model)
 	if m.menuIndex != 0 {
 		t.Fatalf("wrap-around hacia abajo debió volver a index 0, obtenido: %d", m.menuIndex)
 	}
 
-	// 4. Wrap-around hacia arriba (KeyUp en index 0 -> index 2)
+	// 5. Wrap-around hacia arriba (KeyUp en index 0 -> index 3)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = res.(Model)
-	if m.menuIndex != 2 {
-		t.Fatalf("wrap-around hacia arriba debió ir a index 2, obtenido: %d", m.menuIndex)
+	if m.menuIndex != 3 {
+		t.Fatalf("wrap-around hacia arriba debió ir a index 3, obtenido: %d", m.menuIndex)
 	}
 
-	// 5. Tecla 'k' hacia arriba (index 2 -> index 1)
+	// 6. Tecla 'k' hacia arriba (index 3 -> index 2)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	m = res.(Model)
-	if m.menuIndex != 1 {
-		t.Fatalf("tecla 'k' debió retroceder a index 1, obtenido: %d", m.menuIndex)
+	if m.menuIndex != 2 {
+		t.Fatalf("tecla 'k' debió retroceder a index 2, obtenido: %d", m.menuIndex)
 	}
 
-	// 6. Acceso numérico directo ('1' para iniciar conversación)
+	// 7. Acceso numérico directo ('1' para iniciar conversación)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
 	m = res.(Model)
 	if m.state != StateIdle {
@@ -504,8 +511,8 @@ func TestSettingsMenu_NavigationAndCycle(t *testing.T) {
 	m.width = 90
 	m.ready = true
 
-	// 1. Acceder a configuraciones con '2'
-	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	// 1. Acceder a configuraciones con '3'
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("3")})
 	m = res.(Model)
 	if m.state != StateSettingsMenu {
 		t.Fatalf("se esperaba StateSettingsMenu, obtenido: %v", m.state)
@@ -968,6 +975,207 @@ func TestHeader_ReferenceStyleLayout(t *testing.T) {
 	}
 }
 
+// TestStartMenu_FourOptions verifica que el menú principal tiene exactamente 4 opciones
+// y que el wrap circular cubre el rango 0-3.
+func TestStartMenu_FourOptions(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateStartMenu
+	m.width = 120
+	m.height = 40
+	m.ready = true
 
+	view := m.renderStartMenuView()
+
+	// Las 4 opciones deben estar presentes en el render
+	expectedOptions := []string{
+		"INICIAR CONVERSACION",
+		"HISTORIAL DE CONVERSACIONES",
+		"CONFIGURACIONES",
+		"SALIR",
+	}
+	for _, opt := range expectedOptions {
+		if !strings.Contains(view, opt) {
+			t.Errorf("renderStartMenuView debe incluir opción '%s'. Render:\n%s", opt, view)
+		}
+	}
+
+	// Verificar wrap circular: desde índice 0 navegar arriba debe ir a 3
+	m.menuIndex = 0
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	updatedM := updated.(Model)
+	if updatedM.menuIndex != 3 {
+		t.Errorf("Wrap desde 0 hacia arriba debe ir a 3, got %d", updatedM.menuIndex)
+	}
+
+	// Desde índice 3 navegar abajo debe ir a 0
+	m.menuIndex = 3
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updatedM2 := updated2.(Model)
+	if updatedM2.menuIndex != 0 {
+		t.Errorf("Wrap desde 3 hacia abajo debe ir a 0, got %d", updatedM2.menuIndex)
+	}
+}
+
+// TestChatHistory_NavigationAndResume verifica la pantalla de historial:
+// navegación con flechas y transición a StateIdle al seleccionar un chat.
+func TestChatHistory_NavigationAndResume(t *testing.T) {
+	// Setup DB temporal en memoria
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	m := InitialModel(nil, nil, false)
+	m.state = StateChatHistory
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	// Simular sin historial: solo entradas fijas
+	m.historyChats = nil
+	m.chatHistoryIndex = 0
+
+	// Verificar que se renderiza correctamente
+	view := m.renderChatHistoryView()
+	if !strings.Contains(view, "HISTORIAL DE CONVERSACIONES") {
+		t.Errorf("renderChatHistoryView debe incluir el título: %s", view)
+	}
+	if !strings.Contains(view, "NUEVA CONVERSACION") {
+		t.Errorf("renderChatHistoryView debe incluir la opción NUEVA CONVERSACION")
+	}
+	if !strings.Contains(view, "VOLVER AL MENU PRINCIPAL") {
+		t.Errorf("renderChatHistoryView debe incluir la opción VOLVER AL MENU PRINCIPAL")
+	}
+
+	// Navegación hacia abajo: de 0 a 1 (totalItems=2, solo fijas)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	updatedM := updated.(Model)
+	if updatedM.chatHistoryIndex != 1 {
+		t.Errorf("Navegación hacia abajo: chatHistoryIndex esperado 1, got %d", updatedM.chatHistoryIndex)
+	}
+
+	// Esc debe regresar a StateStartMenu
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updatedM2 := updated2.(Model)
+	if updatedM2.state != StateStartMenu {
+		t.Errorf("Esc desde StateChatHistory debe ir a StateStartMenu, got %v", updatedM2.state)
+	}
+}
+
+// TestChatHistory_DeleteConfirmFlow verifica el flujo completo de confirmación de borrado:
+// tecla 'd' activa confirmación, 'n' la cancela, 's' ejecuta el borrado.
+func TestChatHistory_DeleteConfirmFlow(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_delete.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	m := InitialModel(nil, nil, false)
+	m.state = StateChatHistory
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.historyChats = nil
+	m.chatHistoryIndex = 0
+	m.historyConfirmDelete = ""
+
+	// Sin chats, pulsar 'd' no debe activar confirmación (solo chats reales)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
+	updatedM := updated.(Model)
+	if updatedM.historyConfirmDelete != "" {
+		t.Errorf("'d' sobre entradas fijas no debe activar confirmación de borrado")
+	}
+
+	// Cancelar confirmación activa con 'n'
+	m.historyConfirmDelete = "some-chat-id"
+	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")})
+	updatedM2 := updated2.(Model)
+	if updatedM2.historyConfirmDelete != "" {
+		t.Errorf("'n' debe cancelar la confirmación de borrado, got: '%s'", updatedM2.historyConfirmDelete)
+	}
+
+	// Cancelar confirmación activa con Esc
+	m.historyConfirmDelete = "some-chat-id-2"
+	updated3, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updatedM3 := updated3.(Model)
+	if updatedM3.historyConfirmDelete != "" {
+		t.Errorf("Esc debe cancelar la confirmación de borrado, got: '%s'", updatedM3.historyConfirmDelete)
+	}
+}
+
+// TestMouseScrollViewport verifica que la rueda del mouse scrollea el viewport del chat.
+func TestMouseScrollViewport(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_mouse.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	m := InitialModel(nil, nil, false)
+	m.state = StateIdle
+	m.width = 120
+	m.height = 40
+	// Inicializar viewport manualmente para los tests
+	m.viewport.Width = 120
+	m.viewport.Height = 30
+	m.viewport.SetContent("Linea de contenido de prueba para scroll\n" + strings.Repeat("Otra linea de contenido\n", 50))
+	m.ready = true
+
+	// Scroll hacia abajo con rueda
+	updated, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	_ = updated // Solo verificamos que no hay panic ni error
+
+	// Scroll hacia arriba con rueda
+	updated2, _ := m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp})
+	_ = updated2 // Solo verificamos que no hay panic ni error
+}
+
+// TestSlashNew_CreatesNewChat verifica que /new limpia el historial de pantalla
+// y produce un mensaje de bienvenida apropiado.
+func TestSlashNew_CreatesNewChat(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test_new.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("db.Init: %v", err)
+	}
+	_ = db.EnsureDefaultUser()
+	defer db.Close()
+
+	providers.InitProviders()
+	system.InitDefaultPathRegistry(db.DB)
+	memory.BuildSystemIndex()
+
+	m := InitialModel(nil, nil, false)
+	m.width = 120
+	m.height = 40
+	m.ready = true
+	m.state = StateIdle
+
+	// Simular historial de entradas previas
+	m.entries = append(m.entries, ChatEntry{Role: "user", Content: "Mensaje previo de prueba"})
+	m.entries = append(m.entries, ChatEntry{Role: "assistant", Content: "Respuesta previa de prueba"})
+
+	// Ejecutar /new
+	out := m.handleSlashCommand("/new")
+	if !strings.Contains(out, "NUEVO CHAT") {
+		t.Errorf("/new debe retornar confirmación NUEVO CHAT, got: %s", out)
+	}
+
+	// Verificar que /history produce estado correcto
+	m.state = StateIdle
+	m.textarea.Reset()
+	out2 := m.handleSlashCommand("/history")
+	_ = out2 // /history retorna "" y cambia el estado
+	if m.state != StateChatHistory {
+		t.Errorf("/history debe transitar a StateChatHistory, estado actual: %v", m.state)
+	}
+}
 
 

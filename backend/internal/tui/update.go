@@ -60,12 +60,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyUp:
 				m.menuIndex--
 				if m.menuIndex < 0 {
-					m.menuIndex = 2
+					m.menuIndex = 3
 				}
 				return m, nil
 			case tea.KeyDown:
 				m.menuIndex++
-				if m.menuIndex > 2 {
+				if m.menuIndex > 3 {
 					m.menuIndex = 0
 				}
 				return m, nil
@@ -80,11 +80,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, textarea.Blink
 				case 1:
+					// Historial de conversaciones
+					chats, err := db.ListChats()
+					if err != nil {
+						chats = nil
+					}
+					m.historyChats = chats
+					m.chatHistoryIndex = 0
+					m.historyConfirmDelete = ""
+					m.state = StateChatHistory
+					return m, nil
+				case 2:
 					m.state = StateSettingsMenu
 					m.settingsIndex = 0
 					m.settingsNotice = ""
 					return m, nil
-				case 2:
+				case 3:
 					return m, tea.Quit
 				}
 			case tea.KeyCtrlC:
@@ -95,12 +106,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "k", "w":
 					m.menuIndex--
 					if m.menuIndex < 0 {
-						m.menuIndex = 2
+						m.menuIndex = 3
 					}
 					return m, nil
 				case "j", "s":
 					m.menuIndex++
-					if m.menuIndex > 2 {
+					if m.menuIndex > 3 {
 						m.menuIndex = 0
 					}
 					return m, nil
@@ -114,13 +125,148 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, textarea.Blink
 				case "2":
-					m.menuIndex = 1
+					chats, err := db.ListChats()
+					if err != nil {
+						chats = nil
+					}
+					m.historyChats = chats
+					m.chatHistoryIndex = 0
+					m.historyConfirmDelete = ""
+					m.state = StateChatHistory
+					return m, nil
+				case "3":
+					m.menuIndex = 2
 					m.state = StateSettingsMenu
 					m.settingsIndex = 0
 					m.settingsNotice = ""
 					return m, nil
-				case "3", "q", "Q":
+				case "4", "q", "Q":
 					return m, tea.Quit
+				}
+			}
+			return m, nil
+		}
+
+		if m.state == StateChatHistory {
+			// totalItems = len(historyChats) + 2 (NUEVA + VOLVER)
+			totalItems := len(m.historyChats) + 2
+
+			// Si hay confirmación de borrado activa, solo procesar s/n/Esc
+			if m.historyConfirmDelete != "" {
+				switch msg.Type {
+				case tea.KeyEsc:
+					m.historyConfirmDelete = ""
+					return m, nil
+				case tea.KeyRunes:
+					switch string(msg.Runes) {
+					case "s", "S", "y", "Y":
+						if err := db.DeleteChat(m.historyConfirmDelete); err == nil {
+							// Recargar lista sin el chat eliminado
+							chats, _ := db.ListChats()
+							m.historyChats = chats
+							if m.chatHistoryIndex >= len(m.historyChats)+2 {
+								m.chatHistoryIndex = max(0, len(m.historyChats)+1)
+							}
+						}
+						m.historyConfirmDelete = ""
+						return m, nil
+					case "n", "N":
+						m.historyConfirmDelete = ""
+						return m, nil
+					}
+				case tea.KeyCtrlC:
+					return m, tea.Quit
+				}
+				return m, nil
+			}
+
+			// Navegación normal
+			switch msg.Type {
+			case tea.KeyUp:
+				m.chatHistoryIndex--
+				if m.chatHistoryIndex < 0 {
+					m.chatHistoryIndex = totalItems - 1
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.chatHistoryIndex++
+				if m.chatHistoryIndex >= totalItems {
+					m.chatHistoryIndex = 0
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.state = StateStartMenu
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				idx := m.chatHistoryIndex
+				if idx < len(m.historyChats) {
+					// Reanudar sesión existente
+					selected := m.historyChats[idx]
+					m.chat = &selected
+					// Cargar mensajes históricos
+					msgs, err := db.GetMessages(selected.ID)
+					m.entries = nil
+					if err == nil {
+						for _, msg := range msgs {
+							role := msg.Role
+							if role != "user" && role != "assistant" && role != "system" && role != "tool" {
+								role = "system"
+							}
+							m.entries = append(m.entries, ChatEntry{
+								Role:    role,
+								Content: msg.Content,
+							})
+						}
+					}
+					// Actualizar proveedor si cambió
+					if m.provider != nil {
+						m.chat.Provider = m.provider.Name()
+						if len(m.provider.Models()) > 0 && m.chat.Model == "" {
+							m.chat.Model = m.provider.Models()[0]
+						}
+						_ = db.UpdateChat(m.chat)
+					}
+					m.activeCard = nil
+					m.state = StateIdle
+					m.textarea.Focus()
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				} else if idx == len(m.historyChats) {
+					// Nueva conversación
+					return m.handleNewChat()
+				} else {
+					// Volver al menú principal
+					m.state = StateStartMenu
+					return m, nil
+				}
+			case tea.KeyRunes:
+				switch string(msg.Runes) {
+				case "k", "w":
+					m.chatHistoryIndex--
+					if m.chatHistoryIndex < 0 {
+						m.chatHistoryIndex = totalItems - 1
+					}
+					return m, nil
+				case "j", "s":
+					m.chatHistoryIndex++
+					if m.chatHistoryIndex >= totalItems {
+						m.chatHistoryIndex = 0
+					}
+					return m, nil
+				case "d", "D":
+					// Solicitar confirmación de borrado (solo para chats reales, no entradas fijas)
+					if m.chatHistoryIndex < len(m.historyChats) {
+						m.historyConfirmDelete = m.historyChats[m.chatHistoryIndex].ID
+					}
+					return m, nil
+				case "q", "Q":
+					m.state = StateStartMenu
+					return m, nil
 				}
 			}
 			return m, nil
@@ -654,7 +800,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						})
 					}
 					m.promptHistory = append(m.promptHistory, directPrompt)
-					m.historyIndex = len(m.promptHistory)
+					m.promptHistoryIndex = len(m.promptHistory)
 					if m.isWelcomeState() {
 						m.entries = nil
 					}
@@ -732,7 +878,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Si el agente está ocupado y no es un comando slash, encolar el mensaje
 			if m.isBusy() {
 				m.promptHistory = append(m.promptHistory, input)
-				m.historyIndex = len(m.promptHistory)
+				m.promptHistoryIndex = len(m.promptHistory)
 				qPos := m.EnqueuePrompt(input, false)
 				m.textarea.Reset()
 				m.entries = append(m.entries, ChatEntry{
@@ -746,7 +892,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// Registro de historial y entrada normal de usuario (StateIdle)
 			m.promptHistory = append(m.promptHistory, input)
-			m.historyIndex = len(m.promptHistory)
+			m.promptHistoryIndex = len(m.promptHistory)
 			if m.isWelcomeState() {
 				m.entries = nil
 			}
@@ -906,7 +1052,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.isBusy() {
 			m.promptHistory = append(m.promptHistory, prompt)
-			m.historyIndex = len(m.promptHistory)
+			m.promptHistoryIndex = len(m.promptHistory)
 			qPos := m.EnqueuePrompt(prompt, true)
 			m.entries = append(m.entries, ChatEntry{
 				Role:    "system",
@@ -918,7 +1064,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.promptHistory = append(m.promptHistory, prompt)
-		m.historyIndex = len(m.promptHistory)
+		m.promptHistoryIndex = len(m.promptHistory)
 		m.entries = append(m.entries, ChatEntry{
 			Role:    "user",
 			Content: "[VOZ] " + prompt,
@@ -936,6 +1082,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.voiceEnabled = msg.Listening
 		if msg.Status != "" {
 			m.systemStatus = msg.Status
+		}
+		return m, nil
+
+	case tea.MouseMsg:
+		// Scroll con rueda del mouse en el viewport de chat
+		switch msg.Button {
+		case tea.MouseButtonWheelUp:
+			m.viewport.ScrollUp(3)
+			return m, nil
+		case tea.MouseButtonWheelDown:
+			m.viewport.ScrollDown(3)
+			return m, nil
+		case tea.MouseButtonLeft:
+			// Clic izquierdo: seleccionar fila en menús de texto basado en coordenada Y
+			if m.state == StateStartMenu {
+				// Aproximar la fila del menú según la posición Y del clic
+				// Cada ítem ocupa aprox 2 líneas; el menú empieza en la línea ~12 de pantalla
+				row := msg.Y - 12
+				if row >= 0 && row/2 < 4 {
+					m.menuIndex = row / 2
+				}
+				return m, nil
+			}
+			if m.state == StateChatHistory {
+				// Cada ítem ocupa aprox 2 líneas; la lista empieza en la línea ~8
+				row := msg.Y - 8
+				if row >= 0 {
+					idx := row / 2
+					totalItems := len(m.historyChats) + 2
+					if idx >= 0 && idx < totalItems {
+						m.chatHistoryIndex = idx
+					}
+				}
+				return m, nil
+			}
+			if m.state == StateSettingsMenu {
+				row := msg.Y - 8
+				if row >= 0 {
+					idx := row / 2
+					if idx >= 0 && idx < 7 {
+						m.settingsIndex = idx
+					}
+				}
+				return m, nil
+			}
+			// En chat activo con tarjeta: clic sobre opción la selecciona
+			if (m.state == StateIdle || m.state == StateStreaming) && m.activeCard != nil {
+				// Cada opción de la tarjeta ocupa 1 línea; la tarjeta empieza cerca de la parte superior del viewport
+				// Aproximación: si el clic está en la mitad superior de la pantalla, mapear a opciones de la tarjeta
+				optCount := len(m.activeCard.Options)
+				if optCount > 0 {
+					row := msg.Y - (m.height/2 - optCount)
+					if row >= 0 && row < optCount {
+						m.activeCard.SelectedIndex = row
+						m.viewport.SetContent(m.renderConversation())
+					}
+				}
+				return m, nil
+			}
 		}
 		return m, nil
 	}
@@ -1193,12 +1398,31 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /mcp [reload]     - Consulta o recarga los servidores MCP
   /perm [modo]      - Cambia nivel de permisos: autonomous | supervised | sandboxed
   /clear            - Limpia el historial de la pantalla (Ctrl+L)
+  /new              - Crea una nueva sesión de chat limpia sin salir al menú
+  /history          - Abre el historial de conversaciones guardadas
   /exit, /quit      - Cierra la aplicación (Ctrl+C)
 Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] encola si Ozy está ocupado`
 
 	case "/menu", "/inicio", "/start":
 		m.state = StateStartMenu
 		m.settingsNotice = ""
+		m.textarea.Blur()
+		return ""
+
+	case "/new", "/nuevo", "/nueva":
+		_, cmd := m.handleNewChat()
+		_ = cmd
+		return "[NUEVO CHAT] Sesión nueva creada. Escribe tu primera instrucción."
+
+	case "/history", "/historial", "/chats":
+		chats, err := db.ListChats()
+		if err != nil {
+			chats = nil
+		}
+		m.historyChats = chats
+		m.chatHistoryIndex = 0
+		m.historyConfirmDelete = ""
+		m.state = StateChatHistory
 		m.textarea.Blur()
 		return ""
 
@@ -1869,4 +2093,53 @@ func SendVoiceStatus(listening bool, status string) {
 	if currentProgram != nil {
 		currentProgram.Send(VoiceStatusMsg{Listening: listening, Status: status})
 	}
+}
+
+// handleNewChat crea una nueva sesión de chat en SQLite, limpia el historial
+// en pantalla con un mensaje de bienvenida y activa el estado Idle listo para escribir.
+func (m Model) handleNewChat() (tea.Model, tea.Cmd) {
+	newChat := &models.Chat{
+		ID:        uuid.NewString(),
+		UserID:    db.DefaultUserID(),
+		Name:      "Nueva Sesion",
+		Mode:      "chat",
+		CreatedAt: time.Now(),
+	}
+	if m.provider != nil {
+		newChat.Provider = m.provider.Name()
+		if len(m.provider.Models()) > 0 {
+			newChat.Model = m.provider.Models()[0]
+		}
+	}
+	_ = db.CreateChat(newChat)
+	m.chat = newChat
+
+	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nPuedes elegir una prioridad con las flechas [↑/↓] o escribir libremente tu orden."
+
+	m.entries = []ChatEntry{
+		{
+			Role:    "assistant",
+			Content: welcomeContent,
+		},
+	}
+	m.activeCard = nil
+	m.promptHistory = nil
+	m.promptHistoryIndex = -1
+	m.state = StateIdle
+	m.textarea.Focus()
+	m.textarea.Reset()
+	if m.ready {
+		m.viewport.SetContent(m.renderConversation())
+		m.viewport.GotoBottom()
+	}
+	return m, textarea.Blink
+}
+
+// max retorna el mayor de dos enteros.
+// Compatible con Go <1.21 que no tiene builtin max para int.
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

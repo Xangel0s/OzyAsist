@@ -24,6 +24,7 @@ const (
 	StateAPIKeySelect
 	StateAPIKeyInput
 	StateProfileEdit
+	StateChatHistory // Pantalla de historial de conversaciones
 	StateIdle
 	StateThinking
 	StateExecutingTool
@@ -82,7 +83,7 @@ type QueuedPrompt struct {
 
 type Model struct {
 	state           UIState
-	menuIndex       int    // 0: Iniciar Conversacion, 1: Configuraciones, 2: Salir
+	menuIndex       int    // 0: Iniciar Conversacion, 1: Historial, 2: Configuraciones, 3: Salir
 	settingsIndex   int    // Índice en menú de configuraciones
 	providerIndex   int    // Índice en el selector interactivo de proveedores
 	apiKeyIndex     int    // Índice en el selector de claves API
@@ -94,14 +95,19 @@ type Model struct {
 	textarea        textarea.Model
 	spinner         spinner.Model
 	entries         []ChatEntry
-	promptHistory   []string
-	historyIndex    int
+	promptHistory       []string // Historial de prompts escritos por el usuario (para navegación con flechas)
+	promptHistoryIndex  int      // Índice de navegación en el historial de prompts
 	messageQueue    []QueuedPrompt
 	currentStream   string
 	currentThinking string
 	showThinking    bool
 	activeToolName  string
 	activeToolInput string
+
+	// Historial de conversaciones
+	historyChats          []models.Chat // Lista de chats cargada desde SQLite
+	chatHistoryIndex      int           // Fila seleccionada en la pantalla de historial
+	historyConfirmDelete  string        // ID del chat pendiente de confirmación de borrado ("" = ninguno)
 
 	provider        providers.Provider
 	chat            *models.Chat
@@ -181,7 +187,7 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 		permissionLevel: "autonomous",
 		voiceEnabled:    voiceActive,
 		systemStatus:    initStatus,
-		historyIndex:    -1,
+		promptHistoryIndex: -1,
 		activeCard:      welcomeCard,
 		entries: []ChatEntry{
 			{

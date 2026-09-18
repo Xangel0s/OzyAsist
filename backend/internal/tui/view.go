@@ -170,6 +170,9 @@ func (m Model) View() string {
 	if m.state == StateProfileEdit {
 		return m.renderProfileEditView()
 	}
+	if m.state == StateChatHistory {
+		return m.renderChatHistoryView()
+	}
 
 	var sb strings.Builder
 
@@ -761,8 +764,9 @@ func (m Model) renderStartMenuView() string {
 
 	items := []startMenuItem{
 		{"1", "INICIAR CONVERSACION", "Abre la terminal de chat interactivo y control agéntico del sistema"},
-		{"2", "CONFIGURACIONES", "Ajusta proveedor LLM, permisos de seguridad, voz y diagnósticos"},
-		{"3", "SALIR", "Cierra la sesión y apaga el asistente de consola"},
+		{"2", "HISTORIAL DE CONVERSACIONES", "Retomar o eliminar sesiones previas guardadas en SQLite"},
+		{"3", "CONFIGURACIONES", "Ajusta proveedor LLM, permisos de seguridad, voz y diagnósticos"},
+		{"4", "SALIR", "Cierra la sesión y apaga el asistente de consola"},
 	}
 
 	var menuSb strings.Builder
@@ -794,7 +798,7 @@ func (m Model) renderStartMenuView() string {
 	sb.WriteString("\n")
 
 	// 4. Atajos inferiores
-	hintsText := " [↑ / ↓] Navegar  •  [Enter] Seleccionar  •  [1-3] Acceso directo  •  [q] Salir "
+	hintsText := " [↑ / ↓] Navegar  •  [Enter] Seleccionar  •  [1-4] Acceso directo  •  [q] Salir "
 	renderedHints := lipgloss.NewStyle().Foreground(ColorMuted).Render(hintsText)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedHints))
 	sb.WriteString("\n")
@@ -1312,6 +1316,132 @@ func (m Model) renderProfileEditView() string {
 
 	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [Enter] Agregar Directiva y Guardar en SQLite  •  [Esc] Volver a Configuraciones ")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+// renderChatHistoryView renderiza la pantalla de historial de conversaciones navegable.
+// Muestra sesiones guardadas en SQLite con fecha, título y número de mensajes.
+// Permite reanudar, eliminar o crear una nueva sesión.
+func (m Model) renderChatHistoryView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 86 {
+		innerWidth = 86
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// Título superior
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render("OZYASIST >> HISTORIAL DE CONVERSACIONES // ZERO-DOCKER KERNEL v2.6"),
+	))
+	sb.WriteString("\n\n")
+
+	border := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(1, 2)
+
+	var listSb strings.Builder
+	listHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [SESIONES GUARDADAS] ──")
+	listSb.WriteString(listHeader + "\n\n")
+
+	// Entradas fijas al final de la lista de chats reales
+	const extraNew = "[ NUEVA CONVERSACION ]"
+	const extraBack = "[ VOLVER AL MENU PRINCIPAL ]"
+
+	totalItems := len(m.historyChats) + 2 // chats + nueva + volver
+
+	for i := 0; i < totalItems; i++ {
+		selected := i == m.chatHistoryIndex
+
+		var label string
+		var sublabel string
+
+		if i < len(m.historyChats) {
+			c := m.historyChats[i]
+			dateStr := c.CreatedAt.Format("02 Jan 15:04")
+			name := c.Name
+			if name == "" || name == "TUI Session" {
+				name = "Sesion " + c.ID[:8]
+			}
+			if len(name) > 38 {
+				name = name[:35] + "..."
+			}
+			label = fmt.Sprintf("[%s]  %s", dateStr, name)
+			sublabel = fmt.Sprintf("     ID: %s  |  Proveedor: %s", c.ID[:8], c.Provider)
+			if c.Model != "" {
+				sublabel += "  |  Modelo: " + c.Model
+			}
+		} else if i == len(m.historyChats) {
+			label = extraNew
+			sublabel = "     Inicia una nueva conversacion limpia"
+		} else {
+			label = extraBack
+			sublabel = "     Regresa al menu principal"
+		}
+
+		if selected {
+			// Verificar si este item está pendiente de confirmación de borrado
+			isConfirmingDelete := i < len(m.historyChats) &&
+				m.historyConfirmDelete == m.historyChats[i].ID
+
+			cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+			labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary)
+			rowTitle := fmt.Sprintf("%s%s", cursor, labelStyle.Render(" "+label+" "))
+			rowSub := lipgloss.NewStyle().Foreground(ColorText).Render(sublabel)
+
+			listSb.WriteString(rowTitle + "\n" + rowSub + "\n")
+
+			if isConfirmingDelete {
+				confirmBox := lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#181e00")).
+					Background(lipgloss.Color("#f1c40f")).
+					Padding(0, 2).
+					Render("  CONFIRMAR ELIMINACION  [s] Eliminar  [n / Esc] Cancelar  ")
+				listSb.WriteString("     " + confirmBox + "\n")
+			}
+			listSb.WriteString("\n")
+		} else {
+			cursor := "   "
+			labelStyleNormal := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+			rowTitle := fmt.Sprintf("%s%s", cursor, labelStyleNormal.Render(label))
+			rowSub := lipgloss.NewStyle().Foreground(ColorMuted).Render(sublabel)
+			listSb.WriteString(rowTitle + "\n" + rowSub + "\n\n")
+		}
+	}
+
+	if totalItems == 2 {
+		// Sólo las entradas fijas (no hay chats guardados aún)
+		emptyMsg := lipgloss.NewStyle().Foreground(ColorMuted).Render("   Sin sesiones previas registradas en la base de datos.")
+		listSb.WriteString(emptyMsg + "\n\n")
+	}
+
+	rendered := border.Render(listSb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(rendered))
+	sb.WriteString("\n")
+
+	// Atajos
+	var hintStr string
+	if m.historyConfirmDelete != "" {
+		hintStr = " [s] Confirmar Eliminacion  •  [n / Esc] Cancelar "
+	} else {
+		hintStr = " [↑ / ↓] Navegar  •  [Enter] Abrir / Seleccionar  •  [d] Eliminar sesion  •  [Esc] Volver "
+	}
+	hints2 := lipgloss.NewStyle().Foreground(ColorMuted).Render(hintStr)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints2))
 	sb.WriteString("\n")
 
 	return sb.String()

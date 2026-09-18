@@ -209,7 +209,7 @@ func runTUI(prov providers.Provider, chat *models.Chat) {
 	}
 
 	m := tui.InitialModel(prov, chat, voiceReady)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	tui.SetProgram(p)
 
 	engineCtx, cancelEngine := context.WithCancel(context.Background())
