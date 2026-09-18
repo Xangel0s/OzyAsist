@@ -20,6 +20,7 @@ type UIState int
 const (
 	StateStartMenu UIState = iota
 	StateSettingsMenu
+	StateProviderMenu
 	StateIdle
 	StateThinking
 	StateExecutingTool
@@ -68,7 +69,8 @@ type Model struct {
 	state           UIState
 	menuIndex       int    // 0: Iniciar Conversacion, 1: Configuraciones, 2: Salir
 	settingsIndex   int    // 0: Proveedor LLM, 1: Permisos SO, 2: Voz, 3: Rutas, 4: Perfil, 5: Volver
-	settingsNotice  string // Notificacion o resultado de accion en configuraciones
+	providerIndex   int    // Índice en el selector interactivo de proveedores
+	settingsNotice  string // Notificacion o resultado de accion en configuraciones/proveedores
 	viewport        viewport.Model
 	textarea        textarea.Model
 	spinner         spinner.Model

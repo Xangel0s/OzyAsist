@@ -186,6 +186,62 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if m.state == StateProviderMenu {
+			catalog := providers.GetSupportedCatalog()
+			maxIdx := len(catalog) // len(catalog) es la opción "Volver a Configuraciones"
+			switch msg.Type {
+			case tea.KeyUp:
+				m.providerIndex--
+				if m.providerIndex < 0 {
+					m.providerIndex = maxIdx
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.providerIndex++
+				if m.providerIndex > maxIdx {
+					m.providerIndex = 0
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.state = StateSettingsMenu
+				m.settingsNotice = ""
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				return m.handleProviderSelectEnter()
+			case tea.KeyRunes:
+				s := string(msg.Runes)
+				switch s {
+				case "k", "w":
+					m.providerIndex--
+					if m.providerIndex < 0 {
+						m.providerIndex = maxIdx
+					}
+					return m, nil
+				case "j", "s":
+					m.providerIndex++
+					if m.providerIndex > maxIdx {
+						m.providerIndex = 0
+					}
+					return m, nil
+				case "q", "Q":
+					m.state = StateSettingsMenu
+					m.settingsNotice = ""
+					return m, nil
+				default:
+					if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+						idx := int(s[0] - '1')
+						if idx <= maxIdx {
+							m.providerIndex = idx
+							return m.handleProviderSelectEnter()
+						}
+					}
+				}
+			}
+			return m, nil
+		}
+
 		switch msg.Type {
 		case tea.KeyEsc:
 			if m.isBusy() {
@@ -211,6 +267,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 				return m, nil
 			}
+
+			// En reposo (StateIdle), si el campo de texto está vacío, regresar al Menú Principal
+			if strings.TrimSpace(m.textarea.Value()) == "" {
+				m.state = StateStartMenu
+				m.settingsNotice = ""
+				return m, nil
+			}
+			// Si hay texto escrito, limpiar el campo de entrada
+			m.textarea.Reset()
+			return m, nil
 
 		case tea.KeyCtrlC:
 			if m.isBusy() {
@@ -657,46 +723,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 	switch m.settingsIndex {
 	case 0:
-		// 0: Alternar secuencialmente entre proveedores soportados
-		provOrder := []string{"cohere", "groq", "mistral", "openai", "deepseek", "kilocode", "lmstudio", "ollama"}
-		current := ""
+		// 0: Abrir selector interactivo de proveedores LLM
+		m.state = StateProviderMenu
+		m.providerIndex = 0
+		currentProv := ""
 		if m.provider != nil {
-			current = strings.ToLower(m.provider.Name())
+			currentProv = strings.ToLower(m.provider.Name())
 		} else if m.chat != nil && m.chat.Provider != "" {
-			current = strings.ToLower(m.chat.Provider)
+			currentProv = strings.ToLower(m.chat.Provider)
 		}
-		nextIdx := 0
-		for i, p := range provOrder {
-			if p == current {
-				nextIdx = (i + 1) % len(provOrder)
+		for idx, cat := range providers.GetSupportedCatalog() {
+			if strings.ToLower(cat.ID) == currentProv {
+				m.providerIndex = idx
 				break
 			}
 		}
-		target := provOrder[nextIdx]
-		if p, err := providers.Get(target); err == nil && p != nil {
-			m.provider = p
-			defModel := ""
-			if len(p.Models()) > 0 {
-				defModel = p.Models()[0]
-			}
-			if m.chat != nil {
-				m.chat.Provider = target
-				m.chat.Model = defModel
-			}
-			m.settingsNotice = fmt.Sprintf("[OK] Proveedor activo cambiado a: %s (modelo: %s)", strings.ToUpper(target), defModel)
-		} else {
-			key := providers.GetProviderKey(target)
-			if key != "" {
-				providers.RegisterProviderKey(target, key)
-				if p, err := providers.Get(target); err == nil && p != nil {
-					m.provider = p
-				}
-			}
-			if m.chat != nil {
-				m.chat.Provider = target
-			}
-			m.settingsNotice = fmt.Sprintf("[INFO] Proveedor seleccionado: %s (configura su clave con /key %s <api-key>)", strings.ToUpper(target), target)
-		}
+		m.settingsNotice = ""
 		return m, nil
 
 	case 1:
@@ -742,6 +784,51 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		m.state = StateStartMenu
 		m.settingsNotice = ""
 		return m, nil
+	}
+
+	return m, nil
+}
+
+func (m Model) handleProviderSelectEnter() (tea.Model, tea.Cmd) {
+	catalog := providers.GetSupportedCatalog()
+	if m.providerIndex >= len(catalog) {
+		// Opción Volver a Configuraciones
+		m.state = StateSettingsMenu
+		m.settingsNotice = ""
+		return m, nil
+	}
+
+	selected := catalog[m.providerIndex]
+	targetID := selected.ID
+
+	// Obtener o instanciar proveedor de forma segura (con o sin clave)
+	p := providers.EnsureProvider(targetID)
+	if p != nil {
+		m.provider = p
+	}
+
+	defModel := selected.DefaultModel
+	if p != nil && len(p.Models()) > 0 {
+		defModel = p.Models()[0]
+	}
+
+	if m.chat == nil {
+		m.chat = &models.Chat{
+			Provider: targetID,
+			Model:    defModel,
+		}
+	} else {
+		m.chat.Provider = targetID
+		m.chat.Model = defModel
+	}
+
+	hasKey := providers.GetProviderKey(targetID) != ""
+	if selected.IsLocal {
+		m.settingsNotice = fmt.Sprintf("[OK] Proveedor local activado: %s (modelo: %s)", strings.ToUpper(selected.DisplayName), defModel)
+	} else if hasKey {
+		m.settingsNotice = fmt.Sprintf("[OK] Proveedor activo cambiado a: %s (modelo: %s)", strings.ToUpper(selected.DisplayName), defModel)
+	} else {
+		m.settingsNotice = fmt.Sprintf("[SELECCIONADO] Proveedor activo: %s (modelo: %s). Sin clave configurada (puedes usarlo o configurarla con /key %s <api-key>)", strings.ToUpper(selected.DisplayName), defModel, targetID)
 	}
 
 	return m, nil

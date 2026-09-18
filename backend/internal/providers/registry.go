@@ -242,3 +242,128 @@ func InitProviders() {
 	log.Printf("Providers disponibles iniciales: %v", Available())
 }
 
+// ProviderCatalogItem describe un proveedor soportado en el sistema para selectores de interfaz
+type ProviderCatalogItem struct {
+	ID           string   `json:"id"`
+	DisplayName  string   `json:"display_name"`
+	DefaultModel string   `json:"default_model"`
+	Description  string   `json:"description"`
+	IsLocal      bool     `json:"is_local"`
+}
+
+// GetSupportedCatalog devuelve la lista oficial de proveedores soportados en OzyAssist
+func GetSupportedCatalog() []ProviderCatalogItem {
+	return []ProviderCatalogItem{
+		{
+			ID:           "cohere",
+			DisplayName:  "Cohere",
+			DefaultModel: "command-r-plus-08-2024",
+			Description:  "Command R+ / R7B - Multilingüe y agentic reasoning",
+			IsLocal:      false,
+		},
+		{
+			ID:           "groq",
+			DisplayName:  "Groq",
+			DefaultModel: "llama-3.3-70b-versatile",
+			Description:  "Llama 3.3 70B - Ultra rápida inferencia (~800 tok/s)",
+			IsLocal:      false,
+		},
+		{
+			ID:           "mistral",
+			DisplayName:  "Mistral AI",
+			DefaultModel: "mistral-large-latest",
+			Description:  "Mistral Large / Codestral - Código y razonamiento",
+			IsLocal:      false,
+		},
+		{
+			ID:           "openai",
+			DisplayName:  "OpenAI",
+			DefaultModel: "gpt-4o",
+			Description:  "GPT-4o / GPT-4o-mini - Razonamiento multimodal",
+			IsLocal:      false,
+		},
+		{
+			ID:           "deepseek",
+			DisplayName:  "DeepSeek / OpenCode",
+			DefaultModel: "deepseek-chat",
+			Description:  "DeepSeek-V3 / R1 - Especializado en programación",
+			IsLocal:      false,
+		},
+		{
+			ID:           "kilocode",
+			DisplayName:  "KiloCode Gateway",
+			DefaultModel: "anthropic/claude-3.7-sonnet",
+			Description:  "Pasarela universal +500 modelos (Claude, GPT, Gemini)",
+			IsLocal:      false,
+		},
+		{
+			ID:           "lmstudio",
+			DisplayName:  "LM Studio (Local)",
+			DefaultModel: "local-model",
+			Description:  "Servidor local http://localhost:1234/v1 (Sin API Key)",
+			IsLocal:      true,
+		},
+		{
+			ID:           "ollama",
+			DisplayName:  "Ollama (Local)",
+			DefaultModel: "llama3",
+			Description:  "Servidor local http://localhost:11434/v1 (Sin API Key)",
+			IsLocal:      true,
+		},
+	}
+}
+
+// CreateProvider crea una instancia del proveedor dado su identificador y clave (puede ser vacía)
+func CreateProvider(name, key string) Provider {
+	name = strings.ToLower(strings.TrimSpace(name))
+	switch name {
+	case "cohere":
+		return NewCohere(key)
+	case "groq":
+		return NewGroq(key)
+	case "mistral":
+		return NewMistral(key)
+	case "openai":
+		if strings.HasPrefix(key, "sk-GsH") || strings.Contains(key, "opencode") {
+			return NewOpenCode(key)
+		}
+		return NewOpenAI(key)
+	case "deepseek", "opencode":
+		return NewOpenCode(key)
+	case "kilocode", "kilo":
+		return NewKiloCode(key)
+	case "openrouter":
+		return NewOpenRouter(key)
+	case "anthropic":
+		return NewAnthropic(key)
+	case "lmstudio":
+		url := GetLocalHostURL()
+		if !strings.HasSuffix(url, "/v1") {
+			url = strings.TrimRight(url, "/") + "/v1"
+		}
+		return NewLMStudio(url)
+	case "ollama":
+		url := GetLocalHostURL()
+		if !strings.HasSuffix(url, "/v1") {
+			url = strings.TrimRight(url, "/") + "/v1"
+		}
+		return NewOllama(url)
+	default:
+		return nil
+	}
+}
+
+// EnsureProvider obtiene el proveedor registrado o crea una instancia segura con la clave guardada o vacía.
+func EnsureProvider(name string) Provider {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if p, err := Get(name); err == nil && p != nil {
+		return p
+	}
+	key := GetProviderKey(name)
+	p := CreateProvider(name, key)
+	if p != nil {
+		Register(name, p)
+	}
+	return p
+}
+

@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/memory"
+	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
 )
 
@@ -544,26 +545,195 @@ func TestSettingsMenu_NavigationAndCycle(t *testing.T) {
 		t.Fatalf("Enter en permisos debió ciclar el nivel. Antes: %s, Ahora: %s, Notice: %s", initialPerm, m.permissionLevel, m.settingsNotice)
 	}
 
-	// 5. Alternar proveedor LLM (opción 0)
+	// 5. Opción 0 abre el Selector Interactivo de Proveedores
 	m.settingsIndex = 0
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = res.(Model)
-	if m.settingsNotice == "" {
-		t.Fatalf("Enter en proveedor debió generar settingsNotice")
+	if m.state != StateProviderMenu {
+		t.Fatalf("Enter en opción 0 debió pasar a StateProviderMenu, obtenido: %v", m.state)
 	}
 
-	// 6. Salir con Esc regresa a StateStartMenu
+	// 6. En StateProviderMenu, presionar Enter activa el proveedor seleccionado
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.settingsNotice == "" {
+		t.Fatalf("Enter en proveedor debió generar settingsNotice con el proveedor activado")
+	}
+
+	// 7. En StateProviderMenu, Esc regresa a StateSettingsMenu
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateSettingsMenu {
+		t.Fatalf("Esc desde ProviderMenu debió regresar a StateSettingsMenu, obtenido: %v", m.state)
+	}
+
+	// 8. En StateSettingsMenu, Esc regresa a StateStartMenu
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = res.(Model)
 	if m.state != StateStartMenu {
-		t.Fatalf("Esc debió regresar a StateStartMenu, obtenido: %v", m.state)
+		t.Fatalf("Esc desde SettingsMenu debió regresar a StateStartMenu, obtenido: %v", m.state)
 	}
 
-	// 7. Desde chat, /menu regresa a StateStartMenu
+	// 9. Desde chat, /menu regresa a StateStartMenu
 	m.state = StateIdle
 	_ = m.handleSlashCommand("/menu")
 	if m.state != StateStartMenu {
 		t.Fatalf("/menu debió cambiar estado a StateStartMenu, obtenido: %v", m.state)
+	}
+}
+
+func TestOption1_StrictColumnAlignment(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// 1. Verificar alineación en StartMenu
+	startView := m.renderStartMenuView()
+	for i, line := range strings.Split(startView, "\n") {
+		if strings.Contains(line, "[1]") {
+			// La línea no debe tener más de 12 espacios antes de [1] o >>
+			trimmed := strings.TrimLeft(line, " ")
+			leadSpaces := len(line) - len(trimmed)
+			t.Logf("StartMenu line %d: leadSpaces=%d content=%q", i, leadSpaces, line)
+			if leadSpaces > 15 {
+				t.Fatalf("StartMenu: Opción [1] desalineada con sangría excesiva (%d espacios): %q", leadSpaces, line)
+			}
+		}
+	}
+
+	// 2. Verificar alineación en SettingsMenu
+	settingsView := m.renderSettingsMenuView()
+	for i, line := range strings.Split(settingsView, "\n") {
+		if strings.Contains(line, "[1]") {
+			trimmed := strings.TrimLeft(line, " ")
+			leadSpaces := len(line) - len(trimmed)
+			t.Logf("SettingsMenu line %d: leadSpaces=%d content=%q", i, leadSpaces, line)
+			if leadSpaces > 15 {
+				t.Fatalf("SettingsMenu: Opción [1] desalineada con sangría excesiva (%d espacios): %q", leadSpaces, line)
+			}
+		}
+	}
+
+	// 3. Verificar alineación en RetroWelcomeHero
+	heroView := m.renderRetroWelcomeHero(90)
+	for i, line := range strings.Split(heroView, "\n") {
+		if strings.Contains(line, "[1]") {
+			trimmed := strings.TrimLeft(line, " ")
+			leadSpaces := len(line) - len(trimmed)
+			t.Logf("RetroWelcomeHero line %d: leadSpaces=%d content=%q", i, leadSpaces, line)
+			if leadSpaces > 15 {
+				t.Fatalf("RetroWelcomeHero: Opción [1] desalineada con sangría excesiva (%d espacios): %q", leadSpaces, line)
+			}
+		}
+	}
+
+	// 4. Verificar alineación en ProviderSelectView
+	provView := m.renderProviderSelectView()
+	for i, line := range strings.Split(provView, "\n") {
+		if strings.Contains(line, "[1]") {
+			trimmed := strings.TrimLeft(line, " ")
+			leadSpaces := len(line) - len(trimmed)
+			t.Logf("ProviderSelectView line %d: leadSpaces=%d content=%q", i, leadSpaces, line)
+			if leadSpaces > 15 {
+				t.Fatalf("ProviderSelectView: Opción [1] desalineada con sangría excesiva (%d espacios): %q", leadSpaces, line)
+			}
+		}
+	}
+}
+
+func TestProviderSelectMenu_FullFlow(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// Ir a Configuraciones
+	m.state = StateSettingsMenu
+	m.settingsIndex = 0
+
+	// Presionar Enter para entrar al selector de proveedores
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateProviderMenu {
+		t.Fatalf("debió entrar a StateProviderMenu, obtenido: %v", m.state)
+	}
+
+	// Navegar hacia abajo
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.providerIndex != 1 {
+		t.Fatalf("KeyDown debió mover cursor a índice 1, obtenido: %d", m.providerIndex)
+	}
+
+	// Navegar hacia arriba
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = res.(Model)
+	if m.providerIndex != 0 {
+		t.Fatalf("KeyUp debió mover cursor a índice 0, obtenido: %d", m.providerIndex)
+	}
+
+	// Seleccionar segundo proveedor (Groq) con índice 1
+	m.providerIndex = 1 // Groq
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.chat == nil || m.chat.Provider != "groq" {
+		t.Fatalf("proveedor debió ser groq, obtenido: %+v", m.chat)
+	}
+	if !strings.Contains(m.settingsNotice, "GROQ") {
+		t.Fatalf("notice debió mencionar GROQ: %s", m.settingsNotice)
+	}
+
+	// Renderizar la vista de proveedores y comprobar que contiene GROQ y que no tiene emojis
+	view := m.renderProviderSelectView()
+	if !strings.Contains(view, "Groq") || !strings.Contains(view, "Cohere") || !strings.Contains(view, "Volver a Configuraciones") {
+		t.Fatalf("vista de proveedores incompleta: %s", view)
+	}
+
+	for _, r := range view {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("vista de proveedores contiene emoji: %U", r)
+		}
+	}
+
+	// Seleccionar la última opción (Volver a Configuraciones)
+	cat := providers.GetSupportedCatalog()
+	m.providerIndex = len(cat) // Última opción (Volver)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateSettingsMenu {
+		t.Fatalf("Enter en opción Volver debió regresar a StateSettingsMenu, obtenido: %v", m.state)
+	}
+}
+
+func TestChat_EscReturnsToStartMenu(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+	m.state = StateIdle
+
+	// 1. Con textarea vacía, Esc regresa a StateStartMenu
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateStartMenu {
+		t.Fatalf("Esc con textarea vacía debió regresar a StateStartMenu, obtenido: %v", m.state)
+	}
+
+	// 2. Con texto en textarea, primer Esc limpia el texto
+	m.state = StateIdle
+	m.textarea.SetValue("texto de prueba")
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateIdle {
+		t.Fatalf("primer Esc debió mantener StateIdle y limpiar texto")
+	}
+	if m.textarea.Value() != "" {
+		t.Fatalf("primer Esc debió vaciar textarea, valor actual: %q", m.textarea.Value())
+	}
+
+	// Segundo Esc regresa a StateStartMenu
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateStartMenu {
+		t.Fatalf("segundo Esc debió regresar a StateStartMenu, obtenido: %v", m.state)
 	}
 }
 

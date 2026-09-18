@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
 )
 
@@ -156,6 +157,9 @@ func (m Model) View() string {
 	}
 	if m.state == StateSettingsMenu {
 		return m.renderSettingsMenuView()
+	}
+	if m.state == StateProviderMenu {
+		return m.renderProviderSelectView()
 	}
 
 	var sb strings.Builder
@@ -485,9 +489,9 @@ func (m Model) renderFooter() string {
 	} else if len(m.messageQueue) > 0 {
 		hintsText = fmt.Sprintf("  [Enter] Enviar  •  [COLA: %d] (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
 	} else {
-		hintsText = "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [Ctrl+T] Pensamiento  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
+		hintsText = "  [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Pensamiento  •  [/help] Comandos"
 		if m.width > 0 && m.width < 85 {
-			hintsText = "  [Enter] Enviar  •  [Ctrl+T] Pensamiento  •  [/help] Ayuda"
+			hintsText = "  [Enter] Enviar  •  [Esc] Menú  •  [/help] Ayuda"
 		}
 	}
 	hints := MutedStyle.Render(hintsText)
@@ -557,7 +561,8 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 		Padding(0, 1)
 
 	var cardSb strings.Builder
-	cardSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [ACCIONES RAPIDAS & PROMPTS SUGERIDOS] ──\n\n"))
+	cardHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [ACCIONES RAPIDAS & PROMPTS SUGERIDOS] ──")
+	cardSb.WriteString(cardHeader + "\n\n")
 
 	suggestions := []struct {
 		cmd  string
@@ -667,7 +672,8 @@ func (m Model) renderStartMenuView() string {
 	}
 
 	var menuSb strings.Builder
-	menuSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [MENU PRINCIPAL DE CONTROL] ──\n\n"))
+	menuHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [MENU PRINCIPAL DE CONTROL] ──")
+	menuSb.WriteString(menuHeader + "\n\n")
 
 	for i, it := range items {
 		selected := i == m.menuIndex
@@ -766,7 +772,7 @@ func (m Model) renderSettingsMenuView() string {
 	}
 
 	items := []settingRow{
-		{"1", "Proveedor LLM Activo", fmt.Sprintf("%s (%s)", provName, modelName), "Enter: Alternar proveedor (cohere, groq, mistral, openai, local...)"},
+		{"1", "Proveedor LLM Activo", fmt.Sprintf("%s (%s)", provName, modelName), "Enter: Abrir selector interactivo de proveedores (flechas ↑/↓)"},
 		{"2", "Nivel de Permisos SO", m.permissionLevel, "Enter: Alternar nivel (autonomous -> supervised -> sandboxed)"},
 		{"3", "Escucha de Voz Continua", voiceStatus, "Enter: Alternar escucha continua de voz ('Hey Ozy')"},
 		{"4", "Mapa de Rutas en RAM", fmt.Sprintf("%d ubicaciones indexadas", pathCount), "Enter: Inspeccionar detalles de rutas indexadas en RAM"},
@@ -781,7 +787,8 @@ func (m Model) renderSettingsMenuView() string {
 		Padding(1, 2)
 
 	var ssb strings.Builder
-	ssb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [CONFIGURACIONES DE SISTEMA] ──\n\n"))
+	ssbHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [CONFIGURACIONES DE SISTEMA] ──")
+	ssb.WriteString(ssbHeader + "\n\n")
 
 	for i, it := range items {
 		selected := i == m.settingsIndex
@@ -819,7 +826,148 @@ func (m Model) renderSettingsMenuView() string {
 	}
 
 	// Hints
-	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar / Alternar  •  [Esc / 6] Volver ")
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar / Abrir  •  [Esc / 6] Volver ")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderProviderSelectView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 86 {
+		innerWidth = 86
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// Título superior
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render("OZYASIST >> SELECTOR INTERACTIVO DE PROVEEDORES LLM // ZERO-DOCKER"),
+	))
+	sb.WriteString("\n\n")
+
+	// Obtener catálogo oficial
+	catalog := providers.GetSupportedCatalog()
+
+	// Proveedor actual activo en la sesión
+	currentProv := ""
+	if m.provider != nil {
+		currentProv = strings.ToLower(m.provider.Name())
+	} else if m.chat != nil && m.chat.Provider != "" {
+		currentProv = strings.ToLower(m.chat.Provider)
+	}
+
+	var provSb strings.Builder
+	header := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [PROVEEDORES DISPONIBLES EN EL SISTEMA] ──")
+	provSb.WriteString(header + "\n\n")
+
+	// Items: proveedores + opción final de volver
+	totalItems := len(catalog) + 1
+
+	for i := 0; i < totalItems; i++ {
+		selected := i == m.providerIndex
+		if i < len(catalog) {
+			cat := catalog[i]
+			isCurrentActive := strings.ToLower(cat.ID) == currentProv
+			hasKey := providers.GetProviderKey(cat.ID) != ""
+
+			// Tag de estado activo
+			activeTag := ""
+			if isCurrentActive {
+				activeTag = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(" [*] ACTIVO ")
+			}
+
+			// Tag de clave
+			keyTag := ""
+			if cat.IsLocal {
+				keyTag = lipgloss.NewStyle().Foreground(ColorPrimary).Render("[LOCAL]")
+			} else if hasKey {
+				keyTag = lipgloss.NewStyle().Foreground(ColorPrimary).Render("[OK] CLAVE GUARDADA")
+			} else {
+				keyTag = lipgloss.NewStyle().Foreground(ColorMuted).Render("[--] SIN CLAVE")
+			}
+
+			var line string
+			if selected {
+				cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+				numPart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%d]", i+1))
+				namePart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf(" %s (%s) ", cat.DisplayName, cat.DefaultModel))
+				titleLine := fmt.Sprintf("%s%s%s", cursor, numPart, namePart)
+				if activeTag != "" {
+					titleLine += " " + activeTag
+				}
+				if keyTag != "" {
+					titleLine += " " + keyTag
+				}
+				descLine := lipgloss.NewStyle().Foreground(ColorText).Render(fmt.Sprintf("     %s", cat.Description))
+				line = titleLine + "\n" + descLine + "\n\n"
+			} else {
+				cursor := "   "
+				numPart := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%d]", i+1))
+				namePart := lipgloss.NewStyle().Bold(true).Foreground(ColorText).Render(fmt.Sprintf(" %s (%s)", cat.DisplayName, cat.DefaultModel))
+				titleLine := fmt.Sprintf("%s%s%s", cursor, numPart, namePart)
+				if activeTag != "" {
+					titleLine += " " + activeTag
+				}
+				if keyTag != "" {
+					titleLine += " " + keyTag
+				}
+				descLine := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("     %s", cat.Description))
+				line = titleLine + "\n" + descLine + "\n\n"
+			}
+			provSb.WriteString(line)
+		} else {
+			// Opción de retorno a configuraciones
+			var line string
+			if selected {
+				cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+				tag := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%d] Volver a Configuraciones: [ <- REGRESAR ]", i+1))
+				desc := lipgloss.NewStyle().Foreground(ColorText).Render("     Enter o Esc: Regresa al panel de configuraciones general")
+				line = fmt.Sprintf("%s%s\n%s\n", cursor, tag, desc)
+			} else {
+				cursor := "   "
+				tag := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%d] Volver a Configuraciones: [ <- REGRESAR ]", i+1))
+				desc := lipgloss.NewStyle().Foreground(ColorMuted).Render("     Enter o Esc: Regresa al panel de configuraciones general")
+				line = fmt.Sprintf("%s%s\n%s\n", cursor, tag, desc)
+			}
+			provSb.WriteString(line)
+		}
+	}
+
+	provBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(1, 2)
+
+	renderedProv := provBorder.Render(provSb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedProv))
+	sb.WriteString("\n")
+
+	// Cuadro de feedback si hay settingsNotice
+	if m.settingsNotice != "" {
+		noticeBox := lipgloss.NewStyle().
+			Width(innerWidth).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorAccent).
+			Padding(0, 1).
+			Render(m.settingsNotice)
+		sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(noticeBox))
+		sb.WriteString("\n")
+	}
+
+	// Barra inferior de hints
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Activar Proveedor  •  [1-9] Acceso directo  •  [Esc / 9] Volver ")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
 	sb.WriteString("\n")
 
