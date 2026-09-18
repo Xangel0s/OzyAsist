@@ -30,7 +30,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.textarea.SetWidth(msg.Width - 4)
+		taWidth := msg.Width - 14
+		if taWidth < 20 {
+			taWidth = 20
+		}
+		m.textarea.SetWidth(taWidth)
 
 		headerH := lipgloss.Height(m.renderHeader())
 		footerH := lipgloss.Height(m.renderFooter())
@@ -439,11 +443,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if strings.TrimSpace(m.textarea.Value()) == "" {
 				m.state = StateStartMenu
 				m.settingsNotice = ""
+				m.activeCard = nil
 				return m, nil
 			}
 			// Si hay texto escrito, limpiar el campo de entrada
 			m.textarea.Reset()
 			return m, nil
+
+		case tea.KeyUp:
+			if m.state == StateIdle && m.activeCard != nil && strings.TrimSpace(m.textarea.Value()) == "" && len(m.activeCard.Options) > 0 {
+				m.activeCard.SelectedIndex--
+				if m.activeCard.SelectedIndex < 0 {
+					m.activeCard.SelectedIndex = len(m.activeCard.Options) - 1
+				}
+				m.viewport.SetContent(m.renderConversation())
+				return m, nil
+			}
+
+		case tea.KeyDown:
+			if m.state == StateIdle && m.activeCard != nil && strings.TrimSpace(m.textarea.Value()) == "" && len(m.activeCard.Options) > 0 {
+				m.activeCard.SelectedIndex++
+				if m.activeCard.SelectedIndex >= len(m.activeCard.Options) {
+					m.activeCard.SelectedIndex = 0
+				}
+				m.viewport.SetContent(m.renderConversation())
+				return m, nil
+			}
+
+		case tea.KeyTab:
+			if m.state == StateIdle && m.activeCard != nil && len(m.activeCard.Tabs) > 0 && strings.TrimSpace(m.textarea.Value()) == "" {
+				m.activeCard.ActiveTab = (m.activeCard.ActiveTab + 1) % len(m.activeCard.Tabs)
+				m.viewport.SetContent(m.renderConversation())
+				return m, nil
+			}
 
 		case tea.KeyCtrlC:
 			if m.isBusy() {
@@ -473,6 +505,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyCtrlL:
 			m.entries = nil
+			m.activeCard = nil
 			m.viewport.SetContent(m.renderConversation())
 			return m, nil
 
@@ -490,6 +523,56 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			input := strings.TrimSpace(m.textarea.Value())
 			if input == "" {
+				if m.state == StateIdle && m.activeCard != nil && len(m.activeCard.Options) > 0 {
+					selectedOpt := m.activeCard.Options[m.activeCard.SelectedIndex]
+					m.activeCard.IsAnswered = true
+					m.activeCard.Answer = selectedOpt
+					m.activeCard = nil
+
+					// Determinar orden según la opción elegida
+					prompt := selectedOpt
+					if strings.HasPrefix(selectedOpt, "1.") {
+						prompt = "Explorar y ordenar mis proyectos locales"
+					} else if strings.HasPrefix(selectedOpt, "2.") {
+						prompt = "/paths"
+					} else if strings.HasPrefix(selectedOpt, "3.") {
+						m.state = StateSettingsMenu
+						m.settingsNotice = ""
+						return m, nil
+					} else if strings.HasPrefix(selectedOpt, "4.") {
+						// Solo enfocar textarea para redactar orden libre
+						m.viewport.SetContent(m.renderConversation())
+						return m, textarea.Blink
+					}
+
+					if strings.HasPrefix(prompt, "/") {
+						out := m.handleSlashCommand(prompt)
+						m.entries = append(m.entries, ChatEntry{
+							Role:    "user",
+							Content: prompt,
+						})
+						if out != "" {
+							m.entries = append(m.entries, ChatEntry{
+								Role:    "system",
+								Content: out,
+							})
+						}
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+						return m, nil
+					}
+
+					m.entries = append(m.entries, ChatEntry{
+						Role:    "user",
+						Content: prompt,
+					})
+					m.state = StateThinking
+					m.systemStatus = "Procesando razonamiento agéntico..."
+					m.currentStream = ""
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, m.startAgentTurn(prompt)
+				}
 				return m, nil
 			}
 

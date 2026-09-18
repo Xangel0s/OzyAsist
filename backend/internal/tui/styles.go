@@ -114,4 +114,50 @@ var (
 
 	MenuItemDescStyle = lipgloss.NewStyle().
 				Foreground(ColorMuted)
+
+	// Top Header Reference Style
+	TopHeaderTitleStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorPrimary)
+
+	TopHeaderMetaStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted)
+
+	// Interactive Card Reference Style (Plan / Decision UI)
+	CardContainerStyle = lipgloss.NewStyle().
+				Background(ColorMessageBg).
+				BorderLeft(true).
+				BorderStyle(lipgloss.NormalBorder()).
+				BorderLeftForeground(ColorPrimary).
+				Padding(0, 1)
+
+	CardTabActiveStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorPrimary)
+
+	CardTabInactiveStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted)
+
+	CardQuestionStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(ColorText)
+
+	CardOptionSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#ffffff")).
+				Background(lipgloss.Color("#252820")).
+				Padding(0, 1)
+
+	CardOptionNormalStyle = lipgloss.NewStyle().
+				Foreground(ColorText).
+				Padding(0, 1)
+
+	CardHintsStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted)
+
+	InputBadgeStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#181e00")).
+				Background(ColorPrimary).
+				Padding(0, 1)
 )

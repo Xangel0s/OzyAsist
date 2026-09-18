@@ -893,6 +893,81 @@ func TestProviderMenu_EditKeyShortcut(t *testing.T) {
 	}
 }
 
+func TestInteractiveCard_NavigationAndSelection(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+	m.state = StateIdle
+
+	// 1. Verificar que el card inicial existe
+	if m.activeCard == nil {
+		t.Fatalf("se esperaba activeCard inicializado en StateIdle")
+	}
+	if len(m.activeCard.Options) == 0 {
+		t.Fatalf("activeCard debe tener opciones")
+	}
+
+	// 2. Probar navegación KeyDown
+	initialIdx := m.activeCard.SelectedIndex
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.activeCard.SelectedIndex != initialIdx+1 {
+		t.Fatalf("KeyDown debió avanzar SelectedIndex, antes: %d, ahora: %d", initialIdx, m.activeCard.SelectedIndex)
+	}
+
+	// 3. Probar navegación KeyUp
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = res.(Model)
+	if m.activeCard.SelectedIndex != initialIdx {
+		t.Fatalf("KeyUp debió retroceder SelectedIndex, esperado: %d, obtenido: %d", initialIdx, m.activeCard.SelectedIndex)
+	}
+
+	// 4. Probar cambio de pestaña con KeyTab
+	initTab := m.activeCard.ActiveTab
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = res.(Model)
+	if m.activeCard.ActiveTab != (initTab+1)%len(m.activeCard.Tabs) {
+		t.Fatalf("KeyTab debió avanzar pestaña de la tarjeta")
+	}
+
+	// 5. Verificar renderizado del card
+	conv := m.renderConversation()
+	if !strings.Contains(conv, "Prioridad") || !strings.Contains(conv, ">>") {
+		t.Fatalf("renderConversation debe contener las tabs y la opción activa del card: %s", conv)
+	}
+
+	// Verificar ausencia de emojis
+	for _, r := range conv {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("renderConversation contiene emojis: %U", r)
+		}
+	}
+
+	// 6. Seleccionar opción 4 (Escribir instrucción libre) con Enter
+	m.activeCard.SelectedIndex = 3 // Opción 4
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.activeCard != nil {
+		t.Fatalf("Enter en opción libre debió limpiar activeCard")
+	}
+}
+
+func TestHeader_ReferenceStyleLayout(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	header := m.renderHeader()
+	if !strings.Contains(header, "OzyAssist:") {
+		t.Fatalf("header debe incluir título de OzyAssist al estilo de referencia: %s", header)
+	}
+	for _, r := range header {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("header contiene emojis: %U", r)
+		}
+	}
+}
+
 
 
 

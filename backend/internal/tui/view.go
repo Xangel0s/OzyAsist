@@ -195,11 +195,90 @@ func (m Model) View() string {
 }
 
 func (m Model) renderHeader() string {
-	asciiLogo := lipgloss.NewStyle().Foreground(lipgloss.Color("#d1f107")).Bold(true).Render("   .··'¯'··.   \n  :  .-.  :  OZY\n  :  '-'  :  ASSIST\n   '··._.··'   ")
-	if m.width > 0 {
-		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(asciiLogo)
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
 	}
-	return asciiLogo
+
+	leftTitle := TopHeaderTitleStyle.Render("OzyAssist: Plan & Workspace")
+	if m.chat != nil && m.chat.Name != "" && m.chat.Name != "TUI Session" {
+		leftTitle = TopHeaderTitleStyle.Render(fmt.Sprintf("OzyAssist: %s", m.chat.Name))
+	}
+
+	sessionHash := "d850815e"
+	if m.chat != nil && len(m.chat.ID) >= 8 {
+		sessionHash = m.chat.ID[:8]
+	} else if m.loopSessionID != "" && len(m.loopSessionID) >= 8 {
+		sessionHash = m.loopSessionID[:8]
+	}
+	rightMeta := TopHeaderMetaStyle.Render(sessionHash)
+
+	spaceCount := convWidth - lipgloss.Width(leftTitle) - lipgloss.Width(rightMeta) - 2
+	if spaceCount < 1 {
+		spaceCount = 1
+	}
+	headerLine := fmt.Sprintf(" %s%s%s", leftTitle, strings.Repeat(" ", spaceCount), rightMeta)
+
+	return headerLine
+}
+
+func (m Model) renderInteractiveCard(card *InteractiveCard, convWidth int) string {
+	if card == nil {
+		return ""
+	}
+	innerWidth := convWidth - 6
+	if innerWidth < 30 {
+		innerWidth = 30
+	}
+
+	var cardSb strings.Builder
+
+	// 1. Tabs superiores (ej: Prioridad  Acciones  Configurar)
+	if len(card.Tabs) > 0 {
+		var tabParts []string
+		for idx, tab := range card.Tabs {
+			if idx == card.ActiveTab {
+				tabParts = append(tabParts, CardTabActiveStyle.Render(tab))
+			} else {
+				tabParts = append(tabParts, CardTabInactiveStyle.Render(tab))
+			}
+		}
+		cardSb.WriteString(strings.Join(tabParts, "   "))
+		cardSb.WriteString("\n\n")
+	}
+
+	// 2. Pregunta o Título del paso
+	if card.Question != "" {
+		cardSb.WriteString(CardQuestionStyle.Render(card.Question))
+		cardSb.WriteString("\n\n")
+	}
+
+	// 3. Opciones seleccionables con fila destacada
+	for idx, opt := range card.Options {
+		isSelected := idx == card.SelectedIndex && !card.IsAnswered && m.activeCard == card
+		if isSelected {
+			cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+			optText := CardOptionSelectedStyle.Render(fmt.Sprintf(" %s ", opt))
+			cardSb.WriteString(fmt.Sprintf("%s%s\n", cursor, optText))
+		} else if card.IsAnswered && opt == card.Answer {
+			check := lipgloss.NewStyle().Bold(true).Foreground(ColorSuccess).Render(" ✓ ")
+			optText := lipgloss.NewStyle().Bold(true).Foreground(ColorSuccess).Render(opt)
+			cardSb.WriteString(fmt.Sprintf("%s%s\n", check, optText))
+		} else {
+			cursor := "   "
+			cardSb.WriteString(fmt.Sprintf("%s%s\n", cursor, CardOptionNormalStyle.Render(opt)))
+		}
+	}
+	cardSb.WriteString("\n")
+
+	// 4. Barra inferior de atajos de la tarjeta
+	if !card.IsAnswered && m.activeCard == card {
+		hints := CardHintsStyle.Render(" [Tab] Fase  •  [↑ / ↓] Seleccionar  •  [Enter] Confirmar  •  [Esc] Omitir ")
+		cardSb.WriteString(hints)
+		cardSb.WriteString("\n")
+	}
+
+	return CardContainerStyle.Width(innerWidth).Render(cardSb.String())
 }
 
 func (m Model) renderModelInfoLine() string {
@@ -345,6 +424,15 @@ func (m Model) renderConversation() string {
 				}
 			}
 
+			// Renderizar tarjeta interactiva (Plan / Decisión con Tabs y Opciones) si existe
+			if entry.Card != nil {
+				renderedCard := m.renderInteractiveCard(entry.Card, convWidth)
+				if renderedCard != "" {
+					sb.WriteString(renderedCard)
+					sb.WriteString("\n\n")
+				}
+			}
+
 		case "system":
 			maxSysW := convWidth - 4
 			if maxSysW < 20 {
@@ -463,14 +551,16 @@ func (m Model) renderFooter() string {
 		sb.WriteString("\n")
 	}
 
-	// Caja de texto con borde neon o ámbar (si está encolando órdenes)
+	// Caja de texto con badge de marca OZY
 	borderStyle := InputBorderStyle
 	if m.state != StateIdle {
 		borderStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(ColorQueue)
 	}
-	sb.WriteString(borderStyle.Render(m.textarea.View()))
+	badge := InputBadgeStyle.Render(" OZY ")
+	inputContent := fmt.Sprintf("%s %s", badge, m.textarea.View())
+	sb.WriteString(borderStyle.Render(inputContent))
 	sb.WriteString("\n")
 
 	// Información del modelo abajo de la barra de chat
@@ -486,6 +576,8 @@ func (m Model) renderFooter() string {
 		}
 	} else if len(m.messageQueue) > 0 {
 		hintsText = fmt.Sprintf("  [Enter] Enviar  •  [COLA: %d] (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
+	} else if m.activeCard != nil {
+		hintsText = "  [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
 	} else {
 		hintsText = "  [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Pensamiento  •  [/help] Comandos"
 		if m.width > 0 && m.width < 85 {
