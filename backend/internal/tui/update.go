@@ -233,6 +233,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = StateSettingsMenu
 					m.settingsNotice = ""
 					return m, nil
+				case "e", "E":
+					if m.providerIndex < len(catalog) {
+						cat := catalog[m.providerIndex]
+						if !cat.IsLocal {
+							m.apiKeyTarget = cat.ID
+							m.apiKeyInput.SetValue("")
+							m.apiKeyInput.Focus()
+							m.state = StateAPIKeyInput
+							m.settingsNotice = ""
+							return m, textinput.Blink
+						} else {
+							m.settingsNotice = fmt.Sprintf("[INFO] %s es un servidor local y no requiere clave API.", cat.DisplayName)
+							return m, nil
+						}
+					}
+					return m, nil
 				default:
 					if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
 						idx := int(s[0] - '1')

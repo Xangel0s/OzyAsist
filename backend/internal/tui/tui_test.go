@@ -855,6 +855,44 @@ func TestProfileEditor_InteractiveFlow(t *testing.T) {
 	}
 }
 
+func TestModelInfo_RenderedBelowChatBarInFooter(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+	m.state = StateIdle
+
+	footerView := m.renderFooter()
+	if !strings.Contains(footerView, "[LLM:") || !strings.Contains(footerView, "Permisos:") || !strings.Contains(footerView, "[VOZ:") {
+		t.Fatalf("renderFooter debe incluir la información del modelo abajo de la barra de chat: %s", footerView)
+	}
+
+	headerView := m.renderHeader()
+	if strings.Contains(headerView, "[LLM:") {
+		t.Fatalf("renderHeader no debe duplicar las etiquetas del modelo en la parte superior: %s", headerView)
+	}
+}
+
+func TestProviderMenu_EditKeyShortcut(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// Ir a selector de proveedores
+	m.state = StateProviderMenu
+	m.providerIndex = 0 // Cohere
+
+	// Presionar 'e' para editar/reemplazar clave
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})
+	m = res.(Model)
+
+	if m.state != StateAPIKeyInput {
+		t.Fatalf("tecla 'e' en ProviderMenu debió abrir StateAPIKeyInput, obtenido: %v", m.state)
+	}
+	if m.apiKeyTarget != "cohere" {
+		t.Fatalf("apiKeyTarget debió ser cohere, obtenido: %s", m.apiKeyTarget)
+	}
+}
+
 
 
 

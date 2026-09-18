@@ -181,15 +181,28 @@ func (m Model) View() string {
 	sb.WriteString(m.viewport.View())
 	sb.WriteString("\n")
 
-	// 3. Footer inferior (Status + Input box + Hints)
+	// 3. Footer inferior (Status + Input box + Info modelo + Hints)
 	sb.WriteString(m.renderFooter())
 
-	return sb.String()
+	result := sb.String()
+	if m.height > 0 {
+		lines := strings.Split(result, "\n")
+		if len(lines) > m.height {
+			result = strings.Join(lines[:m.height], "\n")
+		}
+	}
+	return result
 }
 
 func (m Model) renderHeader() string {
 	asciiLogo := lipgloss.NewStyle().Foreground(lipgloss.Color("#d1f107")).Bold(true).Render("   .··'¯'··.   \n  :  .-.  :  OZY\n  :  '-'  :  ASSIST\n   '··._.··'   ")
+	if m.width > 0 {
+		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(asciiLogo)
+	}
+	return asciiLogo
+}
 
+func (m Model) renderModelInfoLine() string {
 	modelName := "desconocido"
 	if m.chat != nil && m.chat.Model != "" {
 		modelName = m.chat.Model
@@ -242,13 +255,11 @@ func (m Model) renderHeader() string {
 		tags = append(tags, " ", QueueBadgeStyle.Render(queueText))
 	}
 	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, tags...)
-	
-	header := lipgloss.JoinVertical(lipgloss.Center, asciiLogo, statsLine)
-	
+
 	if m.width > 0 {
-		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(header)
+		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(statsLine)
 	}
-	return header
+	return statsLine
 }
 
 func (m Model) renderConversation() string {
@@ -435,20 +446,22 @@ func (m Model) renderFooter() string {
 	var sb strings.Builder
 
 	// Línea de estado con spinner y contador de cola si aplica
-	statusLine := m.systemStatus
-	if m.state != StateIdle {
-		statusLine = fmt.Sprintf("%s %s", m.spinner.View(), m.systemStatus)
+	if strings.TrimSpace(m.systemStatus) != "" || m.state != StateIdle {
+		statusLine := m.systemStatus
+		if m.state != StateIdle {
+			statusLine = fmt.Sprintf("%s %s", m.spinner.View(), m.systemStatus)
+		}
+		if len(m.messageQueue) > 0 {
+			statusLine = fmt.Sprintf("%s  •  [COLA: %d en espera]", statusLine, len(m.messageQueue))
+		}
+		maxStatusW := m.width - 4
+		if maxStatusW > 10 && len([]rune(statusLine)) > maxStatusW {
+			runes := []rune(statusLine)
+			statusLine = string(runes[:maxStatusW-3]) + "..."
+		}
+		sb.WriteString(StatusBarStyle.Render(statusLine))
+		sb.WriteString("\n")
 	}
-	if len(m.messageQueue) > 0 {
-		statusLine = fmt.Sprintf("%s  •  [COLA: %d en espera]", statusLine, len(m.messageQueue))
-	}
-	maxStatusW := m.width - 4
-	if maxStatusW > 10 && len([]rune(statusLine)) > maxStatusW {
-		runes := []rune(statusLine)
-		statusLine = string(runes[:maxStatusW-3]) + "..."
-	}
-	sb.WriteString(StatusBarStyle.Render(statusLine))
-	sb.WriteString("\n")
 
 	// Caja de texto con borde neon o ámbar (si está encolando órdenes)
 	borderStyle := InputBorderStyle
@@ -458,6 +471,10 @@ func (m Model) renderFooter() string {
 			BorderForeground(ColorQueue)
 	}
 	sb.WriteString(borderStyle.Render(m.textarea.View()))
+	sb.WriteString("\n")
+
+	// Información del modelo abajo de la barra de chat
+	sb.WriteString(m.renderModelInfoLine())
 	sb.WriteString("\n")
 
 	// Hints de atajos contextuales
@@ -476,7 +493,11 @@ func (m Model) renderFooter() string {
 		}
 	}
 	hints := MutedStyle.Render(hintsText)
-	sb.WriteString(hints)
+	if m.width > 0 {
+		sb.WriteString(lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(hints))
+	} else {
+		sb.WriteString(hints)
+	}
 
 	return sb.String()
 }
@@ -949,7 +970,7 @@ func (m Model) renderProviderSelectView() string {
 	}
 
 	// Barra inferior de hints
-	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Activar Proveedor  •  [1-9] Acceso directo  •  [Esc / 9] Volver ")
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Activar Proveedor  •  [e] Modificar Clave  •  [Esc / 9] Volver ")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
 	sb.WriteString("\n")
 
