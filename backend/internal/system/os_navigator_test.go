@@ -225,3 +225,19 @@ func TestOSNavigator_LaunchCalculator(t *testing.T) {
 	_ = exec.Command("powershell", "-NoProfile", "-Command", "Stop-Process -Name CalculatorApp, calc -Force -ErrorAction SilentlyContinue").Run()
 }
 
+func TestOSNavigator_DetectDialogs(t *testing.T) {
+	nav := NewWindowsNavigator()
+	ctx := context.Background()
+
+	dialogs, err := nav.DetectDialogs(ctx, "")
+	if err != nil {
+		t.Fatalf("DetectDialogs failed: %v", err)
+	}
+
+	t.Logf("Detected dialogs count: %d", len(dialogs))
+	for _, d := range dialogs {
+		t.Logf("Dialog: Title=%q Class=%q PID=%d Process=%q IsError=%v Severity=%s Message=%q Buttons=%v",
+			d.Title, d.ClassName, d.ProcessID, d.ProcessName, d.IsError, d.Severity, d.Message, d.Buttons)
+	}
+}
+

@@ -102,4 +102,18 @@ type OSNavigator interface {
 	LaunchApplication(ctx context.Context, target string, args []string) error
 	FocusWindow(ctx context.Context, hwnd uintptr) error
 	KillProcess(ctx context.Context, pid uint32, force bool) error
+	DetectDialogs(ctx context.Context, appFilter string) ([]DialogInfo, error)
+}
+
+// DialogInfo describe un cuadro de diálogo emergente o modal detectado en el sistema
+type DialogInfo struct {
+	Handle      uintptr  `json:"handle"`
+	Title       string   `json:"title"`
+	ClassName   string   `json:"class_name"`
+	ProcessID   uint32   `json:"process_id"`
+	ProcessName string   `json:"process_name,omitempty"`
+	Message     string   `json:"message"`
+	Buttons     []string `json:"buttons,omitempty"`
+	IsError     bool     `json:"is_error"`
+	Severity    string   `json:"severity"` // "ERROR", "WARNING", "INFO"
 }

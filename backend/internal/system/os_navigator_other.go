@@ -139,3 +139,7 @@ func (u *UnixNavigator) FocusWindow(_ context.Context, _ uintptr) error {
 func (u *UnixNavigator) KillProcess(_ context.Context, _ uint32, _ bool) error {
 	return nil
 }
+
+func (u *UnixNavigator) DetectDialogs(_ context.Context, _ string) ([]DialogInfo, error) {
+	return []DialogInfo{}, nil
+}

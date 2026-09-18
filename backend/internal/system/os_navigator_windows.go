@@ -22,8 +22,10 @@ import (
 var (
 	modUser32               = syscall.NewLazyDLL("user32.dll")
 	procEnumWindows         = modUser32.NewProc("EnumWindows")
+	procEnumChildWindows    = modUser32.NewProc("EnumChildWindows")
 	procGetWindowTextW      = modUser32.NewProc("GetWindowTextW")
 	procGetWindowTextLength = modUser32.NewProc("GetWindowTextLengthW")
+	procGetClassNameW       = modUser32.NewProc("GetClassNameW")
 	procIsWindowVisible     = modUser32.NewProc("IsWindowVisible")
 	procGetWindowThreadPID  = modUser32.NewProc("GetWindowThreadProcessId")
 	procSetForegroundWindow = modUser32.NewProc("SetForegroundWindow")
@@ -33,9 +35,13 @@ var (
 	procAttachThreadInput   = modUser32.NewProc("AttachThreadInput")
 	procSwitchToThisWindow  = modUser32.NewProc("SwitchToThisWindow")
 	procGetForegroundWindow = modUser32.NewProc("GetForegroundWindow")
+	procOpenInputDesktop    = modUser32.NewProc("OpenInputDesktop")
 
-	modKernel32             = syscall.NewLazyDLL("kernel32.dll")
-	procGetCurrentThreadId  = modKernel32.NewProc("GetCurrentThreadId")
+	modKernel32                    = syscall.NewLazyDLL("kernel32.dll")
+	procGetCurrentThreadId         = modKernel32.NewProc("GetCurrentThreadId")
+	procOpenProcess                = modKernel32.NewProc("OpenProcess")
+	procQueryFullProcessImageNameW = modKernel32.NewProc("QueryFullProcessImageNameW")
+	procCloseHandle                = modKernel32.NewProc("CloseHandle")
 
 	modShell32              = syscall.NewLazyDLL("shell32.dll")
 	procShellExecuteW       = modShell32.NewProc("ShellExecuteW")
@@ -241,7 +247,7 @@ func (w *WindowsNavigator) GetInstalledSoftware(_ context.Context, filter string
 }
 
 // withInteractiveDesktop asegura que la llamada Win32 se ejecute en el hilo
-// atado al escritorio interactivo del usuario actual ("Default").
+// atado al escritorio interactivo del usuario actual ("Default" o activo).
 func withInteractiveDesktop(fn func()) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -254,8 +260,12 @@ func withInteractiveDesktop(fn func()) {
 	curTid, _, _ := procGetCurrentThreadId.Call()
 	hOrigDesk, _, _ := procGetThreadDesktop.Call(curTid)
 
-	deskNamePtr := uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Default")))
-	hDesk, _, _ := procOpenDesktopW.Call(deskNamePtr, 0, 0, 0x01FF)
+	// Intentar obtener el escritorio interactivo donde el usuario está recibiendo input
+	hDesk, _, _ := procOpenInputDesktop.Call(0, 0, 0x01FF)
+	if hDesk == 0 {
+		deskNamePtr := uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("Default")))
+		hDesk, _, _ = procOpenDesktopW.Call(deskNamePtr, 0, 0, 0x01FF)
+	}
 
 	if hDesk != 0 {
 		procSetThreadDesktop.Call(hDesk)
@@ -269,6 +279,28 @@ func withInteractiveDesktop(fn func()) {
 
 	fn()
 }
+
+func getProcessName(pid uint32) string {
+	if pid == 0 {
+		return ""
+	}
+	const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+	hProc, _, _ := procOpenProcess.Call(PROCESS_QUERY_LIMITED_INFORMATION, 0, uintptr(pid))
+	if hProc == 0 {
+		return ""
+	}
+	defer procCloseHandle.Call(hProc)
+
+	var buf [1024]uint16
+	size := uint32(len(buf))
+	ret, _, _ := procQueryFullProcessImageNameW.Call(hProc, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)))
+	if ret != 0 && size > 0 {
+		fullPath := syscall.UTF16ToString(buf[:size])
+		return filepath.Base(fullPath)
+	}
+	return ""
+}
+
 
 // GetActiveWindows enumera las ventanas visibles en el escritorio usando user32.dll
 func (w *WindowsNavigator) GetActiveWindows(_ context.Context) ([]WindowInfo, error) {
@@ -816,3 +848,152 @@ func copyFileOrDir(src, dst string) error {
 	_, err = io.Copy(out, in)
 	return err
 }
+
+// DetectDialogs inspecciona ventanas emergentes, diálogos modales (#32770) y mensajes de error
+func (w *WindowsNavigator) DetectDialogs(_ context.Context, appFilter string) ([]DialogInfo, error) {
+	var dialogs []DialogInfo
+	filterLower := strings.ToLower(strings.TrimSpace(appFilter))
+	seen := make(map[uintptr]bool)
+
+	withInteractiveDesktop(func() {
+		cb := syscall.NewCallback(func(hwnd uintptr, _ uintptr) uintptr {
+			if seen[hwnd] {
+				return 1
+			}
+			seen[hwnd] = true
+
+			vis, _, _ := procIsWindowVisible.Call(hwnd)
+			if vis == 0 {
+				return 1
+			}
+
+			var classBuf [256]uint16
+			procGetClassNameW.Call(hwnd, uintptr(unsafe.Pointer(&classBuf[0])), 256)
+			class := strings.TrimSpace(syscall.UTF16ToString(classBuf[:]))
+
+			var titleBuf [512]uint16
+			procGetWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&titleBuf[0])), 512)
+			title := strings.TrimSpace(syscall.UTF16ToString(titleBuf[:]))
+
+			var pid uint32
+			procGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+			procName := getProcessName(pid)
+
+			isStandardDialog := class == "#32770"
+			titleLower := strings.ToLower(title)
+			procLower := strings.ToLower(procName)
+
+			isErrorIndicator := strings.Contains(titleLower, "error") ||
+				strings.Contains(titleLower, "advertencia") ||
+				strings.Contains(titleLower, "warning") ||
+				strings.Contains(titleLower, "alerta") ||
+				strings.Contains(titleLower, "alert") ||
+				strings.Contains(titleLower, "falló") ||
+				strings.Contains(titleLower, "failed")
+
+			matchesFilter := filterLower != "" && (strings.Contains(titleLower, filterLower) || strings.Contains(procLower, filterLower))
+
+			// Si no es un diálogo estándar ni indicador de error ni coincide con el filtro, omitir
+			if !isStandardDialog && !isErrorIndicator && !matchesFilter {
+				return 1
+			}
+
+			// Extraer controles hijos (Static, Edit, Button)
+			var messageParts []string
+			var buttons []string
+
+			childCb := syscall.NewCallback(func(childHwnd uintptr, _ uintptr) uintptr {
+				var cClassBuf [128]uint16
+				procGetClassNameW.Call(childHwnd, uintptr(unsafe.Pointer(&cClassBuf[0])), 128)
+				cClass := strings.TrimSpace(syscall.UTF16ToString(cClassBuf[:]))
+
+				var cTextBuf [2048]uint16
+				procGetWindowTextW.Call(childHwnd, uintptr(unsafe.Pointer(&cTextBuf[0])), 2048)
+				cText := strings.TrimSpace(syscall.UTF16ToString(cTextBuf[:]))
+
+				if cText == "" {
+					return 1
+				}
+
+				switch strings.ToLower(cClass) {
+				case "button":
+					buttons = append(buttons, cText)
+				case "static", "edit":
+					messageParts = append(messageParts, cText)
+				default:
+					if isStandardDialog && len(cText) > 1 {
+						messageParts = append(messageParts, cText)
+					}
+				}
+				return 1
+			})
+			procEnumChildWindows.Call(hwnd, childCb, 0)
+
+			fullMessage := strings.Join(messageParts, " ")
+			fullMessage = strings.TrimSpace(fullMessage)
+
+			// Si no hay mensaje ni título relevante, saltar
+			if fullMessage == "" && title == "" {
+				return 1
+			}
+
+			combinedText := strings.ToLower(title + " " + fullMessage)
+			isErr := false
+			severity := "INFO"
+
+			errorKeywords := []string{
+				"error", "dañado", "no pudo abrir", "no se pudo", "falló", "fallo", "failed",
+				"not supported", "no admitido", "no compatible", "corrupt", "corrupto",
+				"cannot open", "could not open", "no responde", "not responding", "denied",
+				"denegado", "invalid", "inválido", "exception", "excepción", "fatal",
+			}
+			warningKeywords := []string{
+				"warning", "advertencia", "alerta", "precaución", "caution", "confirmar",
+			}
+
+			for _, kw := range errorKeywords {
+				if strings.Contains(combinedText, kw) {
+					isErr = true
+					severity = "ERROR"
+					break
+				}
+			}
+			if !isErr {
+				for _, kw := range warningKeywords {
+					if strings.Contains(combinedText, kw) {
+						severity = "WARNING"
+						break
+					}
+				}
+			}
+
+			// Aplicar filtro si se especificó
+			if filterLower != "" {
+				if !strings.Contains(titleLower, filterLower) &&
+					!strings.Contains(procLower, filterLower) &&
+					!strings.Contains(strings.ToLower(fullMessage), filterLower) {
+					return 1
+				}
+			}
+
+			dialogs = append(dialogs, DialogInfo{
+				Handle:      hwnd,
+				Title:       title,
+				ClassName:   class,
+				ProcessID:   pid,
+				ProcessName: procName,
+				Message:     fullMessage,
+				Buttons:     buttons,
+				IsError:     isErr,
+				Severity:    severity,
+			})
+
+			return 1
+		})
+
+		procEnumWindows.Call(cb, 0)
+	})
+
+	return dialogs, nil
+}
+
