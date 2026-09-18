@@ -387,26 +387,26 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 		t.Fatalf("se esperaba estado StateIdle después de presionar Enter en INICIAR CONVERSACION, obtenido: %v", m.state)
 	}
 
-	// 2. Estado inicial de conversación debe ser pantalla de bienvenida retro
-	if !m.isWelcomeState() {
-		t.Fatalf("se esperaba estado de bienvenida al iniciar")
+	// 2. Estado inicial de conversación debe ser chat limpio con mensaje de bienvenida de OzyAssist
+	if m.isWelcomeState() {
+		t.Fatalf("no se debe mostrar la tarjeta estática de sugerencias en el chat")
 	}
 
-	hero := m.renderConversation()
-	if !strings.Contains(hero, "OZYASIST") || !strings.Contains(hero, "ZERO-DOCKER") {
-		t.Errorf("hero debe incluir nombre y arquitectura: %s", hero)
+	chatView := m.renderConversation()
+	if !strings.Contains(chatView, "¡Hola! Soy OzyAssist") {
+		t.Errorf("chat debe incluir mensaje de bienvenida del asistente: %s", chatView)
 	}
-	if !strings.Contains(hero, "/paths") || !strings.Contains(hero, "SUGERIDOS") {
-		t.Errorf("hero debe incluir sugerencias: %s", hero)
+	if strings.Contains(chatView, "ACCIONES RAPIDAS & PROMPTS SUGERIDOS") || strings.Contains(chatView, "ROM BIOS 1989-1996") {
+		t.Errorf("chat no debe incluir la caja duplicada de sugerencias de bienvenida: %s", chatView)
 	}
-	if strings.Contains(hero, "HERMES") || strings.Contains(hero, "GROK") {
-		t.Errorf("hero no debe contener menciones a HERMES ni GROK: %s", hero)
+	if strings.Contains(chatView, "HERMES") || strings.Contains(chatView, "GROK") {
+		t.Errorf("chat no debe contener menciones a HERMES ni GROK: %s", chatView)
 	}
 
-	// 3. Verificar ausencia total de emojis en la pantalla de bienvenida
-	for _, r := range hero {
+	// 3. Verificar ausencia total de emojis en la pantalla de bienvenida y chat
+	for _, r := range chatView {
 		if r >= 0x1F300 && r <= 0x1F9FF {
-			t.Errorf("hero no debe contener emojis, encontrado: %U", r)
+			t.Errorf("chat no debe contener emojis, encontrado: %U", r)
 		}
 	}
 
@@ -415,27 +415,18 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 	newM2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	updatedModel := newM2.(Model)
 
-	// Ya no debe estar en estado de bienvenida
-	if updatedModel.isWelcomeState() {
-		t.Fatalf("después de enviar mensaje ya no debe ser estado de bienvenida")
+	newChatView := updatedModel.renderConversation()
+	if strings.Contains(newChatView, "ROM BIOS 1989-1996") {
+		t.Fatalf("la bienvenida no debe mostrar ROM BIOS")
+	}
+	if !strings.Contains(newChatView, "TÚ: ") || !strings.Contains(newChatView, "¿qué proyectos tengo?") {
+		t.Fatalf("el chat normal debe mostrar el mensaje de usuario: %s", newChatView)
 	}
 
-	chatView := updatedModel.renderConversation()
-	if strings.Contains(chatView, "ROM BIOS 1989-1996") {
-		t.Fatalf("la bienvenida retro debió dar paso al chat normal")
-	}
-	if !strings.Contains(chatView, "TÚ: ") || !strings.Contains(chatView, "¿qué proyectos tengo?") {
-		t.Fatalf("el chat normal debe mostrar el mensaje de usuario: %s", chatView)
-	}
-
-	// 5. Probar /clear para regresar a la pantalla de bienvenida
+	// 5. Probar /clear para limpiar el historial de mensajes
 	_ = updatedModel.handleSlashCommand("/clear")
-	if !updatedModel.isWelcomeState() {
-		t.Fatalf("después de /clear debe retornar a estado de bienvenida")
-	}
-	clearHero := updatedModel.renderConversation()
-	if !strings.Contains(clearHero, "OZYASIST") {
-		t.Fatalf("/clear debió restaurar la pantalla retro de bienvenida: %s", clearHero)
+	if len(updatedModel.entries) != 0 {
+		t.Fatalf("después de /clear entries debe estar vacío, tamaño actual: %d", len(updatedModel.entries))
 	}
 }
 
@@ -522,7 +513,7 @@ func TestSettingsMenu_NavigationAndCycle(t *testing.T) {
 
 	// 2. Verificar renderizado de configuraciones
 	settingsView := m.renderSettingsMenuView()
-	if !strings.Contains(settingsView, "Proveedor LLM Activo") || !strings.Contains(settingsView, "Nivel de Permisos SO") {
+	if !strings.Contains(settingsView, "Proveedor LLM Activo") || !strings.Contains(settingsView, "Gestión de Claves API") || !strings.Contains(settingsView, "Perfil de Usuario") || !strings.Contains(settingsView, "Nivel de Permisos SO") {
 		t.Fatalf("vista de configuraciones incompleta: %s", settingsView)
 	}
 	if strings.Contains(settingsView, "HERMES") || strings.Contains(settingsView, "GROK") {
@@ -536,8 +527,8 @@ func TestSettingsMenu_NavigationAndCycle(t *testing.T) {
 		}
 	}
 
-	// 4. Alternar nivel de permisos (opción 1)
-	m.settingsIndex = 1
+	// 4. Alternar nivel de permisos (opción 4 en menú, índice 3)
+	m.settingsIndex = 3
 	initialPerm := m.permissionLevel
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = res.(Model)
@@ -734,6 +725,133 @@ func TestChat_EscReturnsToStartMenu(t *testing.T) {
 	m = res.(Model)
 	if m.state != StateStartMenu {
 		t.Fatalf("segundo Esc debió regresar a StateStartMenu, obtenido: %v", m.state)
+	}
+}
+
+func TestAPIKeyManager_InteractiveFlow(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// 1. Acceder a configuraciones
+	m.state = StateSettingsMenu
+	m.settingsIndex = 1 // Opción 2: Gestión de Claves API
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateAPIKeySelect {
+		t.Fatalf("se esperaba StateAPIKeySelect, obtenido: %v", m.state)
+	}
+
+	// 2. Verificar vista de selección de claves API
+	selectView := m.renderAPIKeySelectView()
+	if !strings.Contains(selectView, "CONFIGURAR API KEYS DE PROVEEDORES") || !strings.Contains(selectView, "Cohere") || !strings.Contains(selectView, "Groq") {
+		t.Fatalf("vista de selección de claves incompleta: %s", selectView)
+	}
+	for _, r := range selectView {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("renderAPIKeySelectView contiene emoji: %U", r)
+		}
+	}
+
+	// 3. Seleccionar proveedor para configurar (índice 0)
+	m.apiKeyIndex = 0
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateAPIKeyInput {
+		t.Fatalf("se esperaba StateAPIKeyInput, obtenido: %v", m.state)
+	}
+	if m.apiKeyTarget == "" {
+		t.Fatalf("apiKeyTarget no debe estar vacío")
+	}
+
+	// 4. Verificar vista de ingreso de clave API
+	inputView := m.renderAPIKeyInputView()
+	if !strings.Contains(inputView, "CONFIGURAR CLAVE API") || !strings.Contains(inputView, "Ctrl+V") {
+		t.Fatalf("vista de ingreso de clave incompleta: %s", inputView)
+	}
+	for _, r := range inputView {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("renderAPIKeyInputView contiene emoji: %U", r)
+		}
+	}
+
+	// 5. Ingresar una clave y presionar Enter para guardar
+	m.apiKeyInput.SetValue("test-token-cohere-123456")
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateAPIKeySelect {
+		t.Fatalf("después de guardar clave debió retornar a StateAPIKeySelect, obtenido: %v", m.state)
+	}
+	if !strings.Contains(m.settingsNotice, "[OK]") || !strings.Contains(m.settingsNotice, "COHERE") {
+		t.Fatalf("notice de guardado inesperado: %s", m.settingsNotice)
+	}
+
+	// 6. Esc regresa a StateSettingsMenu
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateSettingsMenu {
+		t.Fatalf("Esc desde StateAPIKeySelect debió regresar a StateSettingsMenu, obtenido: %v", m.state)
+	}
+}
+
+func TestProfileEditor_InteractiveFlow(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "ozy-profile-test-*")
+	if err != nil {
+		t.Fatalf("error creating temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dbPath := filepath.Join(tempDir, "profile_test.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("error initializing test db: %v", err)
+	}
+	defer db.Close()
+	_ = db.EnsureDefaultUser()
+
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// 1. Acceder a configuraciones
+	m.state = StateSettingsMenu
+	m.settingsIndex = 2 // Opción 3: Perfil de Usuario
+
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateProfileEdit {
+		t.Fatalf("se esperaba StateProfileEdit, obtenido: %v", m.state)
+	}
+
+	// 2. Verificar vista del editor de perfil
+	profileView := m.renderProfileEditView()
+	if !strings.Contains(profileView, "EDITOR INTERACTIVO DE PERFIL") || !strings.Contains(profileView, "DIRECTIVAS Y PREFERENCIAS") {
+		t.Fatalf("vista de editor de perfil incompleta: %s", profileView)
+	}
+	for _, r := range profileView {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("renderProfileEditView contiene emoji: %U", r)
+		}
+	}
+
+	// 3. Ingresar directiva y presionar Enter
+	m.profileInput.SetValue("Especialista en Go puro y Bubble Tea")
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.state != StateSettingsMenu {
+		t.Fatalf("después de guardar perfil debió regresar a StateSettingsMenu, obtenido: %v", m.state)
+	}
+	if !strings.Contains(m.settingsNotice, "[OK]") || !strings.Contains(m.settingsNotice, "SQLite") {
+		t.Fatalf("notice de perfil guardado inesperado: %s", m.settingsNotice)
+	}
+
+	// 4. Verificar que se persistió en la base de datos
+	u, err := db.GetUser(db.DefaultUserID())
+	if err != nil || u == nil {
+		t.Fatalf("error recuperando usuario de DB: %v", err)
+	}
+	if !strings.Contains(u.ProfileMd, "Especialista en Go puro y Bubble Tea") {
+		t.Fatalf("perfil en DB no contiene la directiva guardada: %s", u.ProfileMd)
 	}
 }
 

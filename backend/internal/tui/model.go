@@ -2,11 +2,11 @@ package tui
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,6 +21,9 @@ const (
 	StateStartMenu UIState = iota
 	StateSettingsMenu
 	StateProviderMenu
+	StateAPIKeySelect
+	StateAPIKeyInput
+	StateProfileEdit
 	StateIdle
 	StateThinking
 	StateExecutingTool
@@ -68,8 +71,12 @@ type QueuedPrompt struct {
 type Model struct {
 	state           UIState
 	menuIndex       int    // 0: Iniciar Conversacion, 1: Configuraciones, 2: Salir
-	settingsIndex   int    // 0: Proveedor LLM, 1: Permisos SO, 2: Voz, 3: Rutas, 4: Perfil, 5: Volver
+	settingsIndex   int    // Índice en menú de configuraciones
 	providerIndex   int    // Índice en el selector interactivo de proveedores
+	apiKeyIndex     int    // Índice en el selector de claves API
+	apiKeyTarget    string // Proveedor seleccionado para ingresar clave (ej: "groq")
+	apiKeyInput     textinput.Model // Input para escribir/pegar la clave
+	profileInput    textinput.Model // Input para escribir directiva de perfil
 	settingsNotice  string // Notificacion o resultado de accion en configuraciones/proveedores
 	viewport        viewport.Model
 	textarea        textarea.Model
@@ -113,12 +120,26 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	sp.Spinner = spinner.Dot
 	sp.Style = SpinnerStyle
 
-	welcomeText := "[SISTEMA] OZYASIST KERNEL v2.6 INICIALIZADO"
+	// Input interactivo para clave API
+	keyTi := textinput.New()
+	keyTi.Placeholder = "Pega o escribe tu API Key aquí..."
+	keyTi.Prompt = "❯ "
+	keyTi.CharLimit = 512
+	keyTi.EchoMode = textinput.EchoPassword
+	keyTi.EchoCharacter = '•'
+
+	// Input interactivo para perfil de usuario
+	profTi := textinput.New()
+	profTi.Placeholder = "Escribe una directiva o preferencia (ej: stack Go/React, respuestas concisas)..."
+	profTi.Prompt = "❯ "
+	profTi.CharLimit = 1024
+
 	initStatus := "Listo para actuar"
 	if voiceActive {
-		welcomeText = "[SISTEMA] OZYASIST KERNEL v2.6 INICIALIZADO (VOZ ACTIVA)"
 		initStatus = "Escuchando Wake Word ('Hey Ozy')..."
 	}
+
+	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nPuedes pedirme inspeccionar proyectos del host, editar código, ejecutar tareas del sistema o automatizar tu flujo de trabajo.\n\n¿En qué te puedo ayudar hoy?"
 
 	m := Model{
 		state:           StateStartMenu,
@@ -126,6 +147,8 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 		settingsIndex:   0,
 		settingsNotice:  "",
 		textarea:        ta,
+		apiKeyInput:     keyTi,
+		profileInput:    profTi,
 		spinner:         sp,
 		provider:        prov,
 		chat:            chat,
@@ -135,8 +158,8 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 		historyIndex:    -1,
 		entries: []ChatEntry{
 			{
-				Role:    "system",
-				Content: welcomeText,
+				Role:    "assistant",
+				Content: welcomeContent,
 			},
 		},
 	}
@@ -145,12 +168,6 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 }
 
 func (m Model) isWelcomeState() bool {
-	if len(m.entries) == 0 {
-		return true
-	}
-	if len(m.entries) == 1 && m.entries[0].Role == "system" && strings.HasPrefix(m.entries[0].Content, "[SISTEMA] OZYASIST") {
-		return true
-	}
 	return false
 }
 

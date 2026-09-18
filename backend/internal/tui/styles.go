@@ -9,6 +9,8 @@ var (
 	ColorPrimary   = lipgloss.Color("#d1f107") // Electric Neon Lime
 	ColorDarkBg    = lipgloss.Color("#131313") // Deep Surface Dark
 	ColorContainer = lipgloss.Color("#1e1e1e") // Card/Container Dark
+	ColorChatBg    = lipgloss.Color("#141613") // Dark background with subtle lime tint
+	ColorMessageBg = lipgloss.Color("#181b14") // Message container background
 	ColorBorder    = lipgloss.Color("#2f2f2f")
 	ColorText      = lipgloss.Color("#f0f0f0")
 	ColorMuted     = lipgloss.Color("#777777")

@@ -161,6 +161,15 @@ func (m Model) View() string {
 	if m.state == StateProviderMenu {
 		return m.renderProviderSelectView()
 	}
+	if m.state == StateAPIKeySelect {
+		return m.renderAPIKeySelectView()
+	}
+	if m.state == StateAPIKeyInput {
+		return m.renderAPIKeyInputView()
+	}
+	if m.state == StateProfileEdit {
+		return m.renderProfileEditView()
+	}
 
 	var sb strings.Builder
 
@@ -248,11 +257,14 @@ func (m Model) renderConversation() string {
 		convWidth = 80
 	}
 
-	if m.isWelcomeState() {
-		return m.renderRetroWelcomeHero(convWidth)
-	}
-
 	var sb strings.Builder
+
+	boxStyle := lipgloss.NewStyle().
+		Background(ColorMessageBg).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderLeftForeground(ColorPrimary).
+		Padding(0, 1)
 
 	for _, entry := range m.entries {
 		switch entry.Role {
@@ -297,8 +309,7 @@ func (m Model) renderConversation() string {
 
 			cleaned := cleanAssistantText(entry.Content)
 			if cleaned != "" {
-				sb.WriteString(AssistantStyle.Render("OZY: "))
-				maxAssistantW := convWidth - 10
+				maxAssistantW := convWidth - 12
 				if maxAssistantW < 20 {
 					maxAssistantW = 20
 				}
@@ -310,29 +321,16 @@ func (m Model) renderConversation() string {
 				)
 				rendered, err := r.Render(cleaned)
 				if err == nil {
-					// Eliminar salto de línea final extra de glamour
 					rendered = strings.TrimRight(rendered, "\r\n")
-					
-					// Añadir sangría para alinear con "⚡ OZY: "
-					lines := strings.Split(rendered, "\n")
-					for i, l := range lines {
-						if i > 0 {
-							sb.WriteString("       ")
-						}
-						sb.WriteString(l)
-						sb.WriteString("\n")
-					}
-					sb.WriteString("\n")
+					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rendered)
+					sb.WriteString(boxStyle.Render(cardText))
+					sb.WriteString("\n\n")
 				} else {
 					lines := wrapContent(cleaned, maxAssistantW)
-					for i, l := range lines {
-						if i > 0 {
-							sb.WriteString("       ")
-						}
-						sb.WriteString(l)
-						sb.WriteString("\n")
-					}
-					sb.WriteString("\n")
+					rawText := strings.Join(lines, "\n")
+					cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rawText)
+					sb.WriteString(boxStyle.Render(cardText))
+					sb.WriteString("\n\n")
 				}
 			}
 
@@ -359,7 +357,6 @@ func (m Model) renderConversation() string {
 			}
 			sb.WriteString(fmt.Sprintf("%s%s\n", badge, MutedStyle.Render(dur)))
 
-			// Formatear salida con sangría y word-wrapping garantizado
 			maxToolWidth := convWidth - 6
 			if maxToolWidth < 25 {
 				maxToolWidth = 25
@@ -380,8 +377,7 @@ func (m Model) renderConversation() string {
 	if len(m.currentStream) > 0 {
 		cleaned := cleanAssistantText(m.currentStream)
 		if cleaned != "" {
-			sb.WriteString(AssistantStyle.Render("OZY: "))
-			maxStreamW := convWidth - 10
+			maxStreamW := convWidth - 12
 			if maxStreamW < 20 {
 				maxStreamW = 20
 			}
@@ -393,35 +389,20 @@ func (m Model) renderConversation() string {
 			)
 			rendered, err := r.Render(cleaned)
 			if err == nil {
-				rendered = strings.TrimRight(rendered, "\r\n")
-				lines := strings.Split(rendered, "\n")
-				for i, l := range lines {
-					if i > 0 {
-						sb.WriteString("       ")
-					}
-					sb.WriteString(l)
-					if i == len(lines)-1 {
-						sb.WriteString("▌")
-					}
-					sb.WriteString("\n")
-				}
-				sb.WriteString("\n")
+				rendered = strings.TrimRight(rendered, "\r\n") + "▌"
+				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rendered)
+				sb.WriteString(boxStyle.Render(cardText))
+				sb.WriteString("\n\n")
 			} else {
 				lines := wrapContent(cleaned, maxStreamW)
-				for i, l := range lines {
-					if i > 0 {
-						sb.WriteString("       ")
-					}
-					sb.WriteString(l)
-					if i == len(lines)-1 {
-						sb.WriteString("▌")
-					}
-					sb.WriteString("\n")
-				}
-				sb.WriteString("\n")
+				rawText := strings.Join(lines, "\n") + "▌"
+				cardText := fmt.Sprintf("%s\n%s", AssistantStyle.Render("OZY:"), rawText)
+				sb.WriteString(boxStyle.Render(cardText))
+				sb.WriteString("\n\n")
 			}
 		} else {
-			sb.WriteString(MutedStyle.Render(">> OZY: (Razonando...) ▌\n\n"))
+			sb.WriteString(boxStyle.Render(fmt.Sprintf("%s\n(Razonando...) ▌", AssistantStyle.Render("OZY:"))))
+			sb.WriteString("\n\n")
 		}
 	}
 
@@ -773,11 +754,12 @@ func (m Model) renderSettingsMenuView() string {
 
 	items := []settingRow{
 		{"1", "Proveedor LLM Activo", fmt.Sprintf("%s (%s)", provName, modelName), "Enter: Abrir selector interactivo de proveedores (flechas ↑/↓)"},
-		{"2", "Nivel de Permisos SO", m.permissionLevel, "Enter: Alternar nivel (autonomous -> supervised -> sandboxed)"},
-		{"3", "Escucha de Voz Continua", voiceStatus, "Enter: Alternar escucha continua de voz ('Hey Ozy')"},
-		{"4", "Mapa de Rutas en RAM", fmt.Sprintf("%d ubicaciones indexadas", pathCount), "Enter: Inspeccionar detalles de rutas indexadas en RAM"},
-		{"5", "Perfil de Usuario", userProfileSummary, "Enter: Mostrar ficha de perfil de usuario persistente"},
-		{"6", "Volver al Menú Principal", "[ <- REGRESAR ]", "Enter o Esc: Vuelve al menú principal de inicio"},
+		{"2", "Gestión de Claves API", "Configurar / Actualizar tokens", "Enter: Seleccionar proveedor e ingresar clave interactiva"},
+		{"3", "Perfil de Usuario", userProfileSummary, "Enter: Consultar o editar directivas y preferencias en SQLite"},
+		{"4", "Nivel de Permisos SO", m.permissionLevel, "Enter: Alternar nivel (autonomous -> supervised -> sandboxed)"},
+		{"5", "Escucha de Voz Continua", voiceStatus, "Enter: Alternar escucha continua de voz ('Hey Ozy')"},
+		{"6", "Mapa de Rutas en RAM", fmt.Sprintf("%d ubicaciones indexadas", pathCount), "Enter: Inspeccionar detalles de rutas indexadas en RAM"},
+		{"7", "Volver al Menú Principal", "[ <- REGRESAR ]", "Enter o Esc: Vuelve al menú principal de inicio"},
 	}
 
 	settingsBorder := lipgloss.NewStyle().
@@ -826,7 +808,7 @@ func (m Model) renderSettingsMenuView() string {
 	}
 
 	// Hints
-	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar / Abrir  •  [Esc / 6] Volver ")
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar / Abrir  •  [Esc / 7] Volver ")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
 	sb.WriteString("\n")
 
@@ -968,6 +950,254 @@ func (m Model) renderProviderSelectView() string {
 
 	// Barra inferior de hints
 	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Activar Proveedor  •  [1-9] Acceso directo  •  [Esc / 9] Volver ")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderAPIKeySelectView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 86 {
+		innerWidth = 86
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// Título superior
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render("OZYASIST >> GESTION INTERACTIVA DE CLAVES API // ZERO-DOCKER"),
+	))
+	sb.WriteString("\n\n")
+
+	catalog := providers.GetSupportedCatalog()
+
+	var ksb strings.Builder
+	header := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [CONFIGURAR API KEYS DE PROVEEDORES] ──")
+	ksb.WriteString(header + "\n\n")
+
+	totalItems := len(catalog) + 1
+
+	for i := 0; i < totalItems; i++ {
+		selected := i == m.apiKeyIndex
+		if i < len(catalog) {
+			cat := catalog[i]
+			key := providers.GetProviderKey(cat.ID)
+
+			statusTag := ""
+			if cat.IsLocal {
+				statusTag = lipgloss.NewStyle().Foreground(ColorPrimary).Render("[LOCAL] No requiere clave")
+			} else if key != "" {
+				masked := key
+				if len(masked) > 8 {
+					masked = masked[:4] + "..." + masked[len(masked)-4:]
+				}
+				statusTag = lipgloss.NewStyle().Foreground(ColorPrimary).Render(fmt.Sprintf("[OK] Guardada: %s", masked))
+			} else {
+				statusTag = lipgloss.NewStyle().Foreground(ColorMuted).Render("[--] Sin clave configurada")
+			}
+
+			var line string
+			if selected {
+				cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+				numPart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%d]", i+1))
+				namePart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf(" %s ", cat.DisplayName))
+				descLine := lipgloss.NewStyle().Foreground(ColorText).Render(fmt.Sprintf("     Enter: Ingresar o actualizar clave para %s", cat.DisplayName))
+				line = fmt.Sprintf("%s%s%s %s\n%s\n\n", cursor, numPart, namePart, statusTag, descLine)
+			} else {
+				cursor := "   "
+				numPart := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%d]", i+1))
+				namePart := lipgloss.NewStyle().Bold(true).Foreground(ColorText).Render(fmt.Sprintf(" %s", cat.DisplayName))
+				descLine := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("     Enter: Ingresar o actualizar clave para %s", cat.DisplayName))
+				line = fmt.Sprintf("%s%s%s %s\n%s\n\n", cursor, numPart, namePart, statusTag, descLine)
+			}
+			ksb.WriteString(line)
+		} else {
+			// Opción volver a configuraciones
+			var line string
+			if selected {
+				cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+				tag := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%d] Volver a Configuraciones: [ <- REGRESAR ]", i+1))
+				desc := lipgloss.NewStyle().Foreground(ColorText).Render("     Enter o Esc: Regresa al menú general de configuraciones")
+				line = fmt.Sprintf("%s%s\n%s\n", cursor, tag, desc)
+			} else {
+				cursor := "   "
+				tag := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%d] Volver a Configuraciones: [ <- REGRESAR ]", i+1))
+				desc := lipgloss.NewStyle().Foreground(ColorMuted).Render("     Enter o Esc: Regresa al menú general de configuraciones")
+				line = fmt.Sprintf("%s%s\n%s\n", cursor, tag, desc)
+			}
+			ksb.WriteString(line)
+		}
+	}
+
+	keyBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(1, 2)
+
+	renderedKeys := keyBorder.Render(ksb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedKeys))
+	sb.WriteString("\n")
+
+	if m.settingsNotice != "" {
+		noticeBox := lipgloss.NewStyle().
+			Width(innerWidth).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorAccent).
+			Padding(0, 1).
+			Render(m.settingsNotice)
+		sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(noticeBox))
+		sb.WriteString("\n")
+	}
+
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar Proveedor  •  [Esc] Volver a Configuraciones ")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderAPIKeyInputView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 82 {
+		innerWidth = 82
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render(fmt.Sprintf("OZYASIST >> CONFIGURAR CLAVE API: %s", strings.ToUpper(m.apiKeyTarget))),
+	))
+	sb.WriteString("\n\n")
+
+	var formSb strings.Builder
+	header := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [INGRESO INTERACTIVO DE CLAVE API] ──")
+	formSb.WriteString(header + "\n\n")
+
+	promptInfo := lipgloss.NewStyle().Foreground(ColorText).Render(
+		fmt.Sprintf("Escribe o pega tu clave para %s (Ctrl+V soportado):\nSe registrará en memoria y se guardará de forma persistente.", strings.ToUpper(m.apiKeyTarget)),
+	)
+	formSb.WriteString(promptInfo + "\n\n")
+
+	inputBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(0, 1).
+		Width(innerWidth - 6).
+		Render(m.apiKeyInput.View())
+
+	formSb.WriteString(inputBox + "\n\n")
+
+	infoText := lipgloss.NewStyle().Foreground(ColorMuted).Render("Nota: Los caracteres se ofuscan con viñetas por seguridad.")
+	formSb.WriteString(infoText + "\n")
+
+	border := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2)
+
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(border.Render(formSb.String())))
+	sb.WriteString("\n")
+
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [Enter] Guardar Clave  •  [Esc] Cancelar y Regresar ")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderProfileEditView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 82 {
+		innerWidth = 82
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render("OZYASIST >> EDITOR INTERACTIVO DE PERFIL DE USUARIO // SQLite WAL"),
+	))
+	sb.WriteString("\n\n")
+
+	// Obtener perfil actual de SQLite
+	currProfile := "Sin perfil registrado aún."
+	if db.DB != nil {
+		if u, err := db.GetUser(db.DefaultUserID()); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) != "" {
+			currProfile = strings.TrimSpace(u.ProfileMd)
+		}
+	}
+
+	var formSb strings.Builder
+	header := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [DIRECTIVAS Y PREFERENCIAS PERSISTENTES] ──")
+	formSb.WriteString(header + "\n\n")
+
+	profHeader := lipgloss.NewStyle().Bold(true).Foreground(ColorAccent).Render("Perfil actual en SQLite:")
+	formSb.WriteString(profHeader + "\n")
+
+	// Mostrar perfil actual en caja sutil
+	profileCard := lipgloss.NewStyle().
+		Background(ColorMessageBg).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderLeftForeground(ColorPrimary).
+		Padding(0, 1).
+		Width(innerWidth - 8).
+		Render(currProfile)
+	formSb.WriteString(profileCard + "\n\n")
+
+	promptInfo := lipgloss.NewStyle().Foreground(ColorText).Render(
+		"Escribe una nueva directiva o preferencia para tu perfil:\n(ej: 'Trabajo en Go y React, respuestas breves y código modular')",
+	)
+	formSb.WriteString(promptInfo + "\n\n")
+
+	inputBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(0, 1).
+		Width(innerWidth - 6).
+		Render(m.profileInput.View())
+
+	formSb.WriteString(inputBox + "\n")
+
+	border := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2)
+
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(border.Render(formSb.String())))
+	sb.WriteString("\n")
+
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [Enter] Agregar Directiva y Guardar en SQLite  •  [Esc] Volver a Configuraciones ")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
 	sb.WriteString("\n")
 

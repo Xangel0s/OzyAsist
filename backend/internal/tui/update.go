@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/agent"
@@ -126,12 +127,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyUp:
 				m.settingsIndex--
 				if m.settingsIndex < 0 {
-					m.settingsIndex = 5
+					m.settingsIndex = 6
 				}
 				return m, nil
 			case tea.KeyDown:
 				m.settingsIndex++
-				if m.settingsIndex > 5 {
+				if m.settingsIndex > 6 {
 					m.settingsIndex = 0
 				}
 				return m, nil
@@ -149,12 +150,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "k", "w":
 					m.settingsIndex--
 					if m.settingsIndex < 0 {
-						m.settingsIndex = 5
+						m.settingsIndex = 6
 					}
 					return m, nil
 				case "j", "s":
 					m.settingsIndex++
-					if m.settingsIndex > 5 {
+					if m.settingsIndex > 6 {
 						m.settingsIndex = 0
 					}
 					return m, nil
@@ -178,6 +179,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.settingsIndex = 4
 					return m.handleSettingsEnter()
 				case "6":
+					m.settingsIndex = 5
+					return m.handleSettingsEnter()
+				case "7":
 					m.state = StateStartMenu
 					m.settingsNotice = ""
 					return m, nil
@@ -240,6 +244,153 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+		}
+
+		if m.state == StateAPIKeySelect {
+			catalog := providers.GetSupportedCatalog()
+			maxIdx := len(catalog) // última opción es volver
+			switch msg.Type {
+			case tea.KeyUp:
+				m.apiKeyIndex--
+				if m.apiKeyIndex < 0 {
+					m.apiKeyIndex = maxIdx
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.apiKeyIndex++
+				if m.apiKeyIndex > maxIdx {
+					m.apiKeyIndex = 0
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.state = StateSettingsMenu
+				m.settingsNotice = ""
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				if m.apiKeyIndex >= len(catalog) {
+					m.state = StateSettingsMenu
+					m.settingsNotice = ""
+					return m, nil
+				}
+				selected := catalog[m.apiKeyIndex]
+				m.apiKeyTarget = selected.ID
+				m.apiKeyInput.SetValue("")
+				m.apiKeyInput.Focus()
+				m.state = StateAPIKeyInput
+				m.settingsNotice = ""
+				return m, textinput.Blink
+			case tea.KeyRunes:
+				s := string(msg.Runes)
+				switch s {
+				case "k", "w":
+					m.apiKeyIndex--
+					if m.apiKeyIndex < 0 {
+						m.apiKeyIndex = maxIdx
+					}
+					return m, nil
+				case "j", "s":
+					m.apiKeyIndex++
+					if m.apiKeyIndex > maxIdx {
+						m.apiKeyIndex = 0
+					}
+					return m, nil
+				case "q", "Q":
+					m.state = StateSettingsMenu
+					m.settingsNotice = ""
+					return m, nil
+				default:
+					if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+						idx := int(s[0] - '1')
+						if idx <= maxIdx {
+							m.apiKeyIndex = idx
+							if m.apiKeyIndex >= len(catalog) {
+								m.state = StateSettingsMenu
+								m.settingsNotice = ""
+								return m, nil
+							}
+							selected := catalog[m.apiKeyIndex]
+							m.apiKeyTarget = selected.ID
+							m.apiKeyInput.SetValue("")
+							m.apiKeyInput.Focus()
+							m.state = StateAPIKeyInput
+							m.settingsNotice = ""
+							return m, textinput.Blink
+						}
+					}
+				}
+			}
+			return m, nil
+		}
+
+		if m.state == StateAPIKeyInput {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.state = StateAPIKeySelect
+				m.apiKeyInput.Blur()
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				keyVal := strings.TrimSpace(m.apiKeyInput.Value())
+				if keyVal != "" {
+					targetProv := m.apiKeyTarget
+					envVar := strings.ToUpper(targetProv) + "_API_KEY"
+					_ = providers.SaveConfigKey(envVar, keyVal)
+					_ = os.Setenv(envVar, keyVal)
+					providers.RegisterProviderKey(targetProv, keyVal)
+					if p, err := providers.Get(targetProv); err == nil && p != nil {
+						m.provider = p
+					}
+					m.settingsNotice = fmt.Sprintf("[OK] Clave API de %s guardada y registrada exitosamente.", strings.ToUpper(targetProv))
+				} else {
+					m.settingsNotice = "[INFO] Entrada vacía, no se guardó ninguna clave."
+				}
+				m.apiKeyInput.Blur()
+				m.state = StateAPIKeySelect
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.apiKeyInput, cmd = m.apiKeyInput.Update(msg)
+				return m, cmd
+			}
+		}
+
+		if m.state == StateProfileEdit {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.state = StateSettingsMenu
+				m.profileInput.Blur()
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				newDirective := strings.TrimSpace(m.profileInput.Value())
+				if newDirective != "" && db.DB != nil {
+					currProfile := ""
+					if u, err := db.GetUser(db.DefaultUserID()); err == nil && u != nil {
+						currProfile = u.ProfileMd
+					}
+					var updated string
+					if strings.TrimSpace(currProfile) == "" {
+						updated = fmt.Sprintf("# Perfil del Usuario\n- %s", newDirective)
+					} else {
+						updated = fmt.Sprintf("%s\n- %s", strings.TrimSpace(currProfile), newDirective)
+					}
+					_ = db.UpdateUserProfile(db.DefaultUserID(), updated)
+					m.settingsNotice = "[OK] Perfil de usuario actualizado y guardado permanentemente en SQLite."
+				} else {
+					m.settingsNotice = "[INFO] Entrada vacía, no se realizaron cambios en el perfil."
+				}
+				m.profileInput.Blur()
+				m.state = StateSettingsMenu
+				return m, nil
+			default:
+				var cmd tea.Cmd
+				m.profileInput, cmd = m.profileInput.Update(msg)
+				return m, cmd
+			}
 		}
 
 		switch msg.Type {
@@ -742,7 +893,22 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case 1:
-		// 1: Alternar nivel de permisos SO
+		// 1: Abrir gestión interactiva de Claves API
+		m.state = StateAPIKeySelect
+		m.apiKeyIndex = 0
+		m.settingsNotice = ""
+		return m, nil
+
+	case 2:
+		// 2: Abrir editor interactivo de Perfil de Usuario
+		m.state = StateProfileEdit
+		m.profileInput.SetValue("")
+		m.profileInput.Focus()
+		m.settingsNotice = ""
+		return m, textinput.Blink
+
+	case 3:
+		// 3: Alternar nivel de permisos SO
 		switch m.permissionLevel {
 		case "autonomous":
 			m.permissionLevel = "supervised"
@@ -754,14 +920,14 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		m.settingsNotice = fmt.Sprintf("[OK] Nivel de permisos establecido en: %s", strings.ToUpper(m.permissionLevel))
 		return m, nil
 
-	case 2:
-		// 2: Alternar escucha continua de voz
+	case 4:
+		// 4: Alternar escucha continua de voz
 		out := m.handleSlashCommand("/voice")
 		m.settingsNotice = out
 		return m, nil
 
-	case 3:
-		// 3: Inspeccionar mapa de rutas en RAM
+	case 5:
+		// 5: Inspeccionar mapa de rutas en RAM
 		count := 0
 		if reg := system.DefaultPathRegistry(); reg != nil {
 			count = len(reg.ListAll())
@@ -769,18 +935,8 @@ func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
 		m.settingsNotice = fmt.Sprintf("[INFO] %d ubicaciones indexadas en RAM. Escribe /paths en el chat para el listado completo.", count)
 		return m, nil
 
-	case 4:
-		// 4: Perfil de usuario persistente
-		out := m.handleSlashCommand("/profile")
-		lines := strings.Split(out, "\n")
-		if len(lines) > 3 {
-			lines = lines[:3]
-		}
-		m.settingsNotice = strings.Join(lines, "\n")
-		return m, nil
-
-	case 5:
-		// 5: Volver al Menú Principal
+	case 6:
+		// 6: Volver al Menú Principal
 		m.state = StateStartMenu
 		m.settingsNotice = ""
 		return m, nil
