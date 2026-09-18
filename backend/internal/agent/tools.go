@@ -928,6 +928,57 @@ var VoiceAgentTools = []providers.ToolDef{
 		Description: "Cierra o termina un programa o proceso por nombre (ej: 'notepad', 'calc') o por PID.",
 		InputSchema: mustJSON(`{"type":"object","properties":{"name":{"type":"string"},"pid":{"type":"integer"}}}`),
 	},
+	{
+		Name:        "remember_fact",
+		Description: "Registra y guarda en memoria permanente un hecho, regla, configuración o preferencia del usuario para no tener que volver a preguntarlo en futuras sesiones.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"category": {
+					"type": "string",
+					"enum": ["preferencia", "stack", "hardware", "regla", "contexto"],
+					"description": "Categoría del hecho memorizado"
+				},
+				"content": {
+					"type": "string",
+					"description": "El hecho o preferencia conciso y atómico a recordar"
+				}
+			},
+			"required": ["content"]
+		}`),
+	},
+	{
+		Name:        "search_memory",
+		Description: "Busca en la memoria persistente hechos, configuraciones, preferencias previas o reglas del usuario usando búsqueda semántica y FTS5.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Términos de búsqueda o pregunta sobre recuerdos pasados"
+				},
+				"limit": {
+					"type": "integer",
+					"description": "Cantidad máxima de recuerdos a recuperar (default: 5)"
+				}
+			},
+			"required": ["query"]
+		}`),
+	},
+	{
+		Name:        "update_user_profile",
+		Description: "Actualiza o expande la ficha de perfil persistente del usuario (quién es, a qué se dedica, rol, proyectos que maneja y estilo de trabajo).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"profile_md": {
+					"type": "string",
+					"description": "Contenido completo en Markdown de la ficha del perfil del usuario"
+				}
+			},
+			"required": ["profile_md"]
+		}`),
+	},
 }
 
 // GetActiveTools returns the tools to inject into the LLM, including dynamic MCP tools.
