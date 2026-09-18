@@ -681,9 +681,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlT:
 			m.showThinking = !m.showThinking
 			if m.showThinking {
-				m.systemStatus = "[PENSAMIENTO] Hilo de pensamiento: VISIBLE (Presiona Ctrl+T para ocultar)"
+				m.systemStatus = "Razonamiento visible"
 			} else {
-				m.systemStatus = "[PENSAMIENTO] Hilo de pensamiento: PLEGADO (Presiona Ctrl+T para desplegar)"
+				m.systemStatus = "Razonamiento oculto"
 			}
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -940,6 +940,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch evt.Type {
 		case "message:thinking", "agent:thinking":
 			m.currentThinking += evt.Content
+			m.systemStatus = "Razonando..."
 			if m.showThinking {
 				m.viewport.SetContent(m.renderConversation())
 				m.viewport.GotoBottom()
@@ -960,9 +961,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 
 		case "tool:result":
+			toolName := evt.ToolName
+			if toolName == "" {
+				toolName = m.activeToolName
+			}
+			toolInput := evt.ToolInput
+			if toolInput == "" {
+				toolInput = m.activeToolInput
+			}
 			m.entries = append(m.entries, ChatEntry{
 				Role:        "tool",
-				ToolName:    evt.ToolName,
+				ToolName:    toolName,
+				ToolInput:   toolInput,
 				Content:     evt.ToolOutput,
 				ToolSuccess: evt.ToolSuccess,
 				DurationMs:  evt.DurationMs,
@@ -1707,9 +1717,9 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 	case "/thinking", "/thought":
 		m.showThinking = !m.showThinking
 		if m.showThinking {
-			return "[PENSAMIENTO] Hilo de pensamiento: VISIBLE y desplegado. (Presiona Ctrl+T o /thinking para ocultar)"
+			return "[OK] Razonamiento visible. (Presiona Ctrl+T o /thinking para ocultar)"
 		}
-		return "[PENSAMIENTO] Hilo de pensamiento: PLEGADO y oculto. (Presiona Ctrl+T o /thinking para desplegar)"
+		return "[OK] Razonamiento oculto. (Presiona Ctrl+T o /thinking para desplegar)"
 
 	case "/mcp":
 		if len(parts) > 1 && strings.ToLower(parts[1]) == "reload" {

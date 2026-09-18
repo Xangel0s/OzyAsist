@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -350,22 +351,9 @@ func (m Model) renderConversation() string {
 			// Renderizar pensamiento (Thinking / Chain of Thought) si existe
 			if entry.Thinking != "" {
 				if m.showThinking {
-					sb.WriteString(MutedStyle.Render("[PENSAMIENTO / RAZONAMIENTO — Presiona Ctrl+T para plegar]:\n"))
-					thinkLines := strings.Split(strings.TrimSpace(entry.Thinking), "\n")
-					maxThinkW := convWidth - 8
-					if maxThinkW < 20 {
-						maxThinkW = 20
-					}
-					for _, tl := range thinkLines {
-						wrapped := wrapLine(tl, maxThinkW)
-						for _, wl := range wrapped {
-							sb.WriteString(MutedStyle.Render("│ " + wl))
-							sb.WriteString("\n")
-						}
-					}
-					sb.WriteString("\n")
+					sb.WriteString(renderThinkingBlock(entry.Thinking, false, "", convWidth))
 				} else {
-					sb.WriteString(MutedStyle.Render("[PENSAMIENTO OCULTO — Presiona Ctrl+T para desplegar]\n\n"))
+					sb.WriteString(MutedStyle.Render("· [Razonamiento plegado · Presiona Ctrl+T para desplegar]\n\n"))
 				}
 			}
 
@@ -418,30 +406,18 @@ func (m Model) renderConversation() string {
 			sb.WriteString("\n")
 
 		case "tool":
-			badge := ToolResultSuccessStyle.Render(fmt.Sprintf(" ✓ %s ", entry.ToolName))
-			if !entry.ToolSuccess {
-				badge = ToolResultErrorStyle.Render(fmt.Sprintf(" ✗ %s (Error) ", entry.ToolName))
-			}
-			dur := ""
-			if entry.DurationMs > 0 {
-				dur = fmt.Sprintf(" (%dms)", entry.DurationMs)
-			}
-			sb.WriteString(fmt.Sprintf("%s%s\n", badge, MutedStyle.Render(dur)))
-
-			maxToolWidth := convWidth - 6
-			if maxToolWidth < 25 {
-				maxToolWidth = 25
-			}
-			rawLines := strings.Split(strings.TrimSpace(entry.Content), "\n")
-			for _, rl := range rawLines {
-				wrapped := wrapLine(rl, maxToolWidth)
-				for _, wl := range wrapped {
-					sb.WriteString(ToolContentStyle.Render("│ " + wl))
-					sb.WriteString("\n")
-				}
-			}
-			sb.WriteString("\n")
+			sb.WriteString(renderPlaygroundTool(entry.ToolName, entry.ToolInput, entry.Content, entry.ToolSuccess, entry.DurationMs, convWidth))
 		}
+	}
+
+	// Si hay una herramienta ejecutándose en este momento
+	if m.activeToolName != "" {
+		sb.WriteString(renderActiveToolProgress(m.activeToolName, m.activeToolInput, m.spinner.View(), convWidth))
+	}
+
+	// Si hay pensamiento en tiempo real mientras el modelo razona
+	if m.currentThinking != "" && m.showThinking {
+		sb.WriteString(renderThinkingBlock(m.currentThinking, true, m.spinner.View(), convWidth))
 	}
 
 	// Si hay streaming activo en este momento
@@ -471,34 +447,203 @@ func (m Model) renderConversation() string {
 				sb.WriteString(boxStyle.Render(cardText))
 				sb.WriteString("\n\n")
 			}
-		} else {
-			sb.WriteString(boxStyle.Render(fmt.Sprintf("%s\n(Razonando...) ▌", AssistantStyle.Render("OZY:"))))
-			sb.WriteString("\n\n")
 		}
+	} else if m.state == StateThinking && m.currentThinking == "" && m.activeToolName == "" {
+		sb.WriteString(boxStyle.Render(fmt.Sprintf("%s\n(Razonando...) ▌", AssistantStyle.Render("OZY:"))))
+		sb.WriteString("\n\n")
 	}
 
-	// Si hay una herramienta ejecutándose en este momento
-	if m.activeToolName != "" {
-		badge := ToolBadgeStyle.Render(fmt.Sprintf(" [EJECUTANDO] %s... ", m.activeToolName))
-		sb.WriteString(fmt.Sprintf("%s %s\n", badge, m.spinner.View()))
-		if m.activeToolInput != "" {
-			maxInputW := convWidth - 14
-			if maxInputW < 20 {
-				maxInputW = 20
+	return sb.String()
+}
+
+// parseToolExecutionDisplay extrae si la llamada corresponde a un comando de terminal y genera un título descriptivo.
+func parseToolExecutionDisplay(toolName, toolInput string) (isCommand bool, title string) {
+	lowerName := strings.ToLower(toolName)
+	if lowerName == "run_command" || lowerName == "os_run_command" || lowerName == "shell_exec" {
+		isCommand = true
+		var params struct {
+			Command string `json:"command"`
+			Cwd     string `json:"cwd"`
+		}
+		if err := json.Unmarshal([]byte(toolInput), &params); err == nil && params.Command != "" {
+			cmdStr := strings.TrimSpace(params.Command)
+			if params.Cwd != "" && params.Cwd != "." {
+				title = fmt.Sprintf("❯ %s (en %s)", cmdStr, params.Cwd)
+			} else {
+				title = fmt.Sprintf("❯ %s", cmdStr)
 			}
-			wrapped := wrapLine(m.activeToolInput, maxInputW)
-			for i, wl := range wrapped {
-				if i == 0 {
-					sb.WriteString(ToolContentStyle.Render("│ Params: " + wl))
-				} else {
-					sb.WriteString(ToolContentStyle.Render("│         " + wl))
+			return
+		}
+		cleanInput := strings.TrimSpace(toolInput)
+		if cleanInput != "" {
+			title = fmt.Sprintf("❯ %s", cleanInput)
+			return
+		}
+		title = "❯ comando del sistema"
+		return
+	}
+
+	isCommand = false
+	cleanName := toolName
+	if cleanName == "" {
+		cleanName = "herramienta"
+	}
+	if strings.TrimSpace(toolInput) == "" {
+		title = cleanName
+		return
+	}
+
+	var genericMap map[string]interface{}
+	if err := json.Unmarshal([]byte(toolInput), &genericMap); err == nil && len(genericMap) > 0 {
+		if pathVal, ok := genericMap["path"].(string); ok && pathVal != "" {
+			title = fmt.Sprintf("%s (path: %s)", cleanName, pathVal)
+			return
+		}
+		if queryVal, ok := genericMap["query"].(string); ok && queryVal != "" {
+			title = fmt.Sprintf("%s (query: %q)", cleanName, queryVal)
+			return
+		}
+		if patternVal, ok := genericMap["pattern"].(string); ok && patternVal != "" {
+			title = fmt.Sprintf("%s (patrón: %s)", cleanName, patternVal)
+			return
+		}
+		if targetVal, ok := genericMap["target"].(string); ok && targetVal != "" {
+			title = fmt.Sprintf("%s (%s)", cleanName, targetVal)
+			return
+		}
+		if nameVal, ok := genericMap["name"].(string); ok && nameVal != "" {
+			title = fmt.Sprintf("%s (%s)", cleanName, nameVal)
+			return
+		}
+		var parts []string
+		for k, v := range genericMap {
+			strVal := fmt.Sprintf("%v", v)
+			if len(strVal) > 30 {
+				strVal = strVal[:27] + "..."
+			}
+			parts = append(parts, fmt.Sprintf("%s: %s", k, strVal))
+			if len(parts) >= 2 {
+				break
+			}
+		}
+		title = fmt.Sprintf("%s (%s)", cleanName, strings.Join(parts, ", "))
+		return
+	}
+
+	rawInput := strings.TrimSpace(toolInput)
+	if len(rawInput) > 40 {
+		rawInput = rawInput[:37] + "..."
+	}
+	title = fmt.Sprintf("%s (%s)", cleanName, rawInput)
+	return
+}
+
+// renderPlaygroundTool formatea la ejecución de un comando o herramienta en un bloque interactivo estilo playground.
+func renderPlaygroundTool(toolName, toolInput, content string, success bool, durationMs int64, convWidth int) string {
+	isCommand, title := parseToolExecutionDisplay(toolName, toolInput)
+
+	var sb strings.Builder
+	borderStyle := lipgloss.NewStyle().Foreground(ColorDim)
+
+	if isCommand {
+		sb.WriteString(borderStyle.Render("┌─ ") + PlaygroundHeaderCmdStyle.Render("[COMANDO] ") + title + "\n")
+	} else {
+		sb.WriteString(borderStyle.Render("┌─ ") + PlaygroundHeaderToolStyle.Render("[PLAYGROUND] ") + title + "\n")
+	}
+
+	maxOutWidth := convWidth - 6
+	if maxOutWidth < 25 {
+		maxOutWidth = 25
+	}
+
+	trimmedContent := strings.TrimSpace(content)
+	if trimmedContent == "" {
+		sb.WriteString(borderStyle.Render("│ ") + MutedStyle.Render("(sin salida de consola)") + "\n")
+	} else {
+		lines := strings.Split(trimmedContent, "\n")
+		const maxLinesToShow = 25
+		if len(lines) > maxLinesToShow {
+			head := lines[:15]
+			tail := lines[len(lines)-5:]
+			omitted := len(lines) - 20
+
+			for _, l := range head {
+				for _, wl := range wrapLine(l, maxOutWidth) {
+					sb.WriteString(borderStyle.Render("│ ") + ToolContentStyle.Render(wl) + "\n")
 				}
-				sb.WriteString("\n")
+			}
+			sb.WriteString(borderStyle.Render("│ ") + MutedStyle.Render(fmt.Sprintf("... (%d líneas omitidas) ...", omitted)) + "\n")
+			for _, l := range tail {
+				for _, wl := range wrapLine(l, maxOutWidth) {
+					sb.WriteString(borderStyle.Render("│ ") + ToolContentStyle.Render(wl) + "\n")
+				}
+			}
+		} else {
+			for _, l := range lines {
+				for _, wl := range wrapLine(l, maxOutWidth) {
+					sb.WriteString(borderStyle.Render("│ ") + ToolContentStyle.Render(wl) + "\n")
+				}
 			}
 		}
-		sb.WriteString("\n")
 	}
 
+	durStr := ""
+	if durationMs > 0 {
+		durStr = fmt.Sprintf(" (%dms)", durationMs)
+	}
+
+	if success {
+		sb.WriteString(borderStyle.Render("└─ ") + PlaygroundSuccessStyle.Render("✓ Completado") + MutedStyle.Render(durStr) + "\n\n")
+	} else {
+		sb.WriteString(borderStyle.Render("└─ ") + PlaygroundErrorStyle.Render("✗ Error") + MutedStyle.Render(durStr) + "\n\n")
+	}
+
+	return sb.String()
+}
+
+// renderActiveToolProgress renderiza la herramienta o comando actualmente en progreso.
+func renderActiveToolProgress(toolName, toolInput string, spinnerView string, convWidth int) string {
+	isCommand, title := parseToolExecutionDisplay(toolName, toolInput)
+	borderStyle := lipgloss.NewStyle().Foreground(ColorDim)
+
+	var sb strings.Builder
+	if isCommand {
+		sb.WriteString(borderStyle.Render("┌─ ") + PlaygroundHeaderCmdStyle.Render("[COMANDO] ") + title + " " + spinnerView + "\n")
+	} else {
+		sb.WriteString(borderStyle.Render("┌─ ") + PlaygroundHeaderToolStyle.Render("[EJECUTANDO] ") + title + " " + spinnerView + "\n")
+	}
+	sb.WriteString(borderStyle.Render("└─ ") + MutedStyle.Render("En ejecución en segundo plano...") + "\n\n")
+	return sb.String()
+}
+
+// renderThinkingBlock renderiza el bloque de razonamiento (pensamiento / chain of thought).
+func renderThinkingBlock(thinking string, isStreaming bool, spinnerView string, convWidth int) string {
+	trimmed := strings.TrimSpace(thinking)
+	if trimmed == "" {
+		return ""
+	}
+
+	borderStyle := lipgloss.NewStyle().Foreground(ColorDim)
+	var sb strings.Builder
+	if isStreaming {
+		sb.WriteString(borderStyle.Render("┌─ ") + MutedStyle.Render("Razonamiento ") + spinnerView + "\n")
+	} else {
+		sb.WriteString(borderStyle.Render("┌─ ") + MutedStyle.Render("Razonamiento") + "\n")
+	}
+
+	maxThinkW := convWidth - 6
+	if maxThinkW < 20 {
+		maxThinkW = 20
+	}
+
+	thinkLines := strings.Split(trimmed, "\n")
+	for _, tl := range thinkLines {
+		wrapped := wrapLine(tl, maxThinkW)
+		for _, wl := range wrapped {
+			sb.WriteString(borderStyle.Render("│ ") + MutedStyle.Render(wl) + "\n")
+		}
+	}
+	sb.WriteString(borderStyle.Render("└─") + "\n\n")
 	return sb.String()
 }
 

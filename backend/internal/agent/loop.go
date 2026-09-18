@@ -343,12 +343,12 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				return
 			}
 
-			inputJSON, _ := json.Marshal(tc.Input)
+			inputStr := string(tc.Input)
 			emit(AgentEvent{
 				Type:      "tool:call",
 				ToolID:    tc.ID,
 				ToolName:  tc.Name,
-				ToolInput: string(inputJSON),
+				ToolInput: inputStr,
 			})
 
 			// --- Verificar autorización / permisos ---
@@ -356,7 +356,14 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			auth, err := ValidateAndAuthorize(step, permLevel, sandbox)
 			if err != nil {
 				toolResult := fmt.Sprintf("ERROR DE AUTORIZACIÓN: %v", err)
-				emit(AgentEvent{Type: "tool:result", ToolID: tc.ID, ToolOutput: toolResult, ToolSuccess: false})
+				emit(AgentEvent{
+					Type:        "tool:result",
+					ToolID:      tc.ID,
+					ToolName:    tc.Name,
+					ToolInput:   inputStr,
+					ToolOutput:  toolResult,
+					ToolSuccess: false,
+				})
 				history = appendToolResult(history, tc.ID, toolResult)
 				continue
 			}
@@ -386,14 +393,21 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 					Type:      "tool:approval_request",
 					ToolID:    tc.ID,
 					ToolName:  tc.Name,
-					ToolInput: string(inputJSON),
+					ToolInput: inputStr,
 				})
 				emit(AgentEvent{Type: "state:sync", State: "awaiting"})
 
 				approved := waitForApproval(ctx, session, tc.ID)
 				if !approved {
 					toolResult := "Herramienta denegada por el usuario."
-					emit(AgentEvent{Type: "tool:result", ToolID: tc.ID, ToolOutput: toolResult, ToolSuccess: false})
+					emit(AgentEvent{
+						Type:        "tool:result",
+						ToolID:      tc.ID,
+						ToolName:    tc.Name,
+						ToolInput:   inputStr,
+						ToolOutput:  toolResult,
+						ToolSuccess: false,
+					})
 					history = appendToolResult(history, tc.ID, toolResult)
 					continue
 				}
@@ -408,6 +422,8 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			emit(AgentEvent{
 				Type:        "tool:result",
 				ToolID:      tc.ID,
+				ToolName:    tc.Name,
+				ToolInput:   inputStr,
 				ToolOutput:  output,
 				ToolSuccess: success,
 				DurationMs:  durationMs,

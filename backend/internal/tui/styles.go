@@ -82,7 +82,25 @@ var (
 
 	ToolContentStyle = lipgloss.NewStyle().
 				Foreground(ColorMuted).
-				PaddingLeft(2)
+				PaddingLeft(0)
+
+	// Playground Execution Styles
+	PlaygroundBorderStyle = lipgloss.NewStyle().
+				Foreground(ColorDim)
+
+	PlaygroundHeaderCmdStyle = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(ColorPrimary)
+
+	PlaygroundHeaderToolStyle = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(ColorAccent)
+
+	PlaygroundSuccessStyle = lipgloss.NewStyle().
+				Foreground(ColorSuccess)
+
+	PlaygroundErrorStyle = lipgloss.NewStyle().
+				Foreground(ColorError)
 
 	// Status & Prompt
 	StatusBarStyle = lipgloss.NewStyle().

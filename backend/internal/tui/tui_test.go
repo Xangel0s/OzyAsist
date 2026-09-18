@@ -1341,3 +1341,88 @@ func TestChat_CleanupEmptySessions(t *testing.T) {
 		t.Fatalf("esperaba únicamente 1 chat activo con mensajes, obtenido: %d", len(chats))
 	}
 }
+
+func TestThinking_DefaultVisible(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.state = StateIdle
+	if !m.showThinking {
+		t.Errorf("Expected showThinking to be true by default, got false")
+	}
+
+	// Probar alternado con Ctrl+T
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	model := newM.(Model)
+	if model.showThinking {
+		t.Errorf("Expected showThinking to be false after Ctrl+T, got true")
+	}
+	if model.systemStatus != "Razonamiento oculto" {
+		t.Errorf("Expected systemStatus 'Razonamiento oculto', got %q", model.systemStatus)
+	}
+
+	// Probar comando /thinking
+	out := model.handleSlashCommand("/thinking")
+	if !strings.Contains(out, "visible") {
+		t.Errorf("Expected /thinking to report visible, got: %s", out)
+	}
+	if !model.showThinking {
+		t.Errorf("Expected showThinking true after /thinking, got false")
+	}
+}
+
+func TestThinking_RenderBlock(t *testing.T) {
+	rendered := renderThinkingBlock("Paso 1: Analizar requerimientos.\nPaso 2: Generar respuesta.", false, "", 80)
+	if !strings.Contains(rendered, "Razonamiento") {
+		t.Errorf("Expected 'Razonamiento' in rendered thinking block, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "Paso 1: Analizar") {
+		t.Errorf("Expected content in rendered thinking block, got:\n%s", rendered)
+	}
+
+	// En modo streaming
+	renderedStream := renderThinkingBlock("Pensando en tiempo real...", true, "⠋", 80)
+	if !strings.Contains(renderedStream, "⠋") {
+		t.Errorf("Expected spinner in streaming thinking block, got:\n%s", renderedStream)
+	}
+}
+
+func TestPlayground_ParseAndRender(t *testing.T) {
+	// 1. Comando de terminal
+	isCmd, title := parseToolExecutionDisplay("run_command", `{"command":"git status","cwd":"C:\\Users\\project"}`)
+	if !isCmd {
+		t.Errorf("Expected isCmd true for run_command")
+	}
+	if !strings.Contains(title, "git status") || !strings.Contains(title, "C:\\Users\\project") {
+		t.Errorf("Unexpected title for run_command: %s", title)
+	}
+
+	renderedCmd := renderPlaygroundTool("run_command", `{"command":"git status"}`, "On branch master\nnothing to commit", true, 18, 80)
+	if !strings.Contains(renderedCmd, "[COMANDO]") {
+		t.Errorf("Expected '[COMANDO]' in rendered command, got:\n%s", renderedCmd)
+	}
+	if !strings.Contains(renderedCmd, "✓ Completado") || !strings.Contains(renderedCmd, "18ms") {
+		t.Errorf("Expected success badge and duration in rendered command, got:\n%s", renderedCmd)
+	}
+
+	// 2. Herramienta genérica
+	isToolCmd, toolTitle := parseToolExecutionDisplay("read_file", `{"path":"backend/main.go"}`)
+	if isToolCmd {
+		t.Errorf("Expected isToolCmd false for read_file")
+	}
+	if !strings.Contains(toolTitle, "path: backend/main.go") {
+		t.Errorf("Unexpected toolTitle: %s", toolTitle)
+	}
+
+	renderedTool := renderPlaygroundTool("read_file", `{"path":"backend/main.go"}`, "error: file not found", false, 5, 80)
+	if !strings.Contains(renderedTool, "[PLAYGROUND]") {
+		t.Errorf("Expected '[PLAYGROUND]' in rendered tool, got:\n%s", renderedTool)
+	}
+	if !strings.Contains(renderedTool, "✗ Error") {
+		t.Errorf("Expected error indicator in rendered tool, got:\n%s", renderedTool)
+	}
+
+	// 3. Herramienta activa en progreso
+	renderedActive := renderActiveToolProgress("run_command", `{"command":"go build"}`, "⠋", 80)
+	if !strings.Contains(renderedActive, "[COMANDO]") || !strings.Contains(renderedActive, "go build") {
+		t.Errorf("Unexpected active progress rendering: %s", renderedActive)
+	}
+}

@@ -182,6 +182,7 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 		permissionLevel:    "autonomous",
 		voiceEnabled:       voiceActive,
 		systemStatus:       initStatus,
+		showThinking:       true,
 		promptHistoryIndex: -1,
 		activeCard:         nil,
 		entries: []ChatEntry{
