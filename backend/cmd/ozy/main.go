@@ -133,7 +133,7 @@ func initCore() (providers.Provider, *models.Chat) {
 	system.InitDefaultPathRegistry(db.DB)
 	go func() {
 		log.Printf("[RUTAS] Iniciando escaneo universal del sistema anfitrión en segundo plano...")
-		_ = system.DefaultPathRegistry().RefreshScan(context.Background())
+		_, _ = system.DefaultPathRegistry().RefreshScan(context.Background())
 		log.Printf("[RUTAS] [OK] Escaneo completado: %d rutas y proyectos indexados en memoria RAM", len(system.DefaultPathRegistry().ListAll()))
 	}()
 
