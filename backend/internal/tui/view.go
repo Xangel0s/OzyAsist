@@ -332,20 +332,15 @@ func (m Model) renderConversation() string {
 	for _, entry := range m.entries {
 		switch entry.Role {
 		case "user":
-			sb.WriteString(UserStyle.Render("❯ TÚ: "))
-			maxUserW := convWidth - 10
+			maxUserW := convWidth - 12
 			if maxUserW < 20 {
 				maxUserW = 20
 			}
 			lines := wrapContent(entry.Content, maxUserW)
-			for i, l := range lines {
-				if i > 0 {
-					sb.WriteString("      ")
-				}
-				sb.WriteString(l)
-				sb.WriteString("\n")
-			}
-			sb.WriteString("\n")
+			rawUserText := strings.Join(lines, "\n")
+			cardText := fmt.Sprintf("%s\n%s", UserStyle.Render("❯ TÚ:"), rawUserText)
+			sb.WriteString(UserBoxStyle.Render(cardText))
+			sb.WriteString("\n\n")
 
 		case "assistant":
 			// Renderizar pensamiento (Thinking / Chain of Thought) si existe
@@ -406,13 +401,21 @@ func (m Model) renderConversation() string {
 			sb.WriteString("\n")
 
 		case "tool":
-			sb.WriteString(renderPlaygroundTool(entry.ToolName, entry.ToolInput, entry.Content, entry.ToolSuccess, entry.DurationMs, convWidth))
+			if m.showThinking {
+				sb.WriteString(renderPlaygroundTool(entry.ToolName, entry.ToolInput, entry.Content, entry.ToolSuccess, entry.DurationMs, convWidth))
+			} else {
+				sb.WriteString(renderCollapsedTool(entry.ToolName, entry.ToolInput, entry.ToolSuccess, entry.DurationMs))
+			}
 		}
 	}
 
 	// Si hay una herramienta ejecutándose en este momento
 	if m.activeToolName != "" {
-		sb.WriteString(renderActiveToolProgress(m.activeToolName, m.activeToolInput, m.spinner.View(), convWidth))
+		if m.showThinking {
+			sb.WriteString(renderActiveToolProgress(m.activeToolName, m.activeToolInput, m.spinner.View(), convWidth))
+		} else {
+			sb.WriteString(renderCollapsedActiveTool(m.activeToolName, m.spinner.View()))
+		}
 	}
 
 	// Si hay pensamiento en tiempo real mientras el modelo razona
@@ -448,9 +451,6 @@ func (m Model) renderConversation() string {
 				sb.WriteString("\n\n")
 			}
 		}
-	} else if m.state == StateThinking && m.currentThinking == "" && m.activeToolName == "" {
-		sb.WriteString(boxStyle.Render(fmt.Sprintf("%s\n(Razonando...) ▌", AssistantStyle.Render("OZY:"))))
-		sb.WriteString("\n\n")
 	}
 
 	return sb.String()
@@ -517,7 +517,13 @@ func parseToolExecutionDisplay(toolName, toolInput string) (isCommand bool, titl
 		}
 		var parts []string
 		for k, v := range genericMap {
+			if v == nil {
+				continue
+			}
 			strVal := fmt.Sprintf("%v", v)
+			if strVal == "<nil>" || strVal == "null" || strVal == "[]" || strVal == "" {
+				continue
+			}
 			if len(strVal) > 30 {
 				strVal = strVal[:27] + "..."
 			}
@@ -526,7 +532,11 @@ func parseToolExecutionDisplay(toolName, toolInput string) (isCommand bool, titl
 				break
 			}
 		}
-		title = fmt.Sprintf("%s (%s)", cleanName, strings.Join(parts, ", "))
+		if len(parts) > 0 {
+			title = fmt.Sprintf("%s (%s)", cleanName, strings.Join(parts, ", "))
+		} else {
+			title = cleanName
+		}
 		return
 	}
 
@@ -616,6 +626,35 @@ func renderActiveToolProgress(toolName, toolInput string, spinnerView string, co
 	return sb.String()
 }
 
+// renderCollapsedTool formatea una herramienta en una sola línea sutil cuando el hilo de ejecución está plegado.
+func renderCollapsedTool(toolName, toolInput string, success bool, durationMs int64) string {
+	isCommand, title := parseToolExecutionDisplay(toolName, toolInput)
+	durStr := ""
+	if durationMs > 0 {
+		durStr = fmt.Sprintf(" (%dms)", durationMs)
+	}
+	status := PlaygroundSuccessStyle.Render("✓")
+	if !success {
+		status = PlaygroundErrorStyle.Render("✗")
+	}
+
+	prefix := "[PLAYGROUND]"
+	if isCommand {
+		prefix = "[COMANDO]"
+	}
+
+	return fmt.Sprintf("  %s %s %s %s%s\n", MutedStyle.Render("·"), PlaygroundHeaderCmdStyle.Render(prefix), MutedStyle.Render(title), status, MutedStyle.Render(durStr))
+}
+
+// renderCollapsedActiveTool renderiza la herramienta activa en una sola línea discreta.
+func renderCollapsedActiveTool(toolName string, spinnerView string) string {
+	cleanName := toolName
+	if cleanName == "" {
+		cleanName = "herramienta"
+	}
+	return fmt.Sprintf("  %s %s %s %s\n", MutedStyle.Render("·"), PlaygroundHeaderCmdStyle.Render("[EJECUTANDO]"), MutedStyle.Render(cleanName), spinnerView)
+}
+
 // renderThinkingBlock renderiza el bloque de razonamiento (pensamiento / chain of thought).
 func renderThinkingBlock(thinking string, isStreaming bool, spinnerView string, convWidth int) string {
 	trimmed := strings.TrimSpace(thinking)
@@ -692,7 +731,7 @@ func (m Model) renderFooter() string {
 	} else if m.activeCard != nil {
 		hintsText = " [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
 	} else {
-		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Pensamiento  •  [/help] Comandos"
+		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Hilo de Ejecución  •  [/help] Comandos"
 		if m.width > 0 && m.width < 85 {
 			hintsText = " [Enter] Enviar  •  [Esc] Menú  •  [/help] Ayuda"
 		}

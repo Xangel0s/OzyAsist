@@ -18,7 +18,7 @@ var (
 	ColorSuccess   = lipgloss.Color("#2ecc71")
 	ColorWarning   = lipgloss.Color("#f39c12")
 	ColorError     = lipgloss.Color("#e74c3c")
-	ColorAccent    = lipgloss.Color("#00d2d3")
+	ColorAccent    = lipgloss.Color("#d1f107") // OzyAssist Electric Lime (No blue/cyan)
 	ColorQueue     = lipgloss.Color("#f1c40f") // Amber/Yellow for queue indication
 
 	// Header Styles
@@ -50,9 +50,16 @@ var (
 			Bold(true).
 			Foreground(ColorPrimary)
 
+	UserBoxStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#171915")).
+			BorderLeft(true).
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderLeftForeground(lipgloss.Color("#4a4a4a")).
+			Padding(0, 1)
+
 	AssistantStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(ColorAccent)
+			Foreground(ColorPrimary)
 
 	SystemStyle = lipgloss.NewStyle().
 			Foreground(ColorMuted).
@@ -94,13 +101,16 @@ var (
 
 	PlaygroundHeaderToolStyle = lipgloss.NewStyle().
 					Bold(true).
-					Foreground(ColorAccent)
+					Foreground(ColorPrimary)
 
 	PlaygroundSuccessStyle = lipgloss.NewStyle().
 				Foreground(ColorSuccess)
 
 	PlaygroundErrorStyle = lipgloss.NewStyle().
 				Foreground(ColorError)
+
+	CollapsedToolStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted)
 
 	// Status & Prompt
 	StatusBarStyle = lipgloss.NewStyle().

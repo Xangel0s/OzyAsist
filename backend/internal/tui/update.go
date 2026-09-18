@@ -681,9 +681,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlT:
 			m.showThinking = !m.showThinking
 			if m.showThinking {
-				m.systemStatus = "Razonamiento visible"
+				m.systemStatus = "Hilo de ejecución: Desplegado"
 			} else {
-				m.systemStatus = "Razonamiento oculto"
+				m.systemStatus = "Hilo de ejecución: Plegado (solo respuestas)"
 			}
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -1714,12 +1714,12 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		}
 		return sb.String()
 
-	case "/thinking", "/thought":
+	case "/thinking", "/thought", "/hilo", "/proceso":
 		m.showThinking = !m.showThinking
 		if m.showThinking {
-			return "[OK] Razonamiento visible. (Presiona Ctrl+T o /thinking para ocultar)"
+			return "[OK] Hilo de ejecución desplegado. (Presiona Ctrl+T para plegar)"
 		}
-		return "[OK] Razonamiento oculto. (Presiona Ctrl+T o /thinking para desplegar)"
+		return "[OK] Hilo de ejecución plegado (modo solo respuestas). (Presiona Ctrl+T para desplegar)"
 
 	case "/mcp":
 		if len(parts) > 1 && strings.ToLower(parts[1]) == "reload" {

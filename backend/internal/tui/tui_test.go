@@ -1355,14 +1355,14 @@ func TestThinking_DefaultVisible(t *testing.T) {
 	if model.showThinking {
 		t.Errorf("Expected showThinking to be false after Ctrl+T, got true")
 	}
-	if model.systemStatus != "Razonamiento oculto" {
-		t.Errorf("Expected systemStatus 'Razonamiento oculto', got %q", model.systemStatus)
+	if !strings.Contains(model.systemStatus, "Plegado") {
+		t.Errorf("Expected systemStatus to contain 'Plegado', got %q", model.systemStatus)
 	}
 
 	// Probar comando /thinking
 	out := model.handleSlashCommand("/thinking")
-	if !strings.Contains(out, "visible") {
-		t.Errorf("Expected /thinking to report visible, got: %s", out)
+	if !strings.Contains(out, "desplegado") {
+		t.Errorf("Expected /thinking to report desplegado, got: %s", out)
 	}
 	if !model.showThinking {
 		t.Errorf("Expected showThinking true after /thinking, got false")
@@ -1403,13 +1403,16 @@ func TestPlayground_ParseAndRender(t *testing.T) {
 		t.Errorf("Expected success badge and duration in rendered command, got:\n%s", renderedCmd)
 	}
 
-	// 2. Herramienta genérica
-	isToolCmd, toolTitle := parseToolExecutionDisplay("read_file", `{"path":"backend/main.go"}`)
+	// 2. Herramienta genérica con filtrado de nil
+	isToolCmd, toolTitle := parseToolExecutionDisplay("os_launch_app", `{"appName":"code","args":null}`)
 	if isToolCmd {
-		t.Errorf("Expected isToolCmd false for read_file")
+		t.Errorf("Expected isToolCmd false for os_launch_app")
 	}
-	if !strings.Contains(toolTitle, "path: backend/main.go") {
-		t.Errorf("Unexpected toolTitle: %s", toolTitle)
+	if strings.Contains(toolTitle, "<nil>") || strings.Contains(toolTitle, "null") {
+		t.Errorf("toolTitle should not contain <nil> or null: %s", toolTitle)
+	}
+	if !strings.Contains(toolTitle, "appName: code") {
+		t.Errorf("toolTitle should contain 'appName: code': %s", toolTitle)
 	}
 
 	renderedTool := renderPlaygroundTool("read_file", `{"path":"backend/main.go"}`, "error: file not found", false, 5, 80)
@@ -1424,5 +1427,11 @@ func TestPlayground_ParseAndRender(t *testing.T) {
 	renderedActive := renderActiveToolProgress("run_command", `{"command":"go build"}`, "⠋", 80)
 	if !strings.Contains(renderedActive, "[COMANDO]") || !strings.Contains(renderedActive, "go build") {
 		t.Errorf("Unexpected active progress rendering: %s", renderedActive)
+	}
+
+	// 4. Modo colapsado (una sola línea)
+	collapsed := renderCollapsedTool("os_launch_app", `{"appName":"code"}`, true, 29)
+	if !strings.Contains(collapsed, "os_launch_app") || !strings.Contains(collapsed, "29ms") || !strings.Contains(collapsed, "✓") {
+		t.Errorf("Unexpected collapsed tool rendering: %s", collapsed)
 	}
 }
