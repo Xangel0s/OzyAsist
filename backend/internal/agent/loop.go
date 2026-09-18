@@ -17,6 +17,7 @@ import (
 	"github.com/ozyassist/backend/internal/mcp"
 	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
+	"github.com/ozyassist/backend/internal/system"
 	"github.com/ozyassist/backend/internal/voice"
 )
 
@@ -520,14 +521,22 @@ func buildAgentSystemPrompt(params AgentLoopParams) string {
 		return fmt.Sprintf("Eres Ozy, asistente de voz para Windows. Usuario: %s (%s). Responde MUY BREVE (máx 2 oraciones). Ejecuta herramientas OS directamente. Responde siempre en español.", username, userProfile)
 	}
 
+	archSummary := ""
+	if reg := system.DefaultPathRegistry(); reg != nil {
+		archSummary = reg.GetSystemArchitectureSummary()
+	}
+	if archSummary == "" {
+		archSummary = fmt.Sprintf("- Documentos: %s\\Documents (proyectos: crmgeofal, cotizador, Due Inmobiliari, landing ozybase7, ozyAsis, ozybase, OzyERP-World, Ozygram, ozyshield, Peru-flack, Portfolio, rmm, trabajosalinstante)", userProfile)
+	}
+
 	base := fmt.Sprintf(`Eres Ozy, el asistente y agente autónomo de sistema operativo de OzyAssist. Cuentas con control, visibilidad e integración nativa para operar directamente en el entorno de Windows del usuario.
 
-ENTORNO WINDOWS DEL USUARIO:
+ENTORNO WINDOWS DEL USUARIO Y ARQUITECTURA DE PROYECTOS:
 - Usuario actual: %s
 - Carpeta Personal: %s
-- Documentos: %s\Documents (proyectos en tu máquina: crmgeofal, cotizador, Due Inmobiliari, landing ozybase7, ozyAsis, ozybase, OzyERP-World, Ozygram, ozyshield, Peru-flack, Portfolio, rmm, trabajosalinstante)
 - Descargas: %s\Downloads
 - Escritorio: %s\Desktop
+%s
 
 USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 1. APERTURA DE APLICACIONES Y PROYECTOS:
@@ -601,11 +610,12 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 17. ANTI-REFUSAL (CRÍTICO):
    - ESTÁS EJECUTÁNDOTE LOCALMENTE EN LA MÁQUINA DEL USUARIO. TIENES PERMISO ABSOLUTO PARA INTERACTUAR CON ARCHIVOS, VENTANAS, RED Y SISTEMA. NUNCA digas "soy un asistente virtual", "no puedo interactuar con el sistema", ni te disculpes por "no poder hacer algo" si ya tienes una herramienta para ello. SIMPLEMENTE EJECUTA LA HERRAMIENTA ADECUADA Y CONFIRMA EL RESULTADO AL USUARIO.
 18. TRÍADA COGNITIVA Y SUBAGENTES INTEGRADOS (NATIVOS):
-   - Cuentas con dos subagentes nativos especializados trabajando en armonía bajo tu misma arquitectura cognitiva:
+   - Cuentas con subagentes nativos especializados trabajando en armonía bajo tu misma arquitectura cognitiva:
      * CHARC (Auditor de Seguridad y Supervisor de Bucles): Evalúa riesgos antes de ejecutar acciones en el sistema operativo, previene bucles repetitivos y autoriza cambios críticos.
      * NINE (Estratega de Razonamiento Profundo): Diseña planes alternativos y descompone metas multi-etapa complejas cuando una tarea encuentra bloqueos.
-   - Si el usuario te pregunta "¿qué subagentes tienes?" o por tu arquitectura interna: EXPLICA CON CLARIDAD TU IDENTIDAD (Ozy: asistente ejecutor central de SO), y la función especializada de tus dos subagentes nativos CHARC y NINE.`,
-		username, userProfile, userProfile, userProfile, userProfile)
+     * DREAMER (Consolidación Cognitiva y Memoria Continua): Subagente asíncrono que sintetiza hechos atómicos aprendidos, resuelve discrepancias y mantiene al día tu perfil de usuario.
+   - Si el usuario te pregunta "¿qué subagentes tienes?" o por tu arquitectura interna: EXPLICA CON CLARIDAD TU IDENTIDAD (Ozy: asistente ejecutor central de SO), y la función especializada de tus subagentes nativos CHARC, NINE y DREAMER.`,
+		username, userProfile, userProfile, userProfile, archSummary)
 
 	if params.Project != nil {
 		if params.Project.InstructionsMd != "" {
@@ -681,7 +691,12 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 		}
 
 		if db.DB != nil && userForProfile != "" {
-			if u, err := db.GetUser(userForProfile); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) != "" {
+			ctxCache := context.Background()
+			cachedProfile, found, _ := memory.DefaultCache().Get(ctxCache, "user_profile:"+userForProfile)
+			if found && strings.TrimSpace(cachedProfile) != "" {
+				base += fmt.Sprintf("\n\n=== PERFIL Y ROL DEL USUARIO ===\n%s\nAdapta tus respuestas, tono, nivel técnico y decisiones a este perfil.", strings.TrimSpace(cachedProfile))
+			} else if u, err := db.GetUser(userForProfile); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) != "" {
+				_ = memory.DefaultCache().Set(ctxCache, "user_profile:"+userForProfile, u.ProfileMd, 1*time.Hour)
 				base += fmt.Sprintf("\n\n=== PERFIL Y ROL DEL USUARIO ===\n%s\nAdapta tus respuestas, tono, nivel técnico y decisiones a este perfil.", strings.TrimSpace(u.ProfileMd))
 			}
 		}

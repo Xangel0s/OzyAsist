@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/ozyassist/backend/internal/db"
 	"github.com/ozyassist/backend/internal/memory"
+	"github.com/ozyassist/backend/internal/system"
 )
 
 func TestInitialModel(t *testing.T) {
@@ -312,6 +313,58 @@ func TestSlashCommands_ProfileAndMemories(t *testing.T) {
 
 	// 5. Verificar que no contenga emojis en las salidas
 	for _, out := range []string{updateOut, viewOut, rememberOut, memoriesOut} {
+		for _, r := range out {
+			if r >= 0x1F300 && r <= 0x1F9FF {
+				t.Errorf("output should not contain emojis, found: %U in '%s'", r, out)
+			}
+		}
+	}
+}
+
+func TestSlashCommands_PathsScanDream(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "paths_test.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("error initializing test db: %v", err)
+	}
+	defer db.Close()
+	_ = db.EnsureDefaultUser()
+
+	// Registrar una ruta de prueba
+	system.InitDefaultPathRegistry(db.DB)
+	system.DefaultPathRegistry().Register(system.IndexedPath{
+		ID:       "p1",
+		Name:     "crmgeofal",
+		FullPath: "C:\\Proyectos\\crmgeofal",
+		Category: system.CategoryProject,
+	}, false)
+
+	// Inicializar subagente DREAMER
+	memory.InitContinuousMemory(db.DB, nil)
+	memory.InitDreamerSubagent(nil, memory.DefaultStore(), db.DB, memory.DefaultCache())
+
+	m := InitialModel(nil, nil, false)
+
+	// 1. Probar /paths
+	pathsOut := m.handleSlashCommand("/paths")
+	if !strings.Contains(pathsOut, "[RUTAS INDEXADAS EN RAM]") || !strings.Contains(pathsOut, "crmgeofal") {
+		t.Errorf("expected crmgeofal in /paths, got: %s", pathsOut)
+	}
+
+	// 2. Probar /scan
+	scanOut := m.handleSlashCommand("/scan")
+	if !strings.Contains(scanOut, "[RUTAS]") || !strings.Contains(scanOut, "iniciado") {
+		t.Errorf("expected scan confirmation in /scan, got: %s", scanOut)
+	}
+
+	// 3. Probar /dream
+	dreamOut := m.handleSlashCommand("/dream")
+	if !strings.Contains(dreamOut, "[DREAMING]") || !strings.Contains(dreamOut, "iniciado") {
+		t.Errorf("expected dreamer confirmation in /dream, got: %s", dreamOut)
+	}
+
+	// 4. Verificar ausencia total de emojis
+	for _, out := range []string{pathsOut, scanOut, dreamOut} {
 		for _, r := range out {
 			if r >= 0x1F300 && r <= 0x1F9FF {
 				t.Errorf("output should not contain emojis, found: %U in '%s'", r, out)

@@ -44,6 +44,11 @@ func InitPathRegistry(dbConn *sql.DB) *PathRegistry {
 	return r
 }
 
+// InitDefaultPathRegistry es un alias para inicializar el registro global por defecto con SQLite.
+func InitDefaultPathRegistry(dbConn *sql.DB) *PathRegistry {
+	return InitPathRegistry(dbConn)
+}
+
 func (r *PathRegistry) ensureTable() error {
 	if r.db == nil {
 		return nil
@@ -208,6 +213,23 @@ func (r *PathRegistry) ListProjects() []IndexedPath {
 		if p.Category == CategoryProject || p.Category == CategorySubRepo {
 			list = append(list, p)
 		}
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		return strings.ToLower(list[i].Name) < strings.ToLower(list[j].Name)
+	})
+
+	return list
+}
+
+// ListAll devuelve todas las rutas indexadas en memoria RAM.
+func (r *PathRegistry) ListAll() []IndexedPath {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	var list []IndexedPath
+	for _, p := range r.paths {
+		list = append(list, p)
 	}
 
 	sort.Slice(list, func(i, j int) bool {

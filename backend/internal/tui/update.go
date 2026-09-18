@@ -599,6 +599,9 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /profile [texto]  - Consulta o actualiza la ficha del perfil de usuario
   /memories         - Consulta los hechos y preferencias aprendidas en memoria continua
   /remember <hecho> - Registra manualmente un hecho técnico o regla persistente
+  /dream            - Ejecuta el subagente DREAMER para consolidar memoria y actualizar perfil
+  /paths, /rutas    - Lista proyectos, repositorios y rutas indexadas en memoria RAM
+  /scan             - Fuerza un escaneo universal de rutas y proyectos en segundo plano
   /cancel [all]     - Cancela la petición activa en curso (o 'all' para vaciar cola)
   /now <orden>      - Interrumpe la tarea actual y ejecuta la orden inmediatamente
   /queue, /cola     - Consulta los mensajes pendientes en la cola de espera
@@ -675,6 +678,50 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			return fmt.Sprintf("[MEMORIA] Error al guardar recuerdo: %v", err)
 		}
 		return fmt.Sprintf("[MEMORIA] Recordado y persistido con exito: \"%s\"", factContent)
+
+	case "/dream", "/sonar", "/soñar", "/consolidar":
+		dreamer := memory.DefaultDreamer()
+		if dreamer == nil {
+			return "[DREAMING] Subagente DREAMER no inicializado."
+		}
+		dreamer.DreamAsync(context.Background(), db.DefaultUserID(), nil)
+		return "[DREAMING] Proceso de consolidacion de memoria continua iniciado en segundo plano por el subagente DREAMER."
+
+	case "/paths", "/rutas", "/proyectos":
+		reg := system.DefaultPathRegistry()
+		if reg == nil {
+			return "[RUTAS] Registro de rutas no inicializado."
+		}
+		paths := reg.ListAll()
+		if len(paths) == 0 {
+			return "[RUTAS] No hay rutas indexadas todavia. Usa /scan para realizar un escaneo del sistema."
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("[RUTAS INDEXADAS EN RAM] Total: %d ubicaciones\n", len(paths)))
+		limit := 25
+		for i, p := range paths {
+			if i >= limit {
+				sb.WriteString(fmt.Sprintf("  ... y %d rutas mas. (Consulta un proyecto directamente por su nombre)\n", len(paths)-limit))
+				break
+			}
+			sb.WriteString(fmt.Sprintf("  %d. [%s] %s -> %s\n", i+1, strings.ToUpper(string(p.Category)), p.Name, p.FullPath))
+		}
+		sb.WriteString("\nUsa /scan para forzar un re-escaneo del sistema de archivos en segundo plano.")
+		return sb.String()
+
+	case "/scan", "/escanear":
+		reg := system.DefaultPathRegistry()
+		if reg == nil && db.DB != nil {
+			system.InitDefaultPathRegistry(db.DB)
+			reg = system.DefaultPathRegistry()
+		}
+		if reg == nil {
+			return "[RUTAS] Registro de rutas no inicializado."
+		}
+		go func() {
+			_, _ = reg.RefreshScan(context.Background())
+		}()
+		return "[RUTAS] Escaneo universal del sistema anfitrion iniciado en segundo plano. Los proyectos se indexan en memoria RAM."
 
 	case "/cancel", "/stop", "/abort", "/cancelar", "/parar":
 		clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"

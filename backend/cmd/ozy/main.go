@@ -24,6 +24,7 @@ import (
 	"github.com/ozyassist/backend/internal/mcp"
 	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
+	"github.com/ozyassist/backend/internal/system"
 	"github.com/ozyassist/backend/internal/tui"
 	"github.com/ozyassist/backend/internal/voice"
 )
@@ -128,9 +129,19 @@ func initCore() (providers.Provider, *models.Chat) {
 	memory.BuildSystemIndex()
 	_ = mcp.DefaultRegistry.InitFromConfigFile(context.Background(), "")
 
+	// Inicializar registro de rutas universales en RAM y sincronización en segundo plano
+	system.InitDefaultPathRegistry(db.DB)
+	go func() {
+		log.Printf("[RUTAS] Iniciando escaneo universal del sistema anfitrión en segundo plano...")
+		_ = system.DefaultPathRegistry().RefreshScan(context.Background())
+		log.Printf("[RUTAS] [OK] Escaneo completado: %d rutas y proyectos indexados en memoria RAM", len(system.DefaultPathRegistry().ListAll()))
+	}()
+
 	prov := providers.GetDefaultOrFirstProvider()
 	if db.DB != nil {
+		cache := memory.DefaultCache()
 		memory.InitContinuousMemory(db.DB, prov)
+		memory.InitDreamerSubagent(prov, memory.DefaultStore(), db.DB, cache)
 
 		// Inicializar perfil base si aún no existe
 		if u, err := db.GetUser(db.DefaultUserID()); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) == "" {
