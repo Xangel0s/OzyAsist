@@ -1,9 +1,14 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/memory"
 )
 
 func TestInitialModel(t *testing.T) {
@@ -263,6 +268,58 @@ func TestMessageQueue_DirectSendInterruptsAndStarts(t *testing.T) {
 		t.Errorf("Expected state to be StateThinking after /now, got %v", model.state)
 	}
 }
+
+func TestSlashCommands_ProfileAndMemories(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "ozy-tui-mem-test-*")
+	if err != nil {
+		t.Fatalf("error creating temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dbPath := filepath.Join(tempDir, "tui_test.db")
+	if err := db.Init(dbPath); err != nil {
+		t.Fatalf("error initializing test db: %v", err)
+	}
+	defer db.Close()
+	_ = db.EnsureDefaultUser()
+	memory.InitContinuousMemory(db.DB, nil)
+
+	m := InitialModel(nil, nil, false)
+
+	// 1. Probar /profile actualización
+	updateOut := m.handleSlashCommand("/profile # Lead Developer crmgeofal")
+	if !strings.Contains(updateOut, "[PERFIL]") || !strings.Contains(updateOut, "actualizado") {
+		t.Errorf("expected profile update confirmation, got: %s", updateOut)
+	}
+
+	// 2. Probar /profile consulta
+	viewOut := m.handleSlashCommand("/profile")
+	if !strings.Contains(viewOut, "Lead Developer crmgeofal") {
+		t.Errorf("expected profile content in /profile, got: %s", viewOut)
+	}
+
+	// 3. Probar /remember
+	rememberOut := m.handleSlashCommand("/remember El backend corre en puerto 4000")
+	if !strings.Contains(rememberOut, "[MEMORIA]") || !strings.Contains(rememberOut, "Recordado") {
+		t.Errorf("expected memory confirmation, got: %s", rememberOut)
+	}
+
+	// 4. Probar /memories consulta
+	memoriesOut := m.handleSlashCommand("/memories")
+	if !strings.Contains(memoriesOut, "[MEMORIA CONTINUA]") || !strings.Contains(memoriesOut, "puerto 4000") {
+		t.Errorf("expected remembered fact in /memories, got: %s", memoriesOut)
+	}
+
+	// 5. Verificar que no contenga emojis en las salidas
+	for _, out := range []string{updateOut, viewOut, rememberOut, memoriesOut} {
+		for _, r := range out {
+			if r >= 0x1F300 && r <= 0x1F9FF {
+				t.Errorf("output should not contain emojis, found: %U in '%s'", r, out)
+			}
+		}
+	}
+}
+
 
 
 

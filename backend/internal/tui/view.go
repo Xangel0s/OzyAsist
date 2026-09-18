@@ -203,20 +203,20 @@ func (m Model) renderHeader() string {
 	}
 	permTag := TagStyle.Render(permText)
 
-	voiceText := " 🎙️ Voz: OFF "
+	voiceText := " [VOZ: OFF] "
 	voiceTag := TagStyle.Render(voiceText)
 	if m.voiceEnabled {
 		if m.width > 0 && m.width < 90 {
-			voiceText = " 🎙️ Voz: ON "
+			voiceText = " [VOZ: ON] "
 		} else {
-			voiceText = " 🎙️ 'Hey Ozy': ACTIVO "
+			voiceText = " [VOZ: ACTIVO] "
 		}
 		voiceTag = TagActiveStyle.Render(voiceText)
 	}
 
 	tags := []string{modelTag, " ", permTag, " ", voiceTag}
 	if len(m.messageQueue) > 0 {
-		queueText := fmt.Sprintf(" 📥 Cola: %d ", len(m.messageQueue))
+		queueText := fmt.Sprintf(" [COLA: %d] ", len(m.messageQueue))
 		tags = append(tags, " ", QueueBadgeStyle.Render(queueText))
 	}
 	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, tags...)
@@ -259,7 +259,7 @@ func (m Model) renderConversation() string {
 			// Renderizar pensamiento (Thinking / Chain of Thought) si existe
 			if entry.Thinking != "" {
 				if m.showThinking {
-					sb.WriteString(MutedStyle.Render("💭 [Pensamiento / Razonamiento — Presiona Ctrl+T para plegar]:\n"))
+					sb.WriteString(MutedStyle.Render("[PENSAMIENTO / RAZONAMIENTO — Presiona Ctrl+T para plegar]:\n"))
 					thinkLines := strings.Split(strings.TrimSpace(entry.Thinking), "\n")
 					maxThinkW := convWidth - 8
 					if maxThinkW < 20 {
@@ -274,13 +274,13 @@ func (m Model) renderConversation() string {
 					}
 					sb.WriteString("\n")
 				} else {
-					sb.WriteString(MutedStyle.Render("💭 [Pensamiento oculto — Presiona Ctrl+T para desplegar]\n\n"))
+					sb.WriteString(MutedStyle.Render("[PENSAMIENTO OCULTO — Presiona Ctrl+T para desplegar]\n\n"))
 				}
 			}
 
 			cleaned := cleanAssistantText(entry.Content)
 			if cleaned != "" {
-				sb.WriteString(AssistantStyle.Render("⚡ OZY: "))
+				sb.WriteString(AssistantStyle.Render("OZY: "))
 				maxAssistantW := convWidth - 10
 				if maxAssistantW < 20 {
 					maxAssistantW = 20
@@ -363,7 +363,7 @@ func (m Model) renderConversation() string {
 	if len(m.currentStream) > 0 {
 		cleaned := cleanAssistantText(m.currentStream)
 		if cleaned != "" {
-			sb.WriteString(AssistantStyle.Render("⚡ OZY: "))
+			sb.WriteString(AssistantStyle.Render("OZY: "))
 			maxStreamW := convWidth - 10
 			if maxStreamW < 20 {
 				maxStreamW = 20

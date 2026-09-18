@@ -595,23 +595,86 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 	cmd := strings.ToLower(parts[0])
 	switch cmd {
 	case "/help":
-		return `📌 Comandos disponibles en OzyAssist TUI:
+		return `[COMANDOS DISPONIBLES EN OZYASSIST TUI]
+  /profile [texto]  - Consulta o actualiza la ficha del perfil de usuario
+  /memories         - Consulta los hechos y preferencias aprendidas en memoria continua
+  /remember <hecho> - Registra manualmente un hecho técnico o regla persistente
   /cancel [all]     - Cancela la petición activa en curso (o 'all' para vaciar cola)
   /now <orden>      - Interrumpe la tarea actual y ejecuta la orden inmediatamente
   /queue, /cola     - Consulta los mensajes pendientes en la cola de espera
   /clearqueue       - Vacía la cola de mensajes pendientes
   /provider [nom]   - Consulta o cambia el proveedor LLM activo (cohere, groq, openai, etc.)
-  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, anthropic, mistral, kilocode) o URL local
-  /groq [key]       - Auto-configura Groq desde portapapeles o abre Chrome autenticado para obtenerla
+  /key <prov> <key> - Configura API Key (cohere, groq, openrouter, openai, deepseek, mistral, kilocode)
   /voice            - Alterna la escucha activa de voz ("Hey Ozy")
   /model [nombre]   - Consulta o cambia el proveedor/modelo actual
-  /tools            - Lista todas las herramientas activas (SO + MCP)
-  /mcp [reload]     - Consulta o recarga en caliente los servidores MCP (mcp_servers.json)
-  /organize [dir]   - Ejecuta la organización rápida de una carpeta
+  /tools            - Lista todas las herramientas activas (SO + MCP + Memoria)
+  /mcp [reload]     - Consulta o recarga los servidores MCP
+  /perm [modo]      - Cambia nivel de permisos: autonomous | supervised | sandboxed
   /clear            - Limpia el historial de la pantalla (Ctrl+L)
-  /perm [modo]      - Cambia nivel de permisos: autonomous | supervised
   /exit, /quit      - Cierra la aplicación (Ctrl+C)
-💡 Atajos: [Esc] o [Ctrl+C] para cancelar tarea • [Enter] encola si Ozy está ocupado`
+Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] encola si Ozy está ocupado`
+
+	case "/profile", "/perfil":
+		if len(parts) == 1 {
+			if db.DB == nil {
+				return "[PERFIL] Base de datos no inicializada."
+			}
+			u, err := db.GetUser(db.DefaultUserID())
+			if err != nil || u == nil || strings.TrimSpace(u.ProfileMd) == "" {
+				return "[PERFIL] No hay perfil definido todavia. Usa /profile <descripcion> para configurar tu rol y proyectos."
+			}
+			return fmt.Sprintf("[PERFIL DEL USUARIO]\n%s\n\n(Usa '/profile <nuevo contenido>' para actualizar tu ficha)", strings.TrimSpace(u.ProfileMd))
+		}
+		newProfile := strings.TrimSpace(strings.TrimPrefix(cmdStr, parts[0]))
+		if db.DB != nil {
+			if err := db.UpdateUserProfile(db.DefaultUserID(), newProfile); err != nil {
+				return fmt.Sprintf("[PERFIL] Error al actualizar perfil: %v", err)
+			}
+		}
+		return "[PERFIL] Perfil de usuario actualizado y persistido con exito."
+
+	case "/memories", "/memoria", "/recuerdos":
+		store := memory.DefaultStore()
+		if store == nil && db.DB != nil {
+			store = memory.NewStore(db.DB)
+		}
+		if store == nil {
+			return "[MEMORIA] Almacen de memoria no disponible."
+		}
+		ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+		facts, err := store.GetRecentFacts(ctxMem, db.DefaultUserID(), 20)
+		cancelMem()
+		if err != nil || len(facts) == 0 {
+			return "[MEMORIA] Aun no se han registrado recuerdos en la memoria persistente."
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("[MEMORIA CONTINUA] Recuerdos registrados (%d):\n", len(facts)))
+		for i, f := range facts {
+			sb.WriteString(fmt.Sprintf("  %d. [%s] %s (relevancia: %.0f%%, consultas: %d)\n",
+				i+1, strings.ToUpper(string(f.Category)), f.Content, f.Confidence*100, f.AccessCount))
+		}
+		sb.WriteString("\nUsa /remember <hecho> para registrar un nuevo detalle tecnico o preferencia.")
+		return sb.String()
+
+	case "/remember", "/recordar":
+		if len(parts) < 2 {
+			return "[MEMORIA] Uso: /remember <hecho o preferencia a recordar>\nEj: /remember En crmgeofal la API corre en el puerto 4000 con Go 1.22"
+		}
+		factContent := strings.TrimSpace(strings.TrimPrefix(cmdStr, parts[0]))
+		store := memory.DefaultStore()
+		if store == nil && db.DB != nil {
+			store = memory.NewStore(db.DB)
+		}
+		if store == nil {
+			return "[MEMORIA] Almacen de memoria no disponible."
+		}
+		ctxMem, cancelMem := context.WithTimeout(context.Background(), 2*time.Second)
+		err := store.UpsertFact(ctxMem, db.DefaultUserID(), memory.CategoryPreference, factContent, 1.0)
+		cancelMem()
+		if err != nil {
+			return fmt.Sprintf("[MEMORIA] Error al guardar recuerdo: %v", err)
+		}
+		return fmt.Sprintf("[MEMORIA] Recordado y persistido con exito: \"%s\"", factContent)
 
 	case "/cancel", "/stop", "/abort", "/cancelar", "/parar":
 		clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"
