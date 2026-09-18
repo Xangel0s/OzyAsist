@@ -202,6 +202,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					m.promptHistory = append(m.promptHistory, directPrompt)
 					m.historyIndex = len(m.promptHistory)
+					if m.isWelcomeState() {
+						m.entries = nil
+					}
 					m.entries = append(m.entries, ChatEntry{
 						Role:    "user",
 						Content: directPrompt,
@@ -291,6 +294,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Registro de historial y entrada normal de usuario (StateIdle)
 			m.promptHistory = append(m.promptHistory, input)
 			m.historyIndex = len(m.promptHistory)
+			if m.isWelcomeState() {
+				m.entries = nil
+			}
 			m.entries = append(m.entries, ChatEntry{
 				Role:    "user",
 				Content: input,
@@ -1083,6 +1089,8 @@ O con OpenAI Whisper:
 
 	case "/clear":
 		m.entries = nil
+		m.viewport.SetContent(m.renderConversation())
+		m.viewport.GotoTop()
 		return ""
 
 	case "/key":

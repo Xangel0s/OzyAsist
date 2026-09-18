@@ -373,6 +373,60 @@ func TestSlashCommands_PathsScanDream(t *testing.T) {
 	}
 }
 
+func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// 1. Estado inicial debe ser pantalla de bienvenida retro
+	if !m.isWelcomeState() {
+		t.Fatalf("se esperaba estado de bienvenida al iniciar")
+	}
+
+	hero := m.renderConversation()
+	if !strings.Contains(hero, "OZYASIST") || !strings.Contains(hero, "ZERO-DOCKER") {
+		t.Errorf("hero debe incluir nombre y arquitectura: %s", hero)
+	}
+	if !strings.Contains(hero, "/paths") || !strings.Contains(hero, "GROK") {
+		t.Errorf("hero debe incluir sugerencias tipo Grok: %s", hero)
+	}
+
+	// 2. Verificar ausencia total de emojis en la pantalla de bienvenida
+	for _, r := range hero {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Errorf("hero no debe contener emojis, encontrado: %U", r)
+		}
+	}
+
+	// 3. Simular primer mensaje de usuario
+	m.textarea.SetValue("¿qué proyectos tengo?")
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updatedModel := newM.(Model)
+
+	// Ya no debe estar en estado de bienvenida
+	if updatedModel.isWelcomeState() {
+		t.Fatalf("después de enviar mensaje ya no debe ser estado de bienvenida")
+	}
+
+	chatView := updatedModel.renderConversation()
+	if strings.Contains(chatView, "ROM BIOS 1989-1996") {
+		t.Fatalf("la bienvenida retro debió dar paso al chat normal")
+	}
+	if !strings.Contains(chatView, "TÚ: ") || !strings.Contains(chatView, "¿qué proyectos tengo?") {
+		t.Fatalf("el chat normal debe mostrar el mensaje de usuario: %s", chatView)
+	}
+
+	// 4. Probar /clear para regresar a la pantalla de bienvenida
+	_ = updatedModel.handleSlashCommand("/clear")
+	if !updatedModel.isWelcomeState() {
+		t.Fatalf("después de /clear debe retornar a estado de bienvenida")
+	}
+	clearHero := updatedModel.renderConversation()
+	if !strings.Contains(clearHero, "OZYASIST") {
+		t.Fatalf("/clear debió restaurar la pantalla retro de bienvenida: %s", clearHero)
+	}
+}
+
 
 
 

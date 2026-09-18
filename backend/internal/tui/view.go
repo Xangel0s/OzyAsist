@@ -191,7 +191,7 @@ func (m Model) renderHeader() string {
 		provName = m.chat.Provider
 	}
 
-	modelTagText := fmt.Sprintf(" 🤖 %s: %s ", provName, displayModel)
+	modelTagText := fmt.Sprintf(" [LLM: %s: %s] ", provName, displayModel)
 	if m.width > 0 && m.width < 90 {
 		modelTagText = fmt.Sprintf(" %s:%s ", provName, displayModel)
 	}
@@ -230,12 +230,16 @@ func (m Model) renderHeader() string {
 }
 
 func (m Model) renderConversation() string {
-	var sb strings.Builder
-
 	convWidth := m.width
 	if convWidth <= 0 {
 		convWidth = 80
 	}
+
+	if m.isWelcomeState() {
+		return m.renderRetroWelcomeHero(convWidth)
+	}
+
+	var sb strings.Builder
 
 	for _, entry := range m.entries {
 		switch entry.Role {
@@ -442,7 +446,7 @@ func (m Model) renderFooter() string {
 		statusLine = fmt.Sprintf("%s %s", m.spinner.View(), m.systemStatus)
 	}
 	if len(m.messageQueue) > 0 {
-		statusLine = fmt.Sprintf("%s  •  📥 %d en cola", statusLine, len(m.messageQueue))
+		statusLine = fmt.Sprintf("%s  •  [COLA: %d en espera]", statusLine, len(m.messageQueue))
 	}
 	maxStatusW := m.width - 4
 	if maxStatusW > 10 && len([]rune(statusLine)) > maxStatusW {
@@ -470,7 +474,7 @@ func (m Model) renderFooter() string {
 			hintsText = "  [Enter] Encolar  •  [/now <orden>] Directo  •  [Esc] Cancelar"
 		}
 	} else if len(m.messageQueue) > 0 {
-		hintsText = fmt.Sprintf("  [Enter] Enviar  •  📥 %d en cola (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
+		hintsText = fmt.Sprintf("  [Enter] Enviar  •  [COLA: %d] (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
 	} else {
 		hintsText = "  [Enter] Enviar  •  [Ctrl+C] Salir  •  [Ctrl+T] Pensamiento  •  [Ctrl+L] Limpiar  •  [/help] Comandos"
 		if m.width > 0 && m.width < 85 {
@@ -479,6 +483,100 @@ func (m Model) renderFooter() string {
 	}
 	hints := MutedStyle.Render(hintsText)
 	sb.WriteString(hints)
+
+	return sb.String()
+}
+
+func (m Model) renderRetroWelcomeHero(convWidth int) string {
+	if convWidth < 40 {
+		convWidth = 40
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 82 {
+		innerWidth = 82
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// 1. Banner Retro ASCII de OZYASIST
+	logoAscii := `   ___  _______   _____   _   ___ ___ ____ _____ 
+  / _ \/ _  /\ \ / / _ | /_\ / __|_ _/ ___|_   _|
+ | | | \// /  \ V / __ |/ _ \\__ \| |\___ \ | |  
+ | |_| |/ //\  | / /_/ / ___ \__) | | ___) || |  
+  \___//___/   |_| \__,_/_/   \_\___/___|____/ |_|`
+
+	renderedLogo := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Render(logoAscii)
+
+	subHeader := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Render("OZYASIST >> OS CONTROL & COWORK AGENT // HERMES CORE v2.6")
+
+	headerBlock := lipgloss.JoinVertical(lipgloss.Center, renderedLogo, "", subHeader)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(headerBlock))
+	sb.WriteString("\n\n")
+
+	// 2. Panel de Diagnóstico Estilo BIOS / 80s-90s Terminal
+	diagBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(ColorPrimary).
+		Background(ColorContainer).
+		Padding(0, 1)
+
+	var diagLines []string
+	tagStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary)
+
+	diagLines = append(diagLines, fmt.Sprintf("%s ROM BIOS 1989-1996 • ZERO-DOCKER VIRTUAL WORKSPACE", tagStyle.Render(" SISTEMA ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s 640KB BASE OK • HYBRID KV-CACHE EN RAM: ACTIVO", tagStyle.Render(" MEMORIA ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s MAPA DE RUTAS Y PROYECTOS DEL HOST INDEXADO EN RAM", tagStyle.Render(" DISCO   ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s OZY (EXEC) • CHARC (SEGURIDAD) • NINE (ESTRATEGA) • DREAMER", tagStyle.Render(" TRIADA  ")))
+
+	diagBox := diagBorder.Render(strings.Join(diagLines, "\n"))
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(diagBox))
+	sb.WriteString("\n\n")
+
+	// 3. Tarjeta de Acciones Rápidas & Prompts Sugeridos (Estilo Grok Central)
+	cardBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(0, 1)
+
+	var cardSb strings.Builder
+	cardSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [ACCIONES RAPIDAS & PROMPTS DISPONIBLES (TIPO GROK)] ──\n\n"))
+
+	suggestions := []struct {
+		cmd  string
+		desc string
+	}{
+		{"/paths", "Inspeccionar mapa de proyectos del host indexados en RAM"},
+		{"/profile", "Consultar o refinar tu perfil permanente y directivas"},
+		{"/dream", "Ejecutar consolidacion cognitiva de memoria con DREAMER"},
+		{"\"Abre con antigravity ide el proyecto crmgeofal\"", "Lanza tu editor en el repo"},
+		{"\"Crea un Excel de presupuesto en el escritorio\"", "Genera hoja .xlsx con formato"},
+		{"\"Monitorea el puerto 8080 con watchdog\"", "Vigila tus servicios en background"},
+	}
+
+	for i, s := range suggestions {
+		numTag := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%d] %s", i+1, s.cmd))
+		cardSb.WriteString(fmt.Sprintf("  %s\n      %s\n", numTag, MutedStyle.Render(s.desc)))
+	}
+
+	renderedCards := cardBorder.Render(cardSb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedCards))
+	sb.WriteString("\n\n")
+
+	// 4. Prompt hint inferior
+	hint := lipgloss.NewStyle().
+		Foreground(ColorMuted).
+		Render(">> Escribe tu orden abajo para comenzar la sesion de chat, o usa /help")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hint))
+	sb.WriteString("\n")
 
 	return sb.String()
 }

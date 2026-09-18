@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -105,10 +106,10 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	sp.Spinner = spinner.Dot
 	sp.Style = SpinnerStyle
 
-	welcomeText := "🚀 ¡Hola! Bienvenido a OzyAssist CLI.\nUn asistente agéntico listo para ayudarte con tu sistema y herramientas.\n💡 Escribe una instrucción, usa /help para comandos o /key groq para activar voz ('Hey Ozy')."
+	welcomeText := "[SISTEMA] OZYASIST KERNEL v2.6 INICIALIZADO"
 	initStatus := "Listo para actuar"
 	if voiceActive {
-		welcomeText = "🚀 ¡Hola! Bienvenido a OzyAssist CLI.\nControl del SO y escucha de voz 'Hey Ozy' activos.\n💡 Escribe una instrucción, usa /help o habla directamente 'Hey Ozy'."
+		welcomeText = "[SISTEMA] OZYASIST KERNEL v2.6 INICIALIZADO (VOZ ACTIVA)"
 		initStatus = "Escuchando Wake Word ('Hey Ozy')..."
 	}
 
@@ -131,6 +132,16 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	}
 
 	return m
+}
+
+func (m Model) isWelcomeState() bool {
+	if len(m.entries) == 0 {
+		return true
+	}
+	if len(m.entries) == 1 && m.entries[0].Role == "system" && strings.HasPrefix(m.entries[0].Content, "[SISTEMA] OZYASIST") {
+		return true
+	}
+	return false
 }
 
 func (m Model) Init() tea.Cmd {
