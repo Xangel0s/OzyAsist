@@ -7,7 +7,7 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
 - **Core / Backend**: Go (Bubble Tea TUI / Gin REST / gorilla/websocket / pure-Go SQLite / local RAM embeddings).
 - **Zero-Docker Policy**: No Docker containers. Pure-Go SQLite driver, in-memory caching, and local vector search.
 - **Interfaces**:
-  - `cmd/ozy`: CLI / TUI interactiva basada en Bubble Tea con streaming, pensamiento colapsable (`Ctrl+T`), colas de mensajes y atajos rápidos.
+  - `cmd/ozy`: CLI / TUI interactiva basada en Bubble Tea con pantalla de bienvenida retro hero (años 80-90 / estilo Grok central) con transición fluida al chat normal, streaming, pensamiento colapsable (`Ctrl+T`), colas de mensajes y atajos rápidos.
   - `cmd/server`: Servidor HTTP y WebSocket para integraciones cliente y streaming reactivo.
   - `cmd/ozyctl`: Herramienta de utilidades y administración.
 - **Cognitive Architecture & Subagents**:
