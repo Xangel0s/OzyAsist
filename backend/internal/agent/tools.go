@@ -810,6 +810,104 @@ var AgentTools = []providers.ToolDef{
 			"required": ["action"]
 		}`),
 	},
+	{
+		Name:        "os_detect_dialogs",
+		Description: "Inspecciona cuadros de diálogo modales, popups del sistema (#32770) y ventanas de mensajes o errores en pantalla. Extrae el texto literal del error y los botones interactivos. OBLIGATORIO: Úsalo siempre después de abrir un archivo o lanzar una aplicación para verificar si Windows o la aplicación mostró algún error.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"app_filter": {
+					"type": "string",
+					"description": "Filtro opcional por título de ventana o nombre de proceso (ej: 'acrobat', 'adobe', 'excel', 'word', 'error'). Si está vacío, devuelve todos los diálogos activos."
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_create_pdf",
+		Description: "Crea un documento PDF profesional nativo con formato estético de alta calidad (cabecera, barra de acento, metadatos, secciones con títulos y viñetas, y tablas opcionales). NUNCA renombres un archivo .xlsx, .txt o .docx a .pdf; usa esta herramienta para generar PDFs válidos.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Ruta completa donde se guardará el archivo PDF (debe terminar en .pdf)"
+				},
+				"title": {
+					"type": "string",
+					"description": "Título principal del documento PDF"
+				},
+				"subtitle": {
+					"type": "string",
+					"description": "Subtítulo explicativo opcional"
+				},
+				"author": {
+					"type": "string",
+					"description": "Autor o entidad que genera el informe (ej: 'OzyAssist')"
+				},
+				"theme_color": {
+					"type": "string",
+					"enum": ["lime", "dark", "slate"],
+					"description": "Tema visual del documento (default: 'lime')"
+				},
+				"sections": {
+					"type": "array",
+					"description": "Lista de secciones del documento con títulos, contenido y viñetas",
+					"items": {
+						"type": "object",
+						"properties": {
+							"title": {"type": "string", "description": "Título de la sección"},
+							"content": {"type": "string", "description": "Párrafo o contenido explicativo"},
+							"bullets": {
+								"type": "array",
+								"items": {"type": "string"},
+								"description": "Puntos clave o viñetas opcionales"
+							}
+						},
+						"required": ["title"]
+					}
+				},
+				"table": {
+					"type": "object",
+					"description": "Tabla de datos opcional a incluir en el informe",
+					"properties": {
+						"headers": {
+							"type": "array",
+							"items": {"type": "string"},
+							"description": "Nombres de las columnas"
+						},
+						"rows": {
+							"type": "array",
+							"items": {
+								"type": "array",
+								"items": {"type": "string"}
+							},
+							"description": "Filas de datos de la tabla"
+						}
+					}
+				}
+			},
+			"required": ["path", "title", "sections"]
+		}`),
+	},
+	{
+		Name:        "os_convert_to_pdf",
+		Description: "Convierte un archivo existente (.txt, .md, .csv, .json) a un documento PDF formal con diseño profesional. Úsalo para compilar informes desde datos existentes sin recurrir a renombrar extensiones.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"src": {
+					"type": "string",
+					"description": "Ruta del archivo fuente (.txt, .md, .csv, .json)"
+				},
+				"dst": {
+					"type": "string",
+					"description": "Ruta del archivo PDF destino (ej: 'C:\\Users\\...\\documento.pdf')"
+				}
+			},
+			"required": ["src"]
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.
@@ -978,6 +1076,11 @@ var VoiceAgentTools = []providers.ToolDef{
 			},
 			"required": ["profile_md"]
 		}`),
+	},
+	{
+		Name:        "os_detect_dialogs",
+		Description: "Inspecciona cuadros de diálogo modales y errores activos en pantalla (#32770).",
+		InputSchema: mustJSON(`{"type":"object","properties":{"app_filter":{"type":"string","description":"Filtro por app o título"}}}`),
 	},
 }
 

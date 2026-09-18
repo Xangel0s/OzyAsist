@@ -339,6 +339,12 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSAnalyzeScreen(ctx, tc)
 	case "os_watchdog":
 		return execOSWatchdog(ctx, tc)
+	case "os_detect_dialogs":
+		return execOSDetectDialogs(ctx, tc)
+	case "os_create_pdf":
+		return execOSCreatePDF(ctx, tc)
+	case "os_convert_to_pdf":
+		return execOSConvertToPDF(ctx, tc)
 	default:
 		return fmt.Sprintf("herramienta desconocida: %s", tc.Name), false
 	}
@@ -370,13 +376,13 @@ func toolNameToActionType(name string) string {
 	switch name {
 	case "read_file":
 		return "file_read"
-	case "write_file", "apply_diff", "os_create_excel":
+	case "write_file", "apply_diff", "os_create_excel", "os_create_pdf", "os_convert_to_pdf":
 		return "file_write"
 	case "run_command":
 		return "command_exec"
 	case "list_files", "search_text":
 		return "file_read"
-	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen":
+	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs":
 		return "os_inspect"
 	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder":
 		return "os_mutate"
@@ -1081,6 +1087,54 @@ func execOSActiveWindows(ctx context.Context) (string, bool) {
 	sb.WriteString(fmt.Sprintf("=== VENTANAS ABIERTAS EN PANTALLA (%d) ===\n", len(windows)))
 	for i, w := range windows {
 		sb.WriteString(fmt.Sprintf("%d. %s (PID: %d)\n", i+1, w.Title, w.ProcessID))
+	}
+	return sb.String(), true
+}
+
+func execOSDetectDialogs(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		AppFilter string `json:"app_filter"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	nav := system.NewWindowsNavigator()
+	dialogs, err := nav.DetectDialogs(ctx, params.AppFilter)
+	if err != nil {
+		return fmt.Sprintf("Error inspeccionando cuadros de diálogo: %v", err), false
+	}
+	if len(dialogs) == 0 {
+		filterMsg := ""
+		if params.AppFilter != "" {
+			filterMsg = fmt.Sprintf(" para '%s'", params.AppFilter)
+		}
+		return fmt.Sprintf("No se detectaron cuadros de diálogo emergentes ni errores activos%s.", filterMsg), true
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("=== CUADROS DE DIÁLOGO Y ERRORES DETECTADOS (%d) ===\n", len(dialogs)))
+	for i, d := range dialogs {
+		prefix := "ℹ️ INFO"
+		if d.IsError {
+			prefix = "🚨 ERROR MODAL DETECTADO"
+		} else if d.Severity == "WARNING" {
+			prefix = "⚠️ ADVERTENCIA"
+		}
+
+		procStr := ""
+		if d.ProcessName != "" {
+			procStr = fmt.Sprintf(" [%s, PID: %d]", d.ProcessName, d.ProcessID)
+		} else if d.ProcessID != 0 {
+			procStr = fmt.Sprintf(" [PID: %d]", d.ProcessID)
+		}
+
+		sb.WriteString(fmt.Sprintf("\n%d. %s: %s%s\n", i+1, prefix, d.Title, procStr))
+		sb.WriteString(fmt.Sprintf("   • Clase:    %s (HWND: %d)\n", d.ClassName, d.Handle))
+		if d.Message != "" {
+			sb.WriteString(fmt.Sprintf("   • Mensaje:  %q\n", d.Message))
+		}
+		if len(d.Buttons) > 0 {
+			sb.WriteString(fmt.Sprintf("   • Botones:  [%s]\n", strings.Join(d.Buttons, ", ")))
+		}
 	}
 	return sb.String(), true
 }
