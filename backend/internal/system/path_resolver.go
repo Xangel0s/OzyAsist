@@ -167,6 +167,13 @@ func ResolveUserPath(input string) string {
 
 	// 9. Si es una ruta relativa o un nombre simple (ej: "crmgeofal", "archivo.xlsx"):
 	if !filepath.IsAbs(clean) && !isWindowsDrivePath(clean) {
+		// Consultar primero el registro en RAM (resolución instantánea en nanosegundos)
+		if reg := DefaultPathRegistry(); reg != nil {
+			if p, found := reg.Lookup(clean); found {
+				return p.FullPath
+			}
+		}
+
 		// A. Verificar si existe respecto al directorio actual (CWD)
 		//    Solo aceptar si el CWD NO es dentro del directorio del servidor (evita
 		//    resolver rutas del proceso Go como rutas de usuario).
