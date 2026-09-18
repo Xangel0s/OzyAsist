@@ -61,6 +61,7 @@ type AgentLoopParams struct {
 	UserMessage     string
 	PermissionLevel string
 	Emit            func(AgentEvent) // callback para emitir eventos WS
+	UserID          string           // opcional: usuario de la sesión
 	// VoiceMode reduce el system prompt y las tools al mínimo para minimizar
 	// el tiempo de prefill y conseguir respuestas rápidas (~2-3s vs ~15s).
 	VoiceMode bool
@@ -298,6 +299,18 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			// --- Auto-Skill Evaluation ---
 			if !params.VoiceMode && len(allToolCalls) > 0 {
 				EvaluateAndSaveSkill(params.Provider, history, params.UserMessage)
+			}
+
+			// --- Auto-Memory Extraction (Continuous Learning) ---
+			userForMem := params.UserID
+			if userForMem == "" && params.Chat != nil {
+				userForMem = params.Chat.UserID
+			}
+			if userForMem == "" {
+				userForMem = db.DefaultUserID()
+			}
+			if extractor := memory.DefaultExtractor(); extractor != nil && !params.VoiceMode && len(strings.TrimSpace(params.UserMessage)) > 8 {
+				extractor.ExtractAndPersistAsync(context.Background(), userForMem, params.UserMessage, finalContent)
 			}
 			
 			// --- Reproducir Voz Nativamente (Piper) ---
@@ -656,6 +669,41 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 				sb.WriteString(fmt.Sprintf("- %s: %s\n", name, t.Description))
 			}
 			base += sb.String()
+		}
+
+		// Inyección de Perfil de Usuario Persistente
+		userForProfile := params.UserID
+		if userForProfile == "" && params.Chat != nil {
+			userForProfile = params.Chat.UserID
+		}
+		if userForProfile == "" && db.DB != nil {
+			userForProfile = db.DefaultUserID()
+		}
+
+		if db.DB != nil && userForProfile != "" {
+			if u, err := db.GetUser(userForProfile); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) != "" {
+				base += fmt.Sprintf("\n\n=== PERFIL Y ROL DEL USUARIO ===\n%s\nAdapta tus respuestas, tono, nivel técnico y decisiones a este perfil.", strings.TrimSpace(u.ProfileMd))
+			}
+		}
+
+		// Inyección de Recuerdos Persistentes Relevantes (FTS5 / user_memories)
+		store := memory.DefaultStore()
+		if store == nil && db.DB != nil {
+			store = memory.NewStore(db.DB)
+		}
+		if store != nil && len(strings.TrimSpace(params.UserMessage)) > 2 {
+			ctxMem, cancelMem := context.WithTimeout(context.Background(), 800*time.Millisecond)
+			facts, err := store.SearchRelevant(ctxMem, userForProfile, params.UserMessage, 5)
+			cancelMem()
+			if err == nil && len(facts) > 0 {
+				var sbMem strings.Builder
+				sbMem.WriteString("\n\n=== RECUERDOS Y PREFERENCIAS APRENDIDAS DEL USUARIO ===\n")
+				for i, f := range facts {
+					sbMem.WriteString(fmt.Sprintf("%d. [%s] %s\n", i+1, strings.ToUpper(string(f.Category)), f.Content))
+				}
+				sbMem.WriteString("Ten en cuenta estos hechos aprendidos para actuar con precisión y no volver a preguntar lo que ya sabes.")
+				base += sbMem.String()
+			}
 		}
 	}
 

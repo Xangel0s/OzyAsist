@@ -141,3 +141,45 @@ func TestExecUpdateUserProfile(t *testing.T) {
 		t.Errorf("expected ProfileMd '%s', got '%s'", profileContent, user.ProfileMd)
 	}
 }
+
+func TestBuildAgentSystemPrompt_IncludesProfileAndMemory(t *testing.T) {
+	cleanup := setupTestMemoryAgent(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := db.DefaultUserID()
+
+	// 1. Configurar Perfil
+	profileContent := "# Datos Clave\n- Lead Developer en crmgeofal\n- Prefiere Go puro"
+	if err := db.UpdateUserProfile(userID, profileContent); err != nil {
+		t.Fatalf("error updating profile: %v", err)
+	}
+
+	// 2. Configurar Recuerdos
+	store := memory.DefaultStore()
+	if err := store.UpsertFact(ctx, userID, memory.CategoryContext, "El puerto de desarrollo es 4000", 1.0); err != nil {
+		t.Fatalf("error upserting fact: %v", err)
+	}
+
+	// 3. Generar Prompt
+	params := AgentLoopParams{
+		UserID:      userID,
+		UserMessage: "Consulta sobre el puerto de desarrollo",
+		VoiceMode:   false,
+	}
+	prompt := buildAgentSystemPrompt(params)
+
+	if !strings.Contains(prompt, "=== PERFIL Y ROL DEL USUARIO ===") {
+		t.Errorf("expected profile section in prompt, got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Lead Developer en crmgeofal") {
+		t.Errorf("expected profile content in prompt, got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "=== RECUERDOS Y PREFERENCIAS APRENDIDAS DEL USUARIO ===") {
+		t.Errorf("expected memories section in prompt, got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "El puerto de desarrollo es 4000") {
+		t.Errorf("expected memory content in prompt, got: %s", prompt)
+	}
+}
+
