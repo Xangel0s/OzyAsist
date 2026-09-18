@@ -42,6 +42,14 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
 - **Smart Path Resolver**:
   - Resolución inteligente de rutas de usuario en microsegundos consultando el registro en RAM antes del disco.
   - Protección estricta: nunca resolver rutas del usuario hacia el directorio de trabajo del servidor (`CWD`).
+- **Error-Sensitive Dialog Inspection & Anti-Hallucination (`os_detect_dialogs`)**:
+  - Detección Win32 nativa de cuadros modales y popups de error (`#32770`, MessageBox, alertas de aplicaciones).
+  - Extracción en microsegundos del texto literal de controles hijos (`Static`, `Edit`, `Button`) y clasificación por severidad (`ERROR`, `WARNING`, `INFO`).
+  - Directiva estricta CHARC: nunca alucinar o afirmar que una aplicación abrió "sin errores" sin auditar activamente el estado del sistema.
+- **Native Pure-Go PDF Engine (`os_create_pdf`, `os_convert_to_pdf`)**:
+  - Generación directa y estilización de documentos PDF profesionales (`github.com/jung-kurt/gofpdf`) bajo la política Zero-Docker.
+  - Soporte de barras de acento institucional en Neon Lime, metadatos, títulos, párrafos con viñetas y tablas con alternancia de colores.
+  - Conversión de fuentes Markdown, TXT, CSV y JSON a PDF estructurado sin recurrir a renombrado de archivos.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`
