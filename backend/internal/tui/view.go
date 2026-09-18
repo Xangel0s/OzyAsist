@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/ozyassist/backend/internal/db"
+	"github.com/ozyassist/backend/internal/system"
 )
 
 var (
@@ -147,6 +149,13 @@ func wrapContent(text string, maxWidth int) []string {
 func (m Model) View() string {
 	if !m.ready {
 		return "\n  Iniciando OzyAssist TUI..."
+	}
+
+	if m.state == StateStartMenu {
+		return m.renderStartMenuView()
+	}
+	if m.state == StateSettingsMenu {
+		return m.renderSettingsMenuView()
 	}
 
 	var sb strings.Builder
@@ -408,13 +417,13 @@ func (m Model) renderConversation() string {
 				sb.WriteString("\n")
 			}
 		} else {
-			sb.WriteString(MutedStyle.Render("⚡ OZY: (Razonando...) ▌\n\n"))
+			sb.WriteString(MutedStyle.Render(">> OZY: (Razonando...) ▌\n\n"))
 		}
 	}
 
 	// Si hay una herramienta ejecutándose en este momento
 	if m.activeToolName != "" {
-		badge := ToolBadgeStyle.Render(fmt.Sprintf(" ⚙️ Ejecutando %s... ", m.activeToolName))
+		badge := ToolBadgeStyle.Render(fmt.Sprintf(" [EJECUTANDO] %s... ", m.activeToolName))
 		sb.WriteString(fmt.Sprintf("%s %s\n", badge, m.spinner.View()))
 		if m.activeToolInput != "" {
 			maxInputW := convWidth - 14
@@ -514,7 +523,7 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 	subHeader := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorPrimary).
-		Render("OZYASIST >> OS CONTROL & COWORK AGENT // HERMES CORE v2.6")
+		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v2.6")
 
 	headerBlock := lipgloss.JoinVertical(lipgloss.Center, renderedLogo, "", subHeader)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(headerBlock))
@@ -540,7 +549,7 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(diagBox))
 	sb.WriteString("\n\n")
 
-	// 3. Tarjeta de Acciones Rápidas & Prompts Sugeridos (Estilo Grok Central)
+	// 3. Tarjeta de Acciones Rápidas & Prompts Sugeridos
 	cardBorder := lipgloss.NewStyle().
 		Width(innerWidth).
 		Border(lipgloss.NormalBorder()).
@@ -548,7 +557,7 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 		Padding(0, 1)
 
 	var cardSb strings.Builder
-	cardSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [ACCIONES RAPIDAS & PROMPTS DISPONIBLES (TIPO GROK)] ──\n\n"))
+	cardSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [ACCIONES RAPIDAS & PROMPTS SUGERIDOS] ──\n\n"))
 
 	suggestions := []struct {
 		cmd  string
@@ -576,6 +585,242 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 		Foreground(ColorMuted).
 		Render(">> Escribe tu orden abajo para comenzar la sesion de chat, o usa /help")
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hint))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderStartMenuView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 82 {
+		innerWidth = 82
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// 1. Banner Retro ASCII de OZYASIST
+	logoAscii := `   ___  _______   _____   _   ___ ___ ____ _____ 
+  / _ \/ _  /\ \ / / _ | /_\ / __|_ _/ ___|_   _|
+ | | | \// /  \ V / __ |/ _ \\__ \| |\___ \ | |  
+ | |_| |/ //\  | / /_/ / ___ \__) | | ___) || |  
+  \___//___/   |_| \__,_/_/   \_\___/___|____/ |_|`
+
+	renderedLogo := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Render(logoAscii)
+
+	subHeader := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(ColorPrimary).
+		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v2.6")
+
+	headerBlock := lipgloss.JoinVertical(lipgloss.Center, renderedLogo, "", subHeader)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(headerBlock))
+	sb.WriteString("\n\n")
+
+	// 2. Panel de Diagnóstico Estilo BIOS / 80s-90s Terminal
+	diagBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.DoubleBorder()).
+		BorderForeground(ColorPrimary).
+		Background(ColorContainer).
+		Padding(0, 1)
+
+	var diagLines []string
+	tagStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary)
+
+	diagLines = append(diagLines, fmt.Sprintf("%s ROM BIOS 1989-1996 • ZERO-DOCKER VIRTUAL WORKSPACE", tagStyle.Render(" SISTEMA ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s 640KB BASE OK • HYBRID KV-CACHE EN RAM: ACTIVO", tagStyle.Render(" MEMORIA ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s MAPA DE RUTAS Y PROYECTOS DEL HOST INDEXADO EN RAM", tagStyle.Render(" DISCO   ")))
+	diagLines = append(diagLines, fmt.Sprintf("%s OZY (EXEC) • CHARC (SEGURIDAD) • NINE (ESTRATEGA) • DREAMER", tagStyle.Render(" TRIADA  ")))
+
+	diagBox := diagBorder.Render(strings.Join(diagLines, "\n"))
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(diagBox))
+	sb.WriteString("\n\n")
+
+	// 3. Menú Interactivo de Inicio con flechitas
+	menuBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(1, 2)
+
+	type startMenuItem struct {
+		num   string
+		title string
+		desc  string
+	}
+
+	items := []startMenuItem{
+		{"1", "INICIAR CONVERSACION", "Abre la terminal de chat interactivo y control agéntico del sistema"},
+		{"2", "CONFIGURACIONES", "Ajusta proveedor LLM, permisos de seguridad, voz y diagnósticos"},
+		{"3", "SALIR", "Cierra la sesión y apaga el asistente de consola"},
+	}
+
+	var menuSb strings.Builder
+	menuSb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [MENU PRINCIPAL DE CONTROL] ──\n\n"))
+
+	for i, it := range items {
+		selected := i == m.menuIndex
+		var rowTitle string
+		var rowDesc string
+		if selected {
+			cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+			numPart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%s]", it.num))
+			titlePart := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(" " + it.title + " ")
+			rowTitle = fmt.Sprintf("%s%s%s", cursor, numPart, titlePart)
+			rowDesc = lipgloss.NewStyle().Foreground(ColorText).Render(fmt.Sprintf("     %s", it.desc))
+		} else {
+			cursor := "   "
+			numPart := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%s]", it.num))
+			titlePart := lipgloss.NewStyle().Foreground(ColorText).Render(" " + it.title)
+			rowTitle = fmt.Sprintf("%s%s%s", cursor, numPart, titlePart)
+			rowDesc = lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("     %s", it.desc))
+		}
+		menuSb.WriteString(rowTitle + "\n" + rowDesc + "\n\n")
+	}
+
+	renderedMenu := menuBorder.Render(menuSb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedMenu))
+	sb.WriteString("\n")
+
+	// 4. Atajos inferiores
+	hintsText := " [↑ / ↓] Navegar  •  [Enter] Seleccionar  •  [1-3] Acceso directo  •  [q] Salir "
+	renderedHints := lipgloss.NewStyle().Foreground(ColorMuted).Render(hintsText)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedHints))
+	sb.WriteString("\n")
+
+	return sb.String()
+}
+
+func (m Model) renderSettingsMenuView() string {
+	convWidth := m.width
+	if convWidth <= 0 {
+		convWidth = 80
+	}
+	innerWidth := convWidth - 6
+	if innerWidth > 82 {
+		innerWidth = 82
+	}
+	if innerWidth < 40 {
+		innerWidth = 40
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n")
+
+	// Título superior
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
+		titleStyle.Render("OZYASIST >> PANEL DE CONFIGURACIONES // ZERO-DOCKER KERNEL v2.6"),
+	))
+	sb.WriteString("\n\n")
+
+	// Determinar valores actuales
+	provName := "sin proveedor"
+	if m.provider != nil {
+		provName = m.provider.Name()
+	} else if m.chat != nil && m.chat.Provider != "" {
+		provName = m.chat.Provider
+	}
+	modelName := "defecto"
+	if m.chat != nil && m.chat.Model != "" {
+		modelName = m.chat.Model
+	}
+
+	voiceStatus := "DESACTIVADA (OFF)"
+	if m.voiceEnabled {
+		voiceStatus = "ACTIVADA (ON - Wake Word 'Hey Ozy')"
+	}
+
+	pathCount := 0
+	if reg := system.DefaultPathRegistry(); reg != nil {
+		pathCount = len(reg.ListAll())
+	}
+
+	userProfileSummary := "Sin definir (usa /profile para personalizar)"
+	if db.DB != nil {
+		if u, err := db.GetUser(db.DefaultUserID()); err == nil && u != nil && strings.TrimSpace(u.ProfileMd) != "" {
+			lines := strings.Split(strings.TrimSpace(u.ProfileMd), "\n")
+			userProfileSummary = lines[0]
+			if len(userProfileSummary) > 38 {
+				userProfileSummary = userProfileSummary[:35] + "..."
+			}
+		}
+	}
+
+	type settingRow struct {
+		num   string
+		label string
+		val   string
+		desc  string
+	}
+
+	items := []settingRow{
+		{"1", "Proveedor LLM Activo", fmt.Sprintf("%s (%s)", provName, modelName), "Enter: Alternar proveedor (cohere, groq, mistral, openai, local...)"},
+		{"2", "Nivel de Permisos SO", m.permissionLevel, "Enter: Alternar nivel (autonomous -> supervised -> sandboxed)"},
+		{"3", "Escucha de Voz Continua", voiceStatus, "Enter: Alternar escucha continua de voz ('Hey Ozy')"},
+		{"4", "Mapa de Rutas en RAM", fmt.Sprintf("%d ubicaciones indexadas", pathCount), "Enter: Inspeccionar detalles de rutas indexadas en RAM"},
+		{"5", "Perfil de Usuario", userProfileSummary, "Enter: Mostrar ficha de perfil de usuario persistente"},
+		{"6", "Volver al Menú Principal", "[ <- REGRESAR ]", "Enter o Esc: Vuelve al menú principal de inicio"},
+	}
+
+	settingsBorder := lipgloss.NewStyle().
+		Width(innerWidth).
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(ColorBorder).
+		Padding(1, 2)
+
+	var ssb strings.Builder
+	ssb.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render("── [CONFIGURACIONES DE SISTEMA] ──\n\n"))
+
+	for i, it := range items {
+		selected := i == m.settingsIndex
+		var line string
+		if selected {
+			cursor := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(">> ")
+			tag := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#181e00")).Background(ColorPrimary).Render(fmt.Sprintf("[%s] %s:", it.num, it.label))
+			val := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(" " + it.val)
+			desc := lipgloss.NewStyle().Foreground(ColorText).Render(fmt.Sprintf("     %s", it.desc))
+			line = fmt.Sprintf("%s%s%s\n%s\n", cursor, tag, val, desc)
+		} else {
+			cursor := "   "
+			tag := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary).Render(fmt.Sprintf("[%s] %s:", it.num, it.label))
+			val := lipgloss.NewStyle().Foreground(ColorText).Render(" " + it.val)
+			desc := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("     %s", it.desc))
+			line = fmt.Sprintf("%s%s%s\n%s\n", cursor, tag, val, desc)
+		}
+		ssb.WriteString(line)
+	}
+
+	renderedSettings := settingsBorder.Render(ssb.String())
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(renderedSettings))
+	sb.WriteString("\n")
+
+	// Cuadro de feedback si hay settingsNotice
+	if m.settingsNotice != "" {
+		noticeBox := lipgloss.NewStyle().
+			Width(innerWidth).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(ColorAccent).
+			Padding(0, 1).
+			Render(m.settingsNotice)
+		sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(noticeBox))
+		sb.WriteString("\n")
+	}
+
+	// Hints
+	hints := lipgloss.NewStyle().Foreground(ColorMuted).Render(" [↑ / ↓] Navegar  •  [Enter] Seleccionar / Alternar  •  [Esc / 6] Volver ")
+	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(hints))
 	sb.WriteString("\n")
 
 	return sb.String()

@@ -32,11 +32,11 @@ import (
 const banner = `
   ██████╗ ███████╗██╗   ██╗ █████╗ ███████╗███████╗██╗███████╗████████╗
  ██╔═══██╗╚══███╔╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝██║██╔════╝╚══██╔══╝
- ██║   ██║  ███╔╝  ╚████╔╝ ███████║███████╗███████╗██║███████╗   ██║   
+ ██║   ██║  ███╔╝  ╚████╔╝ ███████║███████║███████║██║███████╗   ██║   
  ██║   ██║ ███╔╝    ╚██╔╝  ██╔══██║╚════██║╚════██║██║╚════██║   ██║   
  ╚██████╔╝███████╗   ██║   ██║  ██║███████║███████║██║███████║   ██║   
   ╚═════╝ ╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚══════╝   ╚═╝   
-             ⚡ TUI & OS Control Agent (Hermes Mode)
+              >> TUI & OS Control Agent (Kernel v2.6)
 `
 
 func printUsage() {
@@ -266,7 +266,7 @@ func (a *voiceAdapter) UpdateKey(provider, key string) error {
 }
 
 func runExec(prov providers.Provider, _ *models.Chat, prompt string) {
-	fmt.Printf("\n⚡ OZYASSIST EXEC: \"%s\"\n\n", prompt)
+	fmt.Printf("\n>> OZYASSIST EXEC: \"%s\"\n\n", prompt)
 
 	chatName := prompt
 	if len(chatName) > 40 {
@@ -333,15 +333,15 @@ func runVoiceConsole(prov providers.Provider, chat *models.Chat) {
 	fmt.Print(banner)
 	cfg := voice.AutoDetectConfig()
 	if !cfg.HasSTT() {
-		fmt.Println("\n❌ Error: No hay motor de transcripción STT configurado.")
-		fmt.Println("👉 Para usar el modo voz autónomo, configura una clave gratuita de Groq o de OpenAI en tu .env:")
+		fmt.Println("\n[ERROR] Error: No hay motor de transcripción STT configurado.")
+		fmt.Println(">> Para usar el modo voz autónomo, configura una clave gratuita de Groq o de OpenAI en tu .env:")
 		fmt.Println("   GROQ_API_KEY=tu_clave_de_groq  (Consigue una gratis en https://console.groq.com/keys)")
 		fmt.Println("   o OPENAI_API_KEY=tu_clave_de_openai")
 		fmt.Println("\nTambién puedes iniciar 'ozy' y escribir: /key groq <tu-clave>")
 		os.Exit(1)
 	}
 
-	fmt.Println("🎙️ Modo Voz Autónomo Activado.")
+	fmt.Println("[VOZ] Modo Voz Autónomo Activado.")
 	fmt.Println("Di 'Hey Ozy' o 'Hey Osi' seguido de tu orden (ej: 'Hey Ozy ordena mis carpetas')...")
 	fmt.Println("Presiona Ctrl+C para salir.")
 
@@ -359,9 +359,9 @@ func runVoiceConsole(prov providers.Provider, chat *models.Chat) {
 					fmt.Print(evt.Content)
 					onDelta(evt.Content)
 				case "tool:call":
-					fmt.Printf("\n⚙️  [HERRAMIENTA] %s... ", evt.ToolName)
+					fmt.Printf("\n[HERRAMIENTA] %s... ", evt.ToolName)
 				case "tool:result":
-					fmt.Println("✓")
+					fmt.Println("[OK]")
 				case "agent:completed":
 					fmt.Println()
 					onComplete(evt.Content)

@@ -14,8 +14,8 @@ import (
 
 func TestInitialModel(t *testing.T) {
 	m := InitialModel(nil, nil, false)
-	if m.state != StateIdle {
-		t.Errorf("Expected initial state StateIdle, got %v", m.state)
+	if m.state != StateStartMenu {
+		t.Errorf("Expected initial state StateStartMenu, got %v", m.state)
 	}
 	if m.voiceEnabled {
 		t.Errorf("Expected voiceEnabled false when passed false")
@@ -176,7 +176,7 @@ func TestMessageQueue_SlashCommands(t *testing.T) {
 
 	// Test /queue when empty
 	outEmpty := m.handleSlashCommand("/queue")
-	if outEmpty != "ℹ️ La cola de mensajes está vacía." {
+	if outEmpty != "[INFO] La cola de mensajes está vacía." {
 		t.Errorf("Unexpected /queue empty output: %s", outEmpty)
 	}
 
@@ -197,7 +197,7 @@ func TestMessageQueue_SlashCommands(t *testing.T) {
 
 	// Test /cancel when idle
 	outCancelIdle := m.handleSlashCommand("/cancel")
-	if outCancelIdle != "ℹ️ No hay ninguna petición activa ni mensajes en cola." {
+	if outCancelIdle != "[INFO] No hay ninguna petición activa ni mensajes en cola." {
 		t.Errorf("Unexpected /cancel idle output: %s", outCancelIdle)
 	}
 }
@@ -378,7 +378,15 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 	m.width = 90
 	m.ready = true
 
-	// 1. Estado inicial debe ser pantalla de bienvenida retro
+	// 1. Entrar al chat desde el menú de inicio
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.state != StateIdle {
+		t.Fatalf("se esperaba estado StateIdle después de presionar Enter en INICIAR CONVERSACION, obtenido: %v", m.state)
+	}
+
+	// 2. Estado inicial de conversación debe ser pantalla de bienvenida retro
 	if !m.isWelcomeState() {
 		t.Fatalf("se esperaba estado de bienvenida al iniciar")
 	}
@@ -387,21 +395,24 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 	if !strings.Contains(hero, "OZYASIST") || !strings.Contains(hero, "ZERO-DOCKER") {
 		t.Errorf("hero debe incluir nombre y arquitectura: %s", hero)
 	}
-	if !strings.Contains(hero, "/paths") || !strings.Contains(hero, "GROK") {
-		t.Errorf("hero debe incluir sugerencias tipo Grok: %s", hero)
+	if !strings.Contains(hero, "/paths") || !strings.Contains(hero, "SUGERIDOS") {
+		t.Errorf("hero debe incluir sugerencias: %s", hero)
+	}
+	if strings.Contains(hero, "HERMES") || strings.Contains(hero, "GROK") {
+		t.Errorf("hero no debe contener menciones a HERMES ni GROK: %s", hero)
 	}
 
-	// 2. Verificar ausencia total de emojis en la pantalla de bienvenida
+	// 3. Verificar ausencia total de emojis en la pantalla de bienvenida
 	for _, r := range hero {
 		if r >= 0x1F300 && r <= 0x1F9FF {
 			t.Errorf("hero no debe contener emojis, encontrado: %U", r)
 		}
 	}
 
-	// 3. Simular primer mensaje de usuario
+	// 4. Simular primer mensaje de usuario
 	m.textarea.SetValue("¿qué proyectos tengo?")
-	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	updatedModel := newM.(Model)
+	newM2, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updatedModel := newM2.(Model)
 
 	// Ya no debe estar en estado de bienvenida
 	if updatedModel.isWelcomeState() {
@@ -416,7 +427,7 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 		t.Fatalf("el chat normal debe mostrar el mensaje de usuario: %s", chatView)
 	}
 
-	// 4. Probar /clear para regresar a la pantalla de bienvenida
+	// 5. Probar /clear para regresar a la pantalla de bienvenida
 	_ = updatedModel.handleSlashCommand("/clear")
 	if !updatedModel.isWelcomeState() {
 		t.Fatalf("después de /clear debe retornar a estado de bienvenida")
@@ -424,6 +435,135 @@ func TestRetroWelcomeHero_TransitionToChat(t *testing.T) {
 	clearHero := updatedModel.renderConversation()
 	if !strings.Contains(clearHero, "OZYASIST") {
 		t.Fatalf("/clear debió restaurar la pantalla retro de bienvenida: %s", clearHero)
+	}
+}
+
+func TestStartMenu_InteractiveArrowNavigation(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// Estado inicial debe ser StartMenu y menuIndex 0
+	if m.state != StateStartMenu || m.menuIndex != 0 {
+		t.Fatalf("se esperaba StateStartMenu con menuIndex 0, obtenido: state=%v index=%d", m.state, m.menuIndex)
+	}
+
+	// Verificar renderizado de menú de inicio
+	view := m.renderStartMenuView()
+	if !strings.Contains(view, "INICIAR CONVERSACION") || !strings.Contains(view, "CONFIGURACIONES") || !strings.Contains(view, "SALIR") {
+		t.Fatalf("menú de inicio no contiene las opciones principales: %s", view)
+	}
+	if strings.Contains(view, "HERMES") || strings.Contains(view, "GROK") {
+		t.Fatalf("menú no debe contener HERMES ni GROK: %s", view)
+	}
+
+	// Verificar ausencia de emojis en menú
+	for _, r := range view {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("menú de inicio no debe contener emojis, encontrado: %U", r)
+		}
+	}
+
+	// 1. Navegación hacia abajo (KeyDown)
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.menuIndex != 1 {
+		t.Fatalf("KeyDown debió avanzar a index 1, obtenido: %d", m.menuIndex)
+	}
+
+	// 2. Navegación hacia abajo (j)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	m = res.(Model)
+	if m.menuIndex != 2 {
+		t.Fatalf("tecla 'j' debió avanzar a index 2, obtenido: %d", m.menuIndex)
+	}
+
+	// 3. Wrap-around hacia abajo (KeyDown en index 2 -> index 0)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.menuIndex != 0 {
+		t.Fatalf("wrap-around hacia abajo debió volver a index 0, obtenido: %d", m.menuIndex)
+	}
+
+	// 4. Wrap-around hacia arriba (KeyUp en index 0 -> index 2)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = res.(Model)
+	if m.menuIndex != 2 {
+		t.Fatalf("wrap-around hacia arriba debió ir a index 2, obtenido: %d", m.menuIndex)
+	}
+
+	// 5. Tecla 'k' hacia arriba (index 2 -> index 1)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
+	m = res.(Model)
+	if m.menuIndex != 1 {
+		t.Fatalf("tecla 'k' debió retroceder a index 1, obtenido: %d", m.menuIndex)
+	}
+
+	// 6. Acceso numérico directo ('1' para iniciar conversación)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1")})
+	m = res.(Model)
+	if m.state != StateIdle {
+		t.Fatalf("tecla '1' debió pasar a StateIdle, obtenido: %v", m.state)
+	}
+}
+
+func TestSettingsMenu_NavigationAndCycle(t *testing.T) {
+	m := InitialModel(nil, nil, false)
+	m.width = 90
+	m.ready = true
+
+	// 1. Acceder a configuraciones con '2'
+	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2")})
+	m = res.(Model)
+	if m.state != StateSettingsMenu {
+		t.Fatalf("se esperaba StateSettingsMenu, obtenido: %v", m.state)
+	}
+
+	// 2. Verificar renderizado de configuraciones
+	settingsView := m.renderSettingsMenuView()
+	if !strings.Contains(settingsView, "Proveedor LLM Activo") || !strings.Contains(settingsView, "Nivel de Permisos SO") {
+		t.Fatalf("vista de configuraciones incompleta: %s", settingsView)
+	}
+	if strings.Contains(settingsView, "HERMES") || strings.Contains(settingsView, "GROK") {
+		t.Fatalf("configuraciones no debe contener HERMES ni GROK: %s", settingsView)
+	}
+
+	// 3. Verificar ausencia de emojis en vista de configuraciones
+	for _, r := range settingsView {
+		if r >= 0x1F300 && r <= 0x1F9FF {
+			t.Fatalf("configuraciones no debe contener emojis, encontrado: %U", r)
+		}
+	}
+
+	// 4. Alternar nivel de permisos (opción 1)
+	m.settingsIndex = 1
+	initialPerm := m.permissionLevel
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.permissionLevel == initialPerm || m.settingsNotice == "" {
+		t.Fatalf("Enter en permisos debió ciclar el nivel. Antes: %s, Ahora: %s, Notice: %s", initialPerm, m.permissionLevel, m.settingsNotice)
+	}
+
+	// 5. Alternar proveedor LLM (opción 0)
+	m.settingsIndex = 0
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = res.(Model)
+	if m.settingsNotice == "" {
+		t.Fatalf("Enter en proveedor debió generar settingsNotice")
+	}
+
+	// 6. Salir con Esc regresa a StateStartMenu
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = res.(Model)
+	if m.state != StateStartMenu {
+		t.Fatalf("Esc debió regresar a StateStartMenu, obtenido: %v", m.state)
+	}
+
+	// 7. Desde chat, /menu regresa a StateStartMenu
+	m.state = StateIdle
+	_ = m.handleSlashCommand("/menu")
+	if m.state != StateStartMenu {
+		t.Fatalf("/menu debió cambiar estado a StateStartMenu, obtenido: %v", m.state)
 	}
 }
 

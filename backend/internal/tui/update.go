@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/ozyassist/backend/internal/agent"
@@ -49,9 +50,145 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyMsg:
+		if m.state == StateStartMenu {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.menuIndex--
+				if m.menuIndex < 0 {
+					m.menuIndex = 2
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.menuIndex++
+				if m.menuIndex > 2 {
+					m.menuIndex = 0
+				}
+				return m, nil
+			case tea.KeyEnter:
+				switch m.menuIndex {
+				case 0:
+					m.state = StateIdle
+					m.textarea.Focus()
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				case 1:
+					m.state = StateSettingsMenu
+					m.settingsIndex = 0
+					m.settingsNotice = ""
+					return m, nil
+				case 2:
+					return m, tea.Quit
+				}
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyRunes:
+				s := string(msg.Runes)
+				switch s {
+				case "k", "w":
+					m.menuIndex--
+					if m.menuIndex < 0 {
+						m.menuIndex = 2
+					}
+					return m, nil
+				case "j", "s":
+					m.menuIndex++
+					if m.menuIndex > 2 {
+						m.menuIndex = 0
+					}
+					return m, nil
+				case "1":
+					m.menuIndex = 0
+					m.state = StateIdle
+					m.textarea.Focus()
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				case "2":
+					m.menuIndex = 1
+					m.state = StateSettingsMenu
+					m.settingsIndex = 0
+					m.settingsNotice = ""
+					return m, nil
+				case "3", "q", "Q":
+					return m, tea.Quit
+				}
+			}
+			return m, nil
+		}
+
+		if m.state == StateSettingsMenu {
+			switch msg.Type {
+			case tea.KeyUp:
+				m.settingsIndex--
+				if m.settingsIndex < 0 {
+					m.settingsIndex = 5
+				}
+				return m, nil
+			case tea.KeyDown:
+				m.settingsIndex++
+				if m.settingsIndex > 5 {
+					m.settingsIndex = 0
+				}
+				return m, nil
+			case tea.KeyEsc:
+				m.state = StateStartMenu
+				m.settingsNotice = ""
+				return m, nil
+			case tea.KeyCtrlC:
+				return m, tea.Quit
+			case tea.KeyEnter:
+				return m.handleSettingsEnter()
+			case tea.KeyRunes:
+				s := string(msg.Runes)
+				switch s {
+				case "k", "w":
+					m.settingsIndex--
+					if m.settingsIndex < 0 {
+						m.settingsIndex = 5
+					}
+					return m, nil
+				case "j", "s":
+					m.settingsIndex++
+					if m.settingsIndex > 5 {
+						m.settingsIndex = 0
+					}
+					return m, nil
+				case "q", "Q":
+					m.state = StateStartMenu
+					m.settingsNotice = ""
+					return m, nil
+				case "1":
+					m.settingsIndex = 0
+					return m.handleSettingsEnter()
+				case "2":
+					m.settingsIndex = 1
+					return m.handleSettingsEnter()
+				case "3":
+					m.settingsIndex = 2
+					return m.handleSettingsEnter()
+				case "4":
+					m.settingsIndex = 3
+					return m.handleSettingsEnter()
+				case "5":
+					m.settingsIndex = 4
+					return m.handleSettingsEnter()
+				case "6":
+					m.state = StateStartMenu
+					m.settingsNotice = ""
+					return m, nil
+				}
+			}
+			return m, nil
+		}
+
 		switch msg.Type {
 		case tea.KeyEsc:
-			if m.state != StateIdle {
+			if m.isBusy() {
 				if m.loopCancel != nil {
 					m.loopCancel()
 				}
@@ -62,7 +199,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loopSessionID = ""
 				m.state = StateIdle
 				m.systemStatus = "Acción cancelada con tecla [Esc]"
-				msgText := "⚠️ Operación interrumpida con la tecla [Esc]."
+				msgText := "[ALERTA] Operación interrumpida con la tecla [Esc]."
 				if len(m.messageQueue) > 0 {
 					msgText += fmt.Sprintf(" (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para descartarlos).", len(m.messageQueue))
 				}
@@ -76,7 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case tea.KeyCtrlC:
-			if m.state != StateIdle {
+			if m.isBusy() {
 				if m.loopCancel != nil {
 					m.loopCancel()
 				}
@@ -87,7 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loopSessionID = ""
 				m.state = StateIdle
 				m.systemStatus = "Acción cancelada por el usuario"
-				msgText := "⚠️ Operación interrumpida con Ctrl+C."
+				msgText := "[ALERTA] Operación interrumpida con Ctrl+C."
 				if len(m.messageQueue) > 0 {
 					msgText += fmt.Sprintf(" (Quedan %d mensajes en cola. Usa /queue o /clearqueue).", len(m.messageQueue))
 				}
@@ -109,9 +246,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlT:
 			m.showThinking = !m.showThinking
 			if m.showThinking {
-				m.systemStatus = "💭 Hilo de pensamiento: VISIBLE (Presiona Ctrl+T para ocultar)"
+				m.systemStatus = "[PENSAMIENTO] Hilo de pensamiento: VISIBLE (Presiona Ctrl+T para ocultar)"
 			} else {
-				m.systemStatus = "💭 Hilo de pensamiento: PLEGADO (Presiona Ctrl+T para desplegar)"
+				m.systemStatus = "[PENSAMIENTO] Hilo de pensamiento: PLEGADO (Presiona Ctrl+T para desplegar)"
 			}
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -132,7 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if slashCmd == "/cancel" || slashCmd == "/stop" || slashCmd == "/abort" || slashCmd == "/cancelar" || slashCmd == "/parar" {
 					m.textarea.Reset()
 					clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"
-					if m.state != StateIdle {
+					if m.isBusy() {
 						if m.loopCancel != nil {
 							m.loopCancel()
 						}
@@ -143,7 +280,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.loopSessionID = ""
 						m.state = StateIdle
 						m.systemStatus = "Petición cancelada por el usuario"
-						msgText := "⚠️ Petición cancelada con éxito."
+						msgText := "[ALERTA] Petición cancelada con éxito."
 						if clearAll {
 							discarded := m.ClearQueue()
 							msgText += fmt.Sprintf(" Y se descartaron %d mensajes en cola.", discarded)
@@ -159,12 +296,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							discarded := m.ClearQueue()
 							m.entries = append(m.entries, ChatEntry{
 								Role:    "system",
-								Content: fmt.Sprintf("🗑️ Se vació la cola de mensajes (%d descartados).", discarded),
+								Content: fmt.Sprintf("[LIMPIEZA] Se vació la cola de mensajes (%d descartados).", discarded),
 							})
 						} else {
 							m.entries = append(m.entries, ChatEntry{
 								Role:    "system",
-								Content: "ℹ️ No hay ninguna petición activa ni mensajes en cola.",
+								Content: "[INFO] No hay ninguna petición activa ni mensajes en cola.",
 							})
 						}
 					}
@@ -179,14 +316,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(parts) < 2 {
 						m.entries = append(m.entries, ChatEntry{
 							Role:    "system",
-							Content: "ℹ️ Uso: /now <orden> — Cancela la tarea actual y ejecuta la nueva orden inmediatamente.",
+							Content: "[INFO] Uso: /now <orden> — Cancela la tarea actual y ejecuta la nueva orden inmediatamente.",
 						})
 						m.viewport.SetContent(m.renderConversation())
 						m.viewport.GotoBottom()
 						return m, nil
 					}
 					directPrompt := strings.TrimSpace(strings.TrimPrefix(input, parts[0]))
-					if m.state != StateIdle {
+					if m.isBusy() {
 						if m.loopCancel != nil {
 							m.loopCancel()
 						}
@@ -197,7 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.loopSessionID = ""
 						m.entries = append(m.entries, ChatEntry{
 							Role:    "system",
-							Content: "⚡ Tarea anterior interrumpida. Ejecutando nueva orden directamente...",
+							Content: ">> Tarea anterior interrumpida. Ejecutando nueva orden directamente...",
 						})
 					}
 					m.promptHistory = append(m.promptHistory, directPrompt)
@@ -223,19 +360,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if len(m.messageQueue) == 0 {
 						m.entries = append(m.entries, ChatEntry{
 							Role:    "system",
-							Content: "ℹ️ La cola de mensajes está vacía.",
+							Content: "[INFO] La cola de mensajes está vacía.",
 						})
 					} else {
 						var sb strings.Builder
-						sb.WriteString(fmt.Sprintf("📥 Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
+						sb.WriteString(fmt.Sprintf("[COLA] Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
 						for i, q := range m.messageQueue {
 							vTag := ""
 							if q.IsVoice {
-								vTag = "🎙️ [Voz] "
+								vTag = "[VOZ] "
 							}
 							sb.WriteString(fmt.Sprintf("  %d. %s\"%s\"\n", i+1, vTag, q.Prompt))
 						}
-						sb.WriteString("💡 Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
+						sb.WriteString(">> Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
 						m.entries = append(m.entries, ChatEntry{
 							Role:    "system",
 							Content: sb.String(),
@@ -252,7 +389,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					discarded := m.ClearQueue()
 					m.entries = append(m.entries, ChatEntry{
 						Role:    "system",
-						Content: fmt.Sprintf("🗑️ Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded),
+						Content: fmt.Sprintf("[LIMPIEZA] Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded),
 					})
 					m.viewport.SetContent(m.renderConversation())
 					m.viewport.GotoBottom()
@@ -277,14 +414,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// Si el agente está ocupado y no es un comando slash, encolar el mensaje
-			if m.state != StateIdle {
+			if m.isBusy() {
 				m.promptHistory = append(m.promptHistory, input)
 				m.historyIndex = len(m.promptHistory)
 				qPos := m.EnqueuePrompt(input, false)
 				m.textarea.Reset()
 				m.entries = append(m.entries, ChatEntry{
 					Role:    "system",
-					Content: fmt.Sprintf("📥 Mensaje añadido a la cola [#%d]: \"%s\"\n(Se ejecutará automáticamente al finalizar la tarea actual. Usa /now <orden> para ejecutar de inmediato o /cancel para cancelar la actual).", qPos, input),
+					Content: fmt.Sprintf("[COLA] Mensaje añadido a la cola [#%d]: \"%s\"\n(Se ejecutará automáticamente al finalizar la tarea actual. Usa /now <orden> para ejecutar de inmediato o /cancel para cancelar la actual).", qPos, input),
 				})
 				m.viewport.SetContent(m.renderConversation())
 				m.viewport.GotoBottom()
@@ -381,7 +518,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nextPrompt, ok := m.DequeuePrompt(); ok {
 				roleContent := nextPrompt.Prompt
 				if nextPrompt.IsVoice {
-					roleContent = "🎙️ " + nextPrompt.Prompt
+					roleContent = "[VOZ] " + nextPrompt.Prompt
 				}
 				m.entries = append(m.entries, ChatEntry{
 					Role:    "user",
@@ -400,7 +537,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "error":
 			m.entries = append(m.entries, ChatEntry{
 				Role:    "system",
-				Content: fmt.Sprintf("❌ Error: %s", evt.Error),
+				Content: fmt.Sprintf("[ERROR] %s", evt.Error),
 			})
 			m.loopCancel = nil
 			m.loopSessionID = ""
@@ -413,7 +550,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nextPrompt, ok := m.DequeuePrompt(); ok {
 				roleContent := nextPrompt.Prompt
 				if nextPrompt.IsVoice {
-					roleContent = "🎙️ " + nextPrompt.Prompt
+					roleContent = "[VOZ] " + nextPrompt.Prompt
 				}
 				m.entries = append(m.entries, ChatEntry{
 					Role:    "user",
@@ -438,7 +575,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.entries = append(m.entries, ChatEntry{
 			Role:    "system",
-			Content: fmt.Sprintf("❌ Error: %v", msg.err),
+			Content: fmt.Sprintf("[ERROR] %v", msg.err),
 		})
 		m.state = StateIdle
 		m.systemStatus = "Error del sistema"
@@ -451,13 +588,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if m.state != StateIdle {
+		if m.isBusy() {
 			m.promptHistory = append(m.promptHistory, prompt)
 			m.historyIndex = len(m.promptHistory)
 			qPos := m.EnqueuePrompt(prompt, true)
 			m.entries = append(m.entries, ChatEntry{
 				Role:    "system",
-				Content: fmt.Sprintf("📥 Orden de voz añadida a la cola [#%d]: \"%s\" (se procesará automáticamente al terminar la tarea actual).", qPos, prompt),
+				Content: fmt.Sprintf("[COLA] Orden de voz añadida a la cola [#%d]: \"%s\" (se procesará automáticamente al terminar la tarea actual).", qPos, prompt),
 			})
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -468,7 +605,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.historyIndex = len(m.promptHistory)
 		m.entries = append(m.entries, ChatEntry{
 			Role:    "user",
-			Content: "🎙️ " + prompt,
+			Content: "[VOZ] " + prompt,
 		})
 		m.state = StateThinking
 		m.systemStatus = "Escuchado por voz. Procesando orden..."
@@ -492,29 +629,122 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.spinner, spinCmd = m.spinner.Update(msg)
 	cmds = append(cmds, spinCmd)
 
-	// Manejo del input de texto (siempre activo para permitir escribir órdenes en cola o comandos)
-	var taCmd tea.Cmd
-	m.textarea, taCmd = m.textarea.Update(msg)
-	cmds = append(cmds, taCmd)
+	// Manejo del input de texto y scroll (solo cuando el chat está activo)
+	if m.state != StateStartMenu && m.state != StateSettingsMenu {
+		var taCmd tea.Cmd
+		m.textarea, taCmd = m.textarea.Update(msg)
+		cmds = append(cmds, taCmd)
 
-	// Actualización del viewport de scroll
-	// Evitamos que las pulsaciones normales muevan el scroll
-	var vpCmd tea.Cmd
-	isKeyMsg := false
-	var keyMsg tea.KeyMsg
-	if k, ok := msg.(tea.KeyMsg); ok {
-		isKeyMsg = true
-		keyMsg = k
-	}
+		var vpCmd tea.Cmd
+		isKeyMsg := false
+		var keyMsg tea.KeyMsg
+		if k, ok := msg.(tea.KeyMsg); ok {
+			isKeyMsg = true
+			keyMsg = k
+		}
 
-	if !isKeyMsg {
-		m.viewport, vpCmd = m.viewport.Update(msg)
-	} else if keyMsg.Type == tea.KeyPgUp || keyMsg.Type == tea.KeyPgDown || keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown {
-		m.viewport, vpCmd = m.viewport.Update(msg)
+		if !isKeyMsg {
+			m.viewport, vpCmd = m.viewport.Update(msg)
+		} else if keyMsg.Type == tea.KeyPgUp || keyMsg.Type == tea.KeyPgDown || keyMsg.Type == tea.KeyUp || keyMsg.Type == tea.KeyDown {
+			m.viewport, vpCmd = m.viewport.Update(msg)
+		}
+		cmds = append(cmds, vpCmd)
 	}
-	cmds = append(cmds, vpCmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m Model) handleSettingsEnter() (tea.Model, tea.Cmd) {
+	switch m.settingsIndex {
+	case 0:
+		// 0: Alternar secuencialmente entre proveedores soportados
+		provOrder := []string{"cohere", "groq", "mistral", "openai", "deepseek", "kilocode", "lmstudio", "ollama"}
+		current := ""
+		if m.provider != nil {
+			current = strings.ToLower(m.provider.Name())
+		} else if m.chat != nil && m.chat.Provider != "" {
+			current = strings.ToLower(m.chat.Provider)
+		}
+		nextIdx := 0
+		for i, p := range provOrder {
+			if p == current {
+				nextIdx = (i + 1) % len(provOrder)
+				break
+			}
+		}
+		target := provOrder[nextIdx]
+		if p, err := providers.Get(target); err == nil && p != nil {
+			m.provider = p
+			defModel := ""
+			if len(p.Models()) > 0 {
+				defModel = p.Models()[0]
+			}
+			if m.chat != nil {
+				m.chat.Provider = target
+				m.chat.Model = defModel
+			}
+			m.settingsNotice = fmt.Sprintf("[OK] Proveedor activo cambiado a: %s (modelo: %s)", strings.ToUpper(target), defModel)
+		} else {
+			key := providers.GetProviderKey(target)
+			if key != "" {
+				providers.RegisterProviderKey(target, key)
+				if p, err := providers.Get(target); err == nil && p != nil {
+					m.provider = p
+				}
+			}
+			if m.chat != nil {
+				m.chat.Provider = target
+			}
+			m.settingsNotice = fmt.Sprintf("[INFO] Proveedor seleccionado: %s (configura su clave con /key %s <api-key>)", strings.ToUpper(target), target)
+		}
+		return m, nil
+
+	case 1:
+		// 1: Alternar nivel de permisos SO
+		switch m.permissionLevel {
+		case "autonomous":
+			m.permissionLevel = "supervised"
+		case "supervised":
+			m.permissionLevel = "sandboxed"
+		default:
+			m.permissionLevel = "autonomous"
+		}
+		m.settingsNotice = fmt.Sprintf("[OK] Nivel de permisos establecido en: %s", strings.ToUpper(m.permissionLevel))
+		return m, nil
+
+	case 2:
+		// 2: Alternar escucha continua de voz
+		out := m.handleSlashCommand("/voice")
+		m.settingsNotice = out
+		return m, nil
+
+	case 3:
+		// 3: Inspeccionar mapa de rutas en RAM
+		count := 0
+		if reg := system.DefaultPathRegistry(); reg != nil {
+			count = len(reg.ListAll())
+		}
+		m.settingsNotice = fmt.Sprintf("[INFO] %d ubicaciones indexadas en RAM. Escribe /paths en el chat para el listado completo.", count)
+		return m, nil
+
+	case 4:
+		// 4: Perfil de usuario persistente
+		out := m.handleSlashCommand("/profile")
+		lines := strings.Split(out, "\n")
+		if len(lines) > 3 {
+			lines = lines[:3]
+		}
+		m.settingsNotice = strings.Join(lines, "\n")
+		return m, nil
+
+	case 5:
+		// 5: Volver al Menú Principal
+		m.state = StateStartMenu
+		m.settingsNotice = ""
+		return m, nil
+	}
+
+	return m, nil
 }
 
 func (m *Model) startAgentTurn(prompt string) tea.Cmd {
@@ -602,6 +832,7 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
 	switch cmd {
 	case "/help":
 		return `[COMANDOS DISPONIBLES EN OZYASSIST TUI]
+  /menu, /inicio    - Abre el menú interactivo retro de inicio
   /profile [texto]  - Consulta o actualiza la ficha del perfil de usuario
   /memories         - Consulta los hechos y preferencias aprendidas en memoria continua
   /remember <hecho> - Registra manualmente un hecho técnico o regla persistente
@@ -622,6 +853,12 @@ func (m *Model) handleSlashCommand(cmdStr string) string {
   /clear            - Limpia el historial de la pantalla (Ctrl+L)
   /exit, /quit      - Cierra la aplicación (Ctrl+C)
 Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] encola si Ozy está ocupado`
+
+	case "/menu", "/inicio", "/start":
+		m.state = StateStartMenu
+		m.settingsNotice = ""
+		m.textarea.Blur()
+		return ""
 
 	case "/profile", "/perfil":
 		if len(parts) == 1 {
@@ -731,7 +968,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 
 	case "/cancel", "/stop", "/abort", "/cancelar", "/parar":
 		clearAll := len(parts) > 1 && strings.ToLower(parts[1]) == "all"
-		if m.state != StateIdle {
+		if m.isBusy() {
 			if m.loopCancel != nil {
 				m.loopCancel()
 			}
@@ -744,38 +981,38 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			m.systemStatus = "Petición cancelada por el usuario"
 			if clearAll {
 				discarded := m.ClearQueue()
-				return fmt.Sprintf("⚠️ Petición activa cancelada y %d mensajes en cola descartados.", discarded)
+				return fmt.Sprintf("[ALERTA] Petición activa cancelada y %d mensajes en cola descartados.", discarded)
 			}
 			if len(m.messageQueue) > 0 {
-				return fmt.Sprintf("⚠️ Petición cancelada. (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para vaciarla).", len(m.messageQueue))
+				return fmt.Sprintf("[ALERTA] Petición cancelada. (Quedan %d mensajes en cola. Usa /queue para verlos o /clearqueue para vaciarla).", len(m.messageQueue))
 			}
-			return "⚠️ Petición cancelada con éxito."
+			return "[ALERTA] Petición cancelada con éxito."
 		}
 		if clearAll || len(m.messageQueue) > 0 {
 			discarded := m.ClearQueue()
-			return fmt.Sprintf("🗑️ Cola de mensajes vaciada (%d descartados).", discarded)
+			return fmt.Sprintf("[LIMPIEZA] Cola de mensajes vaciada (%d descartados).", discarded)
 		}
-		return "ℹ️ No hay ninguna petición activa ni mensajes en cola."
+		return "[INFO] No hay ninguna petición activa ni mensajes en cola."
 
 	case "/queue", "/cola":
 		if len(m.messageQueue) == 0 {
-			return "ℹ️ La cola de mensajes está vacía."
+			return "[INFO] La cola de mensajes está vacía."
 		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("📥 Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
+		sb.WriteString(fmt.Sprintf("[COLA] Mensajes en cola de espera (%d):\n", len(m.messageQueue)))
 		for i, q := range m.messageQueue {
 			vTag := ""
 			if q.IsVoice {
-				vTag = "🎙️ [Voz] "
+				vTag = "[VOZ] "
 			}
 			sb.WriteString(fmt.Sprintf("  %d. %s\"%s\"\n", i+1, vTag, q.Prompt))
 		}
-		sb.WriteString("💡 Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
+		sb.WriteString(">> Usa /clearqueue para vaciarla, /now <orden> para ejecutar de inmediato o /cancel para detener la tarea activa.")
 		return sb.String()
 
 	case "/clearqueue", "/dropqueue", "/vaciarcola":
 		discarded := m.ClearQueue()
-		return fmt.Sprintf("🗑️ Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded)
+		return fmt.Sprintf("[LIMPIEZA] Cola de mensajes descartada con éxito (%d mensajes eliminados).", discarded)
 
 	case "/groq":
 		targetKey := ""
@@ -798,7 +1035,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 				if len(targetKey) < minLen {
 					minLen = len(targetKey)
 				}
-				return fmt.Sprintf("⚠️ La clave '%s...' no parece ser válida de Groq (debe comenzar con 'gsk_').", targetKey[:minLen])
+				return fmt.Sprintf("[ALERTA] La clave '%s...' no parece ser válida de Groq (debe comenzar con 'gsk_').", targetKey[:minLen])
 			}
 			_ = providers.SaveConfigKey("GROQ_API_KEY", targetKey)
 			_ = os.Setenv("GROQ_API_KEY", targetKey)
@@ -818,10 +1055,10 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 				if err := activeVoiceController.Start(); err == nil {
 					m.voiceEnabled = true
 					m.systemStatus = "Escuchando Wake Word ('Hey Ozy')..."
-					voiceMsg = "\n🎙️ Motor de voz 'Hey Ozy' ACTIVADO y escuchando."
+					voiceMsg = "\n[VOZ] Motor de voz 'Hey Ozy' ACTIVADO y escuchando."
 				}
 			}
-			return fmt.Sprintf("⚡ ¡Groq API Key configurada con éxito!\n✓ Guardada en .env\n✓ Proveedor activo: Groq (llama-3.3-70b-versatile @ 800 tokens/s)%s", voiceMsg)
+			return fmt.Sprintf(">> Groq API Key configurada con éxito.\n[OK] Guardada en .env\n[OK] Proveedor activo: Groq (llama-3.3-70b-versatile @ 800 tokens/s)%s", voiceMsg)
 		}
 
 		// Si no hay clave, abrir navegador Chrome con el perfil autenticado del usuario
@@ -835,22 +1072,22 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			_ = browser.LaunchWithProfile(context.Background(), nil, groqURL)
 		}
 
-		return fmt.Sprintf("🌐 Abriendo la consola de Groq en %s:\n"+
-			"   👉 URL: %s\n"+
+		return fmt.Sprintf(">> Abriendo la consola de Groq en %s:\n"+
+			"   URL: %s\n"+
 			"1. Inicia sesión con 1 clic (Continuar con Google).\n"+
 			"2. Haz clic en 'Create API Key' y copia la clave generada.\n"+
-			"3. Vuelve a esta terminal y escribe '/groq' (o simplemente dime por voz: 'guarda mi clave'). Ozy la leerá directamente del portapapeles.",
+			"3. Vuelve a esta terminal y escribe '/groq' (o por voz: 'guarda mi clave'). Ozy la leerá del portapapeles.",
 			chromeInfo, groqURL)
 
 	case "/tools":
 		var sb strings.Builder
-		sb.WriteString("🛠️ Herramientas de Control del SO disponibles:\n")
+		sb.WriteString(">> Herramientas de Control del SO disponibles:\n")
 		for _, t := range agent.AgentTools {
 			sb.WriteString(fmt.Sprintf("  • %-22s: %s\n", t.Name, t.Description))
 		}
 		mcpTools := mcp.DefaultRegistry.GetAllTools()
 		if len(mcpTools) > 0 {
-			sb.WriteString("\n🔌 Herramientas MCP Externas Conectadas:\n")
+			sb.WriteString("\n>> Herramientas MCP Externas Conectadas:\n")
 			for name, t := range mcpTools {
 				sb.WriteString(fmt.Sprintf("  • %-26s: %s\n", name, t.Description))
 			}
@@ -860,26 +1097,26 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 	case "/thinking", "/thought":
 		m.showThinking = !m.showThinking
 		if m.showThinking {
-			return "💭 Hilo de pensamiento: VISIBLE y desplegado. (Presiona Ctrl+T o /thinking para ocultar)"
+			return "[PENSAMIENTO] Hilo de pensamiento: VISIBLE y desplegado. (Presiona Ctrl+T o /thinking para ocultar)"
 		}
-		return "💭 Hilo de pensamiento: PLEGADO y oculto. (Presiona Ctrl+T o /thinking para desplegar)"
+		return "[PENSAMIENTO] Hilo de pensamiento: PLEGADO y oculto. (Presiona Ctrl+T o /thinking para desplegar)"
 
 	case "/mcp":
 		if len(parts) > 1 && strings.ToLower(parts[1]) == "reload" {
 			cfgPath := mcp.FindDefaultConfigFile()
 			if cfgPath == "" {
-				return "⚠️ No se encontró ningún archivo mcp_servers.json en las rutas canónicas (backend/mcp_servers.json o ~/.ozy/mcp_servers.json)."
+				return "[ALERTA] No se encontró ningún archivo mcp_servers.json en las rutas canónicas (backend/mcp_servers.json o ~/.ozy/mcp_servers.json)."
 			}
 			configs, err := mcp.LoadConfigFile(cfgPath)
 			if err != nil {
-				return fmt.Sprintf("❌ Error leyendo %s: %v", cfgPath, err)
+				return fmt.Sprintf("[ERROR] Error leyendo %s: %v", cfgPath, err)
 			}
 			if err := mcp.DefaultRegistry.Reload(context.Background(), configs); err != nil {
-				return fmt.Sprintf("❌ Error recargando servidores MCP: %v", err)
+				return fmt.Sprintf("[ERROR] Error recargando servidores MCP: %v", err)
 			}
 			statuses := mcp.DefaultRegistry.GetServerStatus()
 			totalTools := len(mcp.DefaultRegistry.GetAllTools())
-			return fmt.Sprintf("✓ Servidores MCP recargados desde %s (%d servidores, %d herramientas activas).", cfgPath, len(statuses), totalTools)
+			return fmt.Sprintf("[OK] Servidores MCP recargados desde %s (%d servidores, %d herramientas activas).", cfgPath, len(statuses), totalTools)
 		}
 
 		statuses := mcp.DefaultRegistry.GetServerStatus()
@@ -889,24 +1126,24 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			if cfgPath != "" {
 				hint = fmt.Sprintf("Archivo detectado: %s (sin servidores activos o con errores).", cfgPath)
 			}
-			return fmt.Sprintf("🔌 No hay servidores MCP conectados actualmente.\n💡 %s\nUsa '/mcp reload' para recargar en caliente.", hint)
+			return fmt.Sprintf("[INFO] No hay servidores MCP conectados actualmente.\n>> %s\nUsa '/mcp reload' para recargar en caliente.", hint)
 		}
 
 		var sb strings.Builder
-		sb.WriteString("🔌 Servidores MCP (Model Context Protocol) Conectados:\n")
+		sb.WriteString(">> Servidores MCP (Model Context Protocol) Conectados:\n")
 		for _, s := range statuses {
-			icon := "🟢"
+			icon := "[OK]"
 			if s.Status == "error" {
-				icon = "🔴"
+				icon = "[ERR]"
 			} else if s.Status == "stopped" {
-				icon = "⚪"
+				icon = "[--]"
 			}
-			sb.WriteString(fmt.Sprintf("  %s %-14s [%s] — %d herramientas (%s)\n", icon, s.Name, s.Status, s.ToolCount, s.Command))
+			sb.WriteString(fmt.Sprintf("  %-5s %-14s [%s] — %d herramientas (%s)\n", icon, s.Name, s.Status, s.ToolCount, s.Command))
 			if s.Error != "" {
-				sb.WriteString(fmt.Sprintf("     ⚠️ Error: %s\n", s.Error))
+				sb.WriteString(fmt.Sprintf("     [ERROR]: %s\n", s.Error))
 			}
 		}
-		sb.WriteString("\n💡 Usa '/mcp reload' para recargar en caliente tras editar mcp_servers.json.")
+		sb.WriteString("\n>> Usa '/mcp reload' para recargar en caliente tras editar mcp_servers.json.")
 		return sb.String()
 
 	case "/provider", "/providers":
@@ -927,14 +1164,14 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			}
 
 			if err != nil || p == nil {
-				return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido o sin registrar.\n"+
-					"💡 Usa '/provider' sin argumentos para ver los proveedores disponibles.", target)
+				return fmt.Sprintf("[ALERTA] Proveedor '%s' no reconocido o sin registrar.\n"+
+					">> Usa '/provider' sin argumentos para ver los proveedores disponibles.", target)
 			}
 
 			key := providers.GetProviderKey(target)
 			if key == "" && target != "lmstudio" && target != "ollama" && target != "local" {
-				return fmt.Sprintf("⚠️ El proveedor '%s' no tiene una API key configurada.\n"+
-					"👉 Configúrala escribiendo: /key %s <tu-api-key>", target, target)
+				return fmt.Sprintf("[ALERTA] El proveedor '%s' no tiene una API key configurada.\n"+
+					">> Configúrala escribiendo: /key %s <tu-api-key>", target, target)
 			}
 
 			m.provider = p
@@ -947,7 +1184,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 				m.chat.Model = defaultModel
 			}
 
-			return fmt.Sprintf("✓ Proveedor activo cambiado a: %s\n✓ Modelo predeterminado: %s", target, defaultModel)
+			return fmt.Sprintf("[OK] Proveedor activo cambiado a: %s\n[OK] Modelo predeterminado: %s", target, defaultModel)
 		}
 
 		allProviders := []struct {
@@ -976,30 +1213,30 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 		}
 
 		var sb strings.Builder
-		sb.WriteString("🤖 Proveedores de IA disponibles en OzyAssist:\n")
+		sb.WriteString(">> Proveedores de IA disponibles en OzyAssist:\n")
 		for _, p := range allProviders {
 			key := providers.GetProviderKey(p.id)
 			hasConfig := key != "" || (p.id == "lmstudio" || p.id == "ollama")
 
-			icon := "⚪"
+			icon := "[--]"
 			statusText := "Sin configurar"
 			if hasConfig {
-				icon = "🟡"
+				icon = "[..]"
 				statusText = "Clave Añadida (sin validar)"
 			}
 			if p.id == currProv {
-				icon = "⭐ 🟢"
+				icon = "[*]"
 				statusText = "ACTIVO"
 			}
 
 			sb.WriteString(fmt.Sprintf("  %-5s %-14s [%s] — %s (%s)\n", icon, p.label, statusText, p.desc, p.defModel))
 		}
 
-		sb.WriteString("\n👉 Para cambiar de proveedor activo escribe:\n")
+		sb.WriteString("\n>> Para cambiar de proveedor activo escribe:\n")
 		sb.WriteString("   /provider cohere\n")
 		sb.WriteString("   /provider groq\n")
 		sb.WriteString("   /provider openai\n")
-		sb.WriteString("💡 Para configurar la clave de un proveedor usa:\n")
+		sb.WriteString(">> Para configurar la clave de un proveedor usa:\n")
 		sb.WriteString("   /key <proveedor> <tu-api-key>")
 		return sb.String()
 
@@ -1015,14 +1252,14 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 						m.chat.Model = prov.Models()[0]
 					}
 				}
-				return fmt.Sprintf("✓ Proveedor: %s (Modelo: %s)", target, m.chat.Model)
+				return fmt.Sprintf("[OK] Proveedor: %s (Modelo: %s)", target, m.chat.Model)
 			}
 			// 2. Si es un nombre de modelo directo (ej: /model deepseek/deepseek-chat)
 			if m.chat != nil {
 				m.chat.Model = target
-				return fmt.Sprintf("✓ Modelo establecido a: %s", target)
+				return fmt.Sprintf("[OK] Modelo establecido a: %s", target)
 			}
-			return fmt.Sprintf("⚠️ No se pudo asignar el modelo: %s", target)
+			return fmt.Sprintf("[ALERTA] No se pudo asignar el modelo: %s", target)
 		}
 		currentM := "por defecto"
 		if m.chat != nil && m.chat.Model != "" {
@@ -1047,7 +1284,7 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			mode := strings.ToLower(parts[1])
 			if mode == "autonomous" || mode == "supervised" || mode == "sandboxed" {
 				m.permissionLevel = mode
-				return fmt.Sprintf("✓ Nivel de permisos establecido en: %s", mode)
+				return fmt.Sprintf("[OK] Nivel de permisos establecido en: %s", mode)
 			}
 			return "Modos válidos: autonomous | supervised | sandboxed"
 		}
@@ -1058,22 +1295,22 @@ Atajos: [Esc] para cancelar tarea • [Ctrl+T] alternar pensamiento • [Enter] 
 			m.voiceEnabled = !m.voiceEnabled
 			if m.voiceEnabled {
 				m.systemStatus = "Escuchando Wake Word ('Hey Ozy')..."
-				return "🎙️ Escucha nativa de Wake Word 'Hey Ozy' ACTIVADA."
+				return "[VOZ] Escucha nativa de Wake Word 'Hey Ozy' ACTIVADA."
 			}
 			m.systemStatus = "Listo para actuar"
-			return "🔇 Escucha nativa de voz DESACTIVADA."
+			return "[SILENCIO] Escucha nativa de voz DESACTIVADA."
 		}
 
 		if m.voiceEnabled {
 			activeVoiceController.Stop()
 			m.voiceEnabled = false
 			m.systemStatus = "Listo para actuar"
-			return "🔇 Escucha nativa de voz DESACTIVADA."
+			return "[SILENCIO] Escucha nativa de voz DESACTIVADA."
 		}
 
 		if !activeVoiceController.HasSTT() {
-			return `⚠️ Para activar la escucha por voz ("Hey Ozy"), necesitas un motor de transcripción (STT).
-👉 Configura una API Key gratuita de Groq (~150ms) escribiendo:
+			return `[ALERTA] Para activar la escucha por voz ("Hey Ozy"), necesitas un motor de transcripción (STT).
+>> Configura una API Key gratuita de Groq (~150ms) escribiendo:
    /key groq <tu-api-key>
    (Obtén una gratis en https://console.groq.com/keys)
 O con OpenAI Whisper:
@@ -1081,11 +1318,11 @@ O con OpenAI Whisper:
 		}
 
 		if err := activeVoiceController.Start(); err != nil {
-			return fmt.Sprintf("❌ Error al arrancar la escucha de voz: %v", err)
+			return fmt.Sprintf("[ERROR] Error al arrancar la escucha de voz: %v", err)
 		}
 		m.voiceEnabled = true
 		m.systemStatus = "Escuchando Wake Word ('Hey Ozy')..."
-		return "🎙️ Escucha nativa de Wake Word 'Hey Ozy' ACTIVADA."
+		return "[VOZ] Escucha nativa de Wake Word 'Hey Ozy' ACTIVADA."
 
 	case "/clear":
 		m.entries = nil
@@ -1095,7 +1332,7 @@ O con OpenAI Whisper:
 
 	case "/key":
 		if len(parts) < 3 {
-			return `📌 Uso de /key:
+			return `>> Uso de /key:
   /key cohere <tu-api-key>      (Command R+ de Cohere)
   /key groq <tu-api-key>        (Voz 'Hey Ozy' ultrarrápida gratis)
   /key openai <tu-api-key>
@@ -1126,7 +1363,7 @@ O con OpenAI Whisper:
 			if m.chat != nil && m.chat.Model != "" {
 				modelName = m.chat.Model
 			}
-			return fmt.Sprintf("✓ Proveedor 'cohere' configurado y activado (Modelo: %s).", modelName)
+			return fmt.Sprintf("[OK] Proveedor 'cohere' configurado y activado (Modelo: %s).", modelName)
 		}
 
 		if targetProv == "groq" {
@@ -1147,10 +1384,10 @@ O con OpenAI Whisper:
 				if err := activeVoiceController.Start(); err == nil {
 					m.voiceEnabled = true
 					m.systemStatus = "Escuchando Wake Word ('Hey Ozy')..."
-					return "✓ API Key de Groq guardada en .env. Motor de voz 'Hey Ozy' ACTIVADO y escuchando."
+					return "[OK] API Key de Groq guardada en .env. Motor de voz 'Hey Ozy' ACTIVADO y escuchando."
 				}
 			}
-			return "✓ API Key de Groq guardada en .env. Activa la voz con /voice."
+			return "[OK] API Key de Groq guardada en .env. Activa la voz con /voice."
 		}
 
 		if targetProv == "openai" {
@@ -1171,9 +1408,9 @@ O con OpenAI Whisper:
 			}
 			extraHint := ""
 			if !strings.HasPrefix(keyVal, "sk-") && len(keyVal) == 40 {
-				extraHint = "\n💡 Nota: Esta clave parece de Cohere. Puedes activarla como proveedor nativo con: /key cohere " + keyVal + " o /provider cohere"
+				extraHint = "\n>> Nota: Esta clave parece de Cohere. Puedes activarla como proveedor nativo con: /key cohere " + keyVal + " o /provider cohere"
 			}
-			return fmt.Sprintf("✓ Proveedor 'openai' configurado y guardado en .env (disponible para LLM y Whisper STT).%s", extraHint)
+			return fmt.Sprintf("[OK] Proveedor 'openai' configurado y guardado en .env (disponible para LLM y Whisper STT).%s", extraHint)
 		}
 
 		if targetProv == "local" || targetProv == "lmstudio" || targetProv == "ollama" && strings.HasPrefix(keyVal, "http") {
@@ -1182,7 +1419,7 @@ O con OpenAI Whisper:
 			if p, err := providers.Get("lmstudio"); err == nil {
 				m.provider = p
 			}
-			return fmt.Sprintf("✓ Endpoint local actualizado y guardado: %s", keyVal)
+			return fmt.Sprintf("[OK] Endpoint local actualizado y guardado: %s", keyVal)
 		}
 
 		if targetProv == "kilocode" || targetProv == "kilo" {
@@ -1202,9 +1439,9 @@ O con OpenAI Whisper:
 			if m.chat != nil && m.chat.Model != "" {
 				modelName = m.chat.Model
 			}
-			return fmt.Sprintf("🚀 Proveedor 'KiloCode Gateway' configurado y activado (Modelo: %s).\n"+
-				"✓ Token JWT guardado en .env como KILOCODE_API_KEY\n"+
-				"💡 Gateway unificado con +500 modelos (Claude, GPT, Gemini, DeepSeek, Mistral)\n"+
+			return fmt.Sprintf(">> Proveedor 'KiloCode Gateway' configurado y activado (Modelo: %s).\n"+
+				"[OK] Token JWT guardado en .env como KILOCODE_API_KEY\n"+
+				">> Gateway unificado con +500 modelos (Claude, GPT, Gemini, DeepSeek, Mistral)\n"+
 				"   Cambia modelo con: /model kilo/anthropic/claude-opus-4-5\n"+
 				"   O: /model kilo/openai/gpt-4o", modelName)
 		}
@@ -1226,9 +1463,9 @@ O con OpenAI Whisper:
 			if m.chat != nil && m.chat.Model != "" {
 				modelName = m.chat.Model
 			}
-			return fmt.Sprintf("🌪️ Proveedor 'mistral' configurado y activado (Modelo: %s).\n"+
-				"✓ Clave guardada en .env\n"+
-				"💡 Modelos disponibles: mistral-large-latest, codestral-latest, open-mixtral-8x22b\n"+
+			return fmt.Sprintf(">> Proveedor 'mistral' configurado y activado (Modelo: %s).\n"+
+				"[OK] Clave guardada en .env\n"+
+				">> Modelos disponibles: mistral-large-latest, codestral-latest, open-mixtral-8x22b\n"+
 				"   Cambia modelo con: /model mistral-large-latest", modelName)
 		}
 
@@ -1244,9 +1481,9 @@ O con OpenAI Whisper:
 				m.chat.Provider = targetProv
 				m.chat.Model = modelName
 			}
-			return fmt.Sprintf("✓ Proveedor '%s' configurado y guardado en .env (Modelo: %s).", targetProv, modelName)
+			return fmt.Sprintf("[OK] Proveedor '%s' configurado y guardado en .env (Modelo: %s).", targetProv, modelName)
 		}
-		return fmt.Sprintf("⚠️ Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, mistral, kilocode, local", targetProv)
+		return fmt.Sprintf("[ALERTA] Proveedor '%s' no reconocido. Disponibles: groq, openrouter, openai, deepseek, anthropic, mistral, kilocode, local", targetProv)
 
 	case "/exit", "/quit":
 		return "QUIT"

@@ -18,7 +18,9 @@ import (
 type UIState int
 
 const (
-	StateIdle UIState = iota
+	StateStartMenu UIState = iota
+	StateSettingsMenu
+	StateIdle
 	StateThinking
 	StateExecutingTool
 	StateStreaming
@@ -64,6 +66,9 @@ type QueuedPrompt struct {
 
 type Model struct {
 	state           UIState
+	menuIndex       int    // 0: Iniciar Conversacion, 1: Configuraciones, 2: Salir
+	settingsIndex   int    // 0: Proveedor LLM, 1: Permisos SO, 2: Voz, 3: Rutas, 4: Perfil, 5: Volver
+	settingsNotice  string // Notificacion o resultado de accion en configuraciones
 	viewport        viewport.Model
 	textarea        textarea.Model
 	spinner         spinner.Model
@@ -114,7 +119,10 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	}
 
 	m := Model{
-		state:           StateIdle,
+		state:           StateStartMenu,
+		menuIndex:       0,
+		settingsIndex:   0,
+		settingsNotice:  "",
 		textarea:        ta,
 		spinner:         sp,
 		provider:        prov,
@@ -142,6 +150,11 @@ func (m Model) isWelcomeState() bool {
 		return true
 	}
 	return false
+}
+
+// isBusy retorna true si el modelo está procesando un turno agéntico o ejecutando herramientas.
+func (m Model) isBusy() bool {
+	return m.state == StateThinking || m.state == StateExecutingTool || m.state == StateStreaming || m.state == StateAwaitingApproval || m.loopSessionID != ""
 }
 
 func (m Model) Init() tea.Cmd {

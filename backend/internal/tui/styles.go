@@ -98,4 +98,18 @@ var (
 
 	SpinnerStyle = lipgloss.NewStyle().
 			Foreground(ColorPrimary)
+
+	// Menu & Interactive Navigation
+	MenuItemSelectedStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#181e00")).
+				Background(ColorPrimary).
+				Padding(0, 1)
+
+	MenuItemNormalStyle = lipgloss.NewStyle().
+				Foreground(ColorText).
+				Padding(0, 1)
+
+	MenuItemDescStyle = lipgloss.NewStyle().
+				Foreground(ColorMuted)
 )
