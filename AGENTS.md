@@ -23,6 +23,12 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Cancelación rápida con `Esc` o `/cancel`.
   - Envío prioritario con interrupción inmediata vía `/now <orden>`.
   - Consulta y limpieza de cola vía `/queue` y `/clearqueue`.
+- **User Profile & Continuous Memory (Auto-Learning)**:
+  - Ficha de perfil persistente en SQLite (`users.profile_md`), inyectada automáticamente en el System Prompt.
+  - Memoria continua en `user_memories` con motor de búsqueda semántica y FTS5 BM25.
+  - Auto-aprendizaje en segundo plano tras cada turno con `FactExtractor.ExtractAndPersistAsync`.
+  - Herramientas nativas del agente: `remember_fact`, `search_memory`, `update_user_profile`.
+  - Comandos TUI sobrios y sin emojis: `/profile`, `/memories`, `/remember <hecho>`.
 - **Smart Path Resolver**:
   - Resolución inteligente de rutas de usuario: `Desktop` prioritario para archivos de trabajo del usuario, `Documents` para proyectos y repositorios.
   - Protección estricta: nunca resolver rutas del usuario hacia el directorio de trabajo del servidor (`CWD`).
