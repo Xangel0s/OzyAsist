@@ -864,20 +864,32 @@ func TestProfileEditor_InteractiveFlow(t *testing.T) {
 	}
 }
 
-func TestModelInfo_RenderedBelowChatBarInFooter(t *testing.T) {
+func TestFooter_CleanMinimalist(t *testing.T) {
 	m := InitialModel(nil, nil, false)
 	m.width = 90
 	m.ready = true
 	m.state = StateIdle
 
 	footerView := m.renderFooter()
-	if !strings.Contains(footerView, "[LLM:") || !strings.Contains(footerView, "Permisos:") || !strings.Contains(footerView, "[VOZ:") {
-		t.Fatalf("renderFooter debe incluir la información del modelo abajo de la barra de chat: %s", footerView)
+	// El footer NO debe tener información redundante del modelo ni permisos
+	if strings.Contains(footerView, "[LLM:") {
+		t.Fatalf("renderFooter no debe incluir el tag redundante [LLM:]: %s", footerView)
+	}
+	if strings.Contains(footerView, "Permisos:") {
+		t.Fatalf("renderFooter no debe incluir Permisos: irrelevante: %s", footerView)
+	}
+	if strings.Contains(footerView, "[VOZ:") {
+		t.Fatalf("renderFooter no debe incluir badges fluorescentes de voz: %s", footerView)
 	}
 
-	headerView := m.renderHeader()
-	if strings.Contains(headerView, "[LLM:") {
-		t.Fatalf("renderHeader no debe duplicar las etiquetas del modelo en la parte superior: %s", headerView)
+	// Con voz activada debe ser discreto ("voz: on")
+	mVoice := InitialModel(nil, nil, true)
+	mVoice.width = 90
+	mVoice.ready = true
+	mVoice.state = StateIdle
+	footerVoice := mVoice.renderFooter()
+	if !strings.Contains(footerVoice, "voz: on") {
+		t.Fatalf("renderFooter con voz activa debe incluir el indicador discreto 'voz: on': %s", footerVoice)
 	}
 }
 

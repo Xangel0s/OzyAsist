@@ -313,66 +313,6 @@ func (m Model) renderInteractiveCard(card *InteractiveCard, convWidth int) strin
 	return CardContainerStyle.Width(innerWidth).Render(cardSb.String())
 }
 
-func (m Model) renderModelInfoLine() string {
-	modelName := "desconocido"
-	if m.chat != nil && m.chat.Model != "" {
-		modelName = m.chat.Model
-	} else if m.provider != nil {
-		modelName = m.provider.Name()
-	}
-
-	displayModel := modelName
-	if m.width > 0 && m.width < 95 && strings.Contains(displayModel, "/") {
-		parts := strings.Split(displayModel, "/")
-		displayModel = parts[len(parts)-1]
-	}
-	if len(displayModel) > 22 {
-		displayModel = displayModel[:20] + ".."
-	}
-
-	provName := "sin proveedor"
-	if m.provider != nil {
-		provName = m.provider.Name()
-	} else if m.chat != nil && m.chat.Provider != "" {
-		provName = m.chat.Provider
-	}
-
-	modelTagText := fmt.Sprintf(" [LLM: %s: %s] ", provName, displayModel)
-	if m.width > 0 && m.width < 90 {
-		modelTagText = fmt.Sprintf(" %s:%s ", provName, displayModel)
-	}
-	modelTag := TagStyle.Render(modelTagText)
-
-	permText := fmt.Sprintf(" Permisos: %s ", m.permissionLevel)
-	if m.width > 0 && m.width < 85 {
-		permText = fmt.Sprintf(" %s ", m.permissionLevel)
-	}
-	permTag := TagStyle.Render(permText)
-
-	voiceText := " [VOZ: OFF] "
-	voiceTag := TagStyle.Render(voiceText)
-	if m.voiceEnabled {
-		if m.width > 0 && m.width < 90 {
-			voiceText = " [VOZ: ON] "
-		} else {
-			voiceText = " [VOZ: ACTIVO] "
-		}
-		voiceTag = TagActiveStyle.Render(voiceText)
-	}
-
-	tags := []string{modelTag, " ", permTag, " ", voiceTag}
-	if len(m.messageQueue) > 0 {
-		queueText := fmt.Sprintf(" [COLA: %d] ", len(m.messageQueue))
-		tags = append(tags, " ", QueueBadgeStyle.Render(queueText))
-	}
-	statsLine := lipgloss.JoinHorizontal(lipgloss.Center, tags...)
-
-	if m.width > 0 {
-		return lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(statsLine)
-	}
-	return statsLine
-}
-
 func (m Model) renderConversation() string {
 	convWidth := m.width
 	if convWidth <= 0 {
@@ -565,8 +505,8 @@ func (m Model) renderConversation() string {
 func (m Model) renderFooter() string {
 	var sb strings.Builder
 
-	// Línea de estado con spinner y contador de cola si aplica
-	if strings.TrimSpace(m.systemStatus) != "" || m.state != StateIdle {
+	// Barra de estado: solo se muestra cuando el agente está procesando o hay cola en espera
+	if m.state != StateIdle || len(m.messageQueue) > 0 {
 		statusLine := m.systemStatus
 		if m.state != StateIdle {
 			statusLine = fmt.Sprintf("%s %s", m.spinner.View(), m.systemStatus)
@@ -595,27 +535,29 @@ func (m Model) renderFooter() string {
 	sb.WriteString(borderStyle.Render(inputContent))
 	sb.WriteString("\n")
 
-	// Información del modelo abajo de la barra de chat
-	sb.WriteString(m.renderModelInfoLine())
-	sb.WriteString("\n")
-
-	// Hints de atajos contextuales
+	// Hints de atajos contextuales con indicador de voz discreto
 	var hintsText string
 	if m.state != StateIdle {
-		hintsText = "  [Enter] Encolar  •  [/now <orden>] Enviar directo  •  [/cancel | Esc] Cancelar  •  [/queue] Ver cola"
+		hintsText = " [Enter] Encolar  •  [/now <orden>] Enviar directo  •  [/cancel | Esc] Cancelar  •  [/queue] Ver cola"
 		if m.width > 0 && m.width < 95 {
-			hintsText = "  [Enter] Encolar  •  [/now <orden>] Directo  •  [Esc] Cancelar"
+			hintsText = " [Enter] Encolar  •  [/now <orden>] Directo  •  [Esc] Cancelar"
 		}
 	} else if len(m.messageQueue) > 0 {
-		hintsText = fmt.Sprintf("  [Enter] Enviar  •  [COLA: %d] (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
+		hintsText = fmt.Sprintf(" [Enter] Enviar  •  [COLA: %d] (/queue)  •  [/clearqueue] Vaciar  •  [Ctrl+C] Salir", len(m.messageQueue))
 	} else if m.activeCard != nil {
-		hintsText = "  [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
+		hintsText = " [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
 	} else {
-		hintsText = "  [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Pensamiento  •  [/help] Comandos"
+		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú de Inicio  •  [Ctrl+T] Pensamiento  •  [/help] Comandos"
 		if m.width > 0 && m.width < 85 {
-			hintsText = "  [Enter] Enviar  •  [Esc] Menú  •  [/help] Ayuda"
+			hintsText = " [Enter] Enviar  •  [Esc] Menú  •  [/help] Ayuda"
 		}
 	}
+
+	// Indicador discreto de voz si está activa
+	if m.voiceEnabled {
+		hintsText += "  •  voz: on"
+	}
+
 	hints := MutedStyle.Render(hintsText)
 	if m.width > 0 {
 		sb.WriteString(lipgloss.NewStyle().Width(m.width).Align(lipgloss.Center).Render(hints))
