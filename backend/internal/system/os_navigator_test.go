@@ -295,4 +295,19 @@ func TestOSNavigator_CloseWindow(t *testing.T) {
 	}
 }
 
+func TestOSNavigator_TileWindow(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("skipping Windows tile window test on non-windows")
+	}
+
+	nav := NewWindowsNavigator()
+	ctx := context.Background()
+
+	// Test show_desktop layout
+	if err := nav.TileWindow(ctx, 0, "show_desktop"); err != nil {
+		t.Errorf("TileWindow show_desktop failed: %v", err)
+	}
+}
+
+
 

@@ -36,6 +36,8 @@ var (
 	procSwitchToThisWindow  = modUser32.NewProc("SwitchToThisWindow")
 	procGetForegroundWindow = modUser32.NewProc("GetForegroundWindow")
 	procOpenInputDesktop    = modUser32.NewProc("OpenInputDesktop")
+	procMoveWindow          = modUser32.NewProc("MoveWindow")
+	procSystemParametersInfoW = modUser32.NewProc("SystemParametersInfoW")
 
 	modKernel32                    = syscall.NewLazyDLL("kernel32.dll")
 	procGetCurrentThreadId         = modKernel32.NewProc("GetCurrentThreadId")
@@ -724,20 +726,37 @@ func (w *WindowsNavigator) LaunchApplication(ctx context.Context, target string,
 	}
 
 	if !launched {
-		// 1. Intentar ejecución directa con CreateProcess (evita que cmd.exe rompa parámetros con & y URLs)
-		directCmd := exec.Command(appInfo.Command, resolvedArgs...)
-		if errDirect := directCmd.Start(); errDirect == nil {
+		// 1. Invocar prioritariamente a través de ShellExecuteW de shell32.dll
+		// ShellExecute delega la apertura al shell de Windows Explorer, permitiendo que programas
+		// que requieren elevación (como Taskmgr.exe, SystemSettings.exe o herramientas de administración)
+		// se abran al primer intento sin error 740 (ERROR_ELEVATION_REQUIRED).
+		verbPtr := uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr("open")))
+		filePtr := uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(appInfo.Command)))
+		var argPtr uintptr
+		if len(resolvedArgs) > 0 {
+			argPtr = uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(strings.Join(resolvedArgs, " "))))
+		}
+		const SW_SHOWNORMAL = 1
+		ret, _, _ := procShellExecuteW.Call(0, verbPtr, filePtr, argPtr, 0, SW_SHOWNORMAL)
+		if ret > 32 {
 			launched = true
 		} else {
-			// 2. Broker de fallback con cmd.exe si la ejecución directa falló
-			brokerCtx, brokerCancel := context.WithTimeout(ctx, 3*time.Second)
-			defer brokerCancel()
+			// 2. Ejecución directa con CreateProcess (fallback para herramientas CLI o scripts sin shell verb)
+			directCmd := exec.Command(appInfo.Command, resolvedArgs...)
+			if errDirect := directCmd.Start(); errDirect == nil {
+				launched = true
+			} else {
+				// 3. Broker de fallback con cmd.exe si la ejecución directa falló
+				brokerCtx, brokerCancel := context.WithTimeout(ctx, 3*time.Second)
+				defer brokerCancel()
 
-			cmdArgs := []string{"/c", "start", "", appInfo.Command}
-			cmdArgs = append(cmdArgs, resolvedArgs...)
-			cmd := exec.CommandContext(brokerCtx, "cmd.exe", cmdArgs...)
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("error ejecutando aplicación %s (%s): %v", target, appInfo.Command, err)
+				cmdArgs := []string{"/c", "start", "", appInfo.Command}
+				cmdArgs = append(cmdArgs, resolvedArgs...)
+				cmd := exec.CommandContext(brokerCtx, "cmd.exe", cmdArgs...)
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("error ejecutando aplicación %s (%s): %v", target, appInfo.Command, err)
+				}
+				launched = true
 			}
 		}
 	}
@@ -833,6 +852,97 @@ func (w *WindowsNavigator) CloseWindow(ctx context.Context, hwnd uintptr) error 
 	}
 
 	return nil
+}
+
+type winRect struct {
+	Left   int32
+	Top    int32
+	Right  int32
+	Bottom int32
+}
+
+// TileWindow acomoda una ventana en mosaico según el layout solicitado ("left", "right", "maximize", "minimize", "restore", "center", "show_desktop")
+func (w *WindowsNavigator) TileWindow(ctx context.Context, hwnd uintptr, layout string) error {
+	layout = strings.ToLower(strings.TrimSpace(layout))
+	if layout == "" {
+		layout = "maximize"
+	}
+
+	if layout == "show_desktop" || layout == "minimize_all" {
+		psCmd := `(New-Object -ComObject Shell.Application).MinimizeAll()`
+		_ = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Run()
+		return nil
+	}
+
+	if hwnd == 0 {
+		return fmt.Errorf("identificador de ventana (hwnd) inválido")
+	}
+
+	const (
+		SW_MAXIMIZE     = 3
+		SW_MINIMIZE     = 6
+		SW_RESTORE      = 9
+		SPI_GETWORKAREA = 0x0030
+	)
+
+	var workArea winRect
+	withInteractiveDesktop(func() {
+		procSystemParametersInfoW.Call(SPI_GETWORKAREA, 0, uintptr(unsafe.Pointer(&workArea)), 0)
+	})
+
+	workWidth := workArea.Right - workArea.Left
+	workHeight := workArea.Bottom - workArea.Top
+	if workWidth <= 0 || workHeight <= 0 {
+		workWidth = 1920
+		workHeight = 1080
+	}
+
+	switch layout {
+	case "maximize", "maximizar":
+		procShowWindow.Call(hwnd, SW_MAXIMIZE)
+		ForceForegroundWindow(hwnd)
+		return nil
+
+	case "minimize", "minimizar":
+		procShowWindow.Call(hwnd, SW_MINIMIZE)
+		return nil
+
+	case "restore", "restaurar":
+		procShowWindow.Call(hwnd, SW_RESTORE)
+		ForceForegroundWindow(hwnd)
+		return nil
+
+	case "left", "izquierda":
+		procShowWindow.Call(hwnd, SW_RESTORE)
+		x := workArea.Left
+		y := workArea.Top
+		wHalf := workWidth / 2
+		procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(wHalf), uintptr(workHeight), 1)
+		ForceForegroundWindow(hwnd)
+		return nil
+
+	case "right", "derecha":
+		procShowWindow.Call(hwnd, SW_RESTORE)
+		x := workArea.Left + (workWidth / 2)
+		y := workArea.Top
+		wHalf := workWidth / 2
+		procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(wHalf), uintptr(workHeight), 1)
+		ForceForegroundWindow(hwnd)
+		return nil
+
+	case "center", "centro":
+		procShowWindow.Call(hwnd, SW_RESTORE)
+		wWidth := int32(float64(workWidth) * 0.7)
+		wHeight := int32(float64(workHeight) * 0.7)
+		x := workArea.Left + (workWidth-wWidth)/2
+		y := workArea.Top + (workHeight-wHeight)/2
+		procMoveWindow.Call(hwnd, uintptr(x), uintptr(y), uintptr(wWidth), uintptr(wHeight), 1)
+		ForceForegroundWindow(hwnd)
+		return nil
+
+	default:
+		return fmt.Errorf("layout '%s' no reconocido. Opciones válidas: left, right, maximize, minimize, restore, center, show_desktop", layout)
+	}
 }
 
 // KillProcess finaliza un proceso por su Process ID con fallback multinivel (taskkill -> Stop-Process -> WMI/CIM Terminate)

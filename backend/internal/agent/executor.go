@@ -297,6 +297,8 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSFocusWindow(ctx, tc)
 	case "os_close_window":
 		return execOSCloseWindow(ctx, tc)
+	case "os_tile_windows":
+		return execOSTileWindows(ctx, tc)
 	case "os_kill_process":
 		return execOSKillProcess(ctx, tc)
 	case "os_service_manager":
@@ -305,6 +307,14 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSDockerManager(ctx, tc)
 	case "os_analyze_logs":
 		return execOSAnalyzeLogs(ctx, tc)
+	case "os_disk_cleaner":
+		return execOSDiskCleaner(ctx, tc)
+	case "os_audio_device":
+		return execOSAudioDevice(ctx, tc)
+	case "os_wifi_manager":
+		return execOSWifiManager(ctx, tc)
+	case "os_schedule_task":
+		return execOSScheduleTask(ctx, tc)
 	case "os_run_command":
 		return execOSRunCommand(ctx, tc)
 	case "os_draft_email":
@@ -402,12 +412,12 @@ func toolNameToActionType(name string) string {
 		return "command_exec"
 	case "list_files", "search_text":
 		return "file_read"
-	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector", "os_analyze_logs":
+	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector", "os_analyze_logs", "os_wifi_manager":
 		return "os_inspect"
-	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file":
+	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file", "os_disk_cleaner":
 		return "os_mutate"
 
-	case "os_launch_app", "os_focus_window", "os_close_window", "os_kill_process", "os_service_manager", "os_docker_manager", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
+	case "os_launch_app", "os_focus_window", "os_close_window", "os_tile_windows", "os_kill_process", "os_service_manager", "os_docker_manager", "os_audio_device", "os_schedule_task", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
 		return "os_exec"
 	case "web_search", "deep_search", "web_fetch", "web_dns_lookup":
 		return "web_search"

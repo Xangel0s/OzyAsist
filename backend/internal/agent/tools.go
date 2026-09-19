@@ -1165,6 +1165,109 @@ var AgentTools = []providers.ToolDef{
 			}
 		}`),
 	},
+	{
+		Name:        "os_tile_windows",
+		Description: "Acomoda, divide o reposiciona ventanas en la pantalla (mitad izquierda, mitad derecha, maximizar, restaurar, centrar o minimizar todo para ver escritorio).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"description": "Nombre o título de la ventana a mover (ej: 'Administrador de tareas', 'Google Chrome', 'Visual Studio Code')"
+				},
+				"hwnd": {
+					"type": "integer",
+					"description": "Handle numérico de la ventana (opcional si se especifica title)"
+				},
+				"layout": {
+					"type": "string",
+					"enum": ["left", "right", "maximize", "minimize", "restore", "center", "show_desktop"],
+					"description": "Disposición deseada de la ventana (default: 'maximize')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_disk_cleaner",
+		Description: "Analiza y purga de forma segura archivos temporales huérfanos (%TEMP%) y vacía opcionalmente la papelera de reciclaje para recuperar espacio en disco.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["analyze", "clean"],
+					"description": "'analyze' solo calcula el espacio recuperable; 'clean' purga los archivos seguros (default: 'analyze')"
+				},
+				"empty_recycle_bin": {
+					"type": "boolean",
+					"description": "Si es true, también vacía la papelera de reciclaje de Windows"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_audio_device",
+		Description: "Lista los dispositivos de salida de sonido activos (altavoces, auriculares Bluetooth, FxSound) o cambia el endpoint de audio predeterminado.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["list", "set"],
+					"description": "Acción a realizar: 'list' para ver dispositivos, 'set' para cambiar el predeterminado (default: 'list')"
+				},
+				"name": {
+					"type": "string",
+					"description": "Nombre o fragmento del dispositivo a seleccionar (requerido para 'set', ej: 'auriculares', 'altavoces')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_wifi_manager",
+		Description: "Inspecciona la conexión Wi-Fi actual (nombre SSID, calidad de señal %, velocidad, canal, autenticación) o escanea redes disponibles en el entorno.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "networks"],
+					"description": "'status' muestra la conexión actual detallada; 'networks' escanea redes visibles (default: 'status')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_schedule_task",
+		Description: "Crea, lista o elimina tareas programadas persistentes en Windows (schtasks.exe) que se ejecutan automáticamente en segundo plano.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["list", "create", "delete"],
+					"description": "Acción a ejecutar: 'list', 'create' o 'delete' (default: 'list')"
+				},
+				"name": {
+					"type": "string",
+					"description": "Nombre de la tarea (ej: 'BackupProyectos', 'CleanLogs')"
+				},
+				"command": {
+					"type": "string",
+					"description": "Comando o script completo a ejecutar (requerido para 'create')"
+				},
+				"schedule": {
+					"type": "string",
+					"enum": ["DAILY", "HOURLY", "ONLOGON", "WEEKLY"],
+					"description": "Frecuencia de ejecución (default: 'DAILY')"
+				},
+				"time": {
+					"type": "string",
+					"description": "Hora de ejecución en formato 24h 'HH:mm' (ej: '20:00', default: '09:00')"
+				}
+			}
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.
@@ -1282,6 +1385,16 @@ var VoiceAgentTools = []providers.ToolDef{
 		Name:        "os_close_window",
 		Description: "Cierra una ventana de Windows por título (ej: 'Administrador de tareas', 'Calculadora') o por su HWND/PID.",
 		InputSchema: mustJSON(`{"type":"object","properties":{"title":{"type":"string"},"hwnd":{"type":"integer"},"pid":{"type":"integer"}}}`),
+	},
+	{
+		Name:        "os_tile_windows",
+		Description: "Acomoda o divide ventanas en pantalla (left, right, maximize, minimize, restore, show_desktop).",
+		InputSchema: mustJSON(`{"type":"object","properties":{"title":{"type":"string"},"layout":{"type":"string"}}}`),
+	},
+	{
+		Name:        "os_wifi_manager",
+		Description: "Muestra el estado de la conexión Wi-Fi actual y señal.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"}}}`),
 	},
 	{
 		Name:        "os_kill_process",

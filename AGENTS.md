@@ -72,6 +72,18 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Control e inspección del daemon de Docker local y contenedores (`status`, `list`, `logs`, `start`, `stop`, `restart`, `stats`).
 - **Intelligent Log & Event Analyzer (`os_analyze_logs`)**:
   - Extracción y análisis de trazas, excepciones y pánicos en archivos locales `.log`/`.txt` con filtrado regex y lectura del Visor de Eventos de Windows (`Get-WinEvent`).
+- **Instant Shell Launch Engine (`procShellExecuteW`)**:
+  - Invocación nativa delegada al Shell del explorador de Windows para abrir ejecutables elevados (`Taskmgr.exe`, `SystemSettings.exe`), herramientas y documentos al primer intento sin errores de elevación 740.
+- **Dynamic Window Snapping & Tiling (`os_tile_windows`)**:
+  - Acomodo y división de ventanas en pantalla en tiempo real (`left`, `right`, `maximize`, `minimize`, `restore`, `center`, `show_desktop`) mediante APIs Win32 `MoveWindow` y `ShowWindow` calculando el área de trabajo del monitor (`SPI_GETWORKAREA`).
+- **Autonomous Disk Purge & Sentinel (`os_disk_cleaner`)**:
+  - Análisis y purga segura de archivos temporales huérfanos (`%TEMP%`, cachés de compilación) protegiendo procesos activos, con opción de vaciado de Papelera y telemetría de MB liberados.
+- **Audio Output Endpoint Controller (`os_audio_device`)**:
+  - Detección, listado y conmutación de dispositivos de salida de sonido (altavoces, auriculares Bluetooth, FxSound).
+- **Wi-Fi & Network Inspector (`os_wifi_manager`)**:
+  - Telemetría en vivo de interfaces inalámbricas (SSID, señal %, canal, tipo de radio, velocidad Mbps) y escaneo de redes disponibles.
+- **Persistent Task Scheduler (`os_schedule_task`)**:
+  - Creación, listado y eliminación de tareas programadas persistentes en segundo plano mediante `schtasks.exe` nativo de Windows.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`

@@ -140,6 +140,10 @@ func (u *UnixNavigator) CloseWindow(_ context.Context, _ uintptr) error {
 	return nil
 }
 
+func (u *UnixNavigator) TileWindow(_ context.Context, _ uintptr, _ string) error {
+	return nil
+}
+
 func (u *UnixNavigator) KillProcess(_ context.Context, _ uint32, _ bool) error {
 	return nil
 }

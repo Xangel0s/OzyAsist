@@ -102,6 +102,7 @@ type OSNavigator interface {
 	LaunchApplication(ctx context.Context, target string, args []string) error
 	FocusWindow(ctx context.Context, hwnd uintptr) error
 	CloseWindow(ctx context.Context, hwnd uintptr) error
+	TileWindow(ctx context.Context, hwnd uintptr, layout string) error
 	KillProcess(ctx context.Context, pid uint32, force bool) error
 	DetectDialogs(ctx context.Context, appFilter string) ([]DialogInfo, error)
 }
