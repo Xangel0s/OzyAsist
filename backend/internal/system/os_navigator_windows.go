@@ -797,16 +797,79 @@ func (w *WindowsNavigator) FocusWindow(_ context.Context, hwnd uintptr) error {
 	return nil
 }
 
-// KillProcess finaliza un proceso por su Process ID
-func (w *WindowsNavigator) KillProcess(_ context.Context, pid uint32, force bool) error {
+// CloseWindow envía el mensaje Win32 WM_CLOSE (0x0010) y SC_CLOSE a la ventana especificada para cerrarla elegantemente.
+func (w *WindowsNavigator) CloseWindow(ctx context.Context, hwnd uintptr) error {
+	if hwnd == 0 {
+		return fmt.Errorf("handle de ventana inválido (0)")
+	}
+
+	procIsWindow := modUser32.NewProc("IsWindow")
+	procPostMessageW := modUser32.NewProc("PostMessageW")
+	const WM_CLOSE = 0x0010
+	const WM_SYSCOMMAND = 0x0112
+	const SC_CLOSE = 0xF060
+
+	var pid uint32
+	procGetWindowThreadPID.Call(hwnd, uintptr(unsafe.Pointer(&pid)))
+
+	var posted bool
+	withInteractiveDesktop(func() {
+		isWin, _, _ := procIsWindow.Call(hwnd)
+		if isWin == 0 {
+			return
+		}
+		r1, _, _ := procPostMessageW.Call(hwnd, WM_CLOSE, 0, 0)
+		if r1 != 0 {
+			posted = true
+		}
+		procPostMessageW.Call(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0)
+	})
+
+	if !posted {
+		if pid > 0 {
+			return w.KillProcess(ctx, pid, true)
+		}
+		return fmt.Errorf("no se pudo cerrar la ventana (HWND: %d)", hwnd)
+	}
+
+	return nil
+}
+
+// KillProcess finaliza un proceso por su Process ID con fallback multinivel (taskkill -> Stop-Process -> WMI/CIM Terminate)
+func (w *WindowsNavigator) KillProcess(ctx context.Context, pid uint32, force bool) error {
 	if pid == 0 {
 		return fmt.Errorf("PID inválido")
 	}
+
+	// 1. Intento primario con taskkill nativo
 	args := []string{"/PID", fmt.Sprintf("%d", pid)}
 	if force {
 		args = append(args, "/F", "/T")
 	}
-	return exec.Command("taskkill", args...).Run()
+	cmd := exec.CommandContext(ctx, "taskkill", args...)
+	if err := cmd.Run(); err == nil {
+		return nil
+	}
+
+	// 2. Intento secundario: PowerShell Stop-Process
+	psCmd := fmt.Sprintf("Stop-Process -Id %d -Force -ErrorAction SilentlyContinue", pid)
+	_ = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Run()
+
+	// 3. Intento terciario de alta resiliencia: WMI / CIM Terminate (ejecutado con permisos del subsistema WMI)
+	// Esto permite finalizar procesos con nivel de integridad alto / UAC (como Taskmgr.exe) sin requerir elevación manual.
+	wmiCmd := fmt.Sprintf("Get-CimInstance Win32_Process -Filter 'ProcessId = %d' | Invoke-CimMethod -MethodName Terminate", pid)
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", wmiCmd).CombinedOutput()
+	if err == nil && strings.Contains(string(out), "0") {
+		return nil
+	}
+
+	// Comprobación final si el proceso ya no existe
+	checkCmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", fmt.Sprintf("Get-Process -Id %d -ErrorAction SilentlyContinue", pid))
+	if outCheck, _ := checkCmd.Output(); len(strings.TrimSpace(string(outCheck))) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("no se pudo finalizar el proceso PID %d (incluso con fallback WMI)", pid)
 }
 
 func copyFileOrDir(src, dst string) error {

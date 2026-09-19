@@ -295,8 +295,16 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSPowerState(ctx, tc)
 	case "os_focus_window":
 		return execOSFocusWindow(ctx, tc)
+	case "os_close_window":
+		return execOSCloseWindow(ctx, tc)
 	case "os_kill_process":
 		return execOSKillProcess(ctx, tc)
+	case "os_service_manager":
+		return execOSServiceManager(ctx, tc)
+	case "os_docker_manager":
+		return execOSDockerManager(ctx, tc)
+	case "os_analyze_logs":
+		return execOSAnalyzeLogs(ctx, tc)
 	case "os_run_command":
 		return execOSRunCommand(ctx, tc)
 	case "os_draft_email":
@@ -394,12 +402,12 @@ func toolNameToActionType(name string) string {
 		return "command_exec"
 	case "list_files", "search_text":
 		return "file_read"
-	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector":
+	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector", "os_analyze_logs":
 		return "os_inspect"
 	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file":
 		return "os_mutate"
 
-	case "os_launch_app", "os_focus_window", "os_kill_process", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
+	case "os_launch_app", "os_focus_window", "os_close_window", "os_kill_process", "os_service_manager", "os_docker_manager", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
 		return "os_exec"
 	case "web_search", "deep_search", "web_fetch", "web_dns_lookup":
 		return "web_search"
@@ -1099,7 +1107,7 @@ func execOSActiveWindows(ctx context.Context) (string, bool) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("=== VENTANAS ABIERTAS EN PANTALLA (%d) ===\n", len(windows)))
 	for i, w := range windows {
-		sb.WriteString(fmt.Sprintf("%d. %s (PID: %d)\n", i+1, w.Title, w.ProcessID))
+		sb.WriteString(fmt.Sprintf("%d. %s (HWND: %d, PID: %d)\n", i+1, w.Title, w.Handle, w.ProcessID))
 	}
 	return sb.String(), true
 }
@@ -1488,11 +1496,81 @@ func execOSFocusWindow(ctx context.Context, tc providers.ToolCall) (string, bool
 	return fmt.Sprintf("Ventana (HWND: %d) enfocada y traída al frente.", params.HWND), true
 }
 
+func execOSCloseWindow(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		HWND  uintptr `json:"hwnd"`
+		Title string  `json:"title"`
+		PID   uint32  `json:"pid"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	nav := system.NewWindowsNavigator()
+
+	// 1. Si se especificó HWND directo
+	if params.HWND > 0 {
+		if err := nav.CloseWindow(ctx, params.HWND); err != nil {
+			return fmt.Sprintf("Error cerrando ventana (HWND: %d): %v", params.HWND, err), false
+		}
+		return fmt.Sprintf("Ventana (HWND: %d) cerrada exitosamente mediante WM_CLOSE.", params.HWND), true
+	}
+
+	// 2. Si se especificó un título o nombre de ventana
+	searchTitle := strings.TrimSpace(params.Title)
+	if searchTitle != "" {
+		cleanLower := strings.ToLower(searchTitle)
+		for _, prefix := range []string{"cerrar ", "cierra ", "el ", "la ", "los ", "las "} {
+			if strings.HasPrefix(cleanLower, prefix) {
+				cleanLower = strings.TrimSpace(cleanLower[len(prefix):])
+			}
+		}
+
+		wins, err := nav.GetActiveWindows(ctx)
+		if err == nil {
+			for _, w := range wins {
+				wLower := strings.ToLower(w.Title)
+				if strings.Contains(wLower, cleanLower) ||
+					(strings.Contains(cleanLower, "administrador") && (strings.Contains(wLower, "administrador de tareas") || strings.Contains(wLower, "task manager"))) ||
+					(strings.Contains(cleanLower, "tarea") && (strings.Contains(wLower, "administrador de tareas") || strings.Contains(wLower, "task manager"))) ||
+					(strings.Contains(cleanLower, "bloc") && (strings.Contains(wLower, "bloc de notas") || strings.Contains(wLower, "notepad"))) ||
+					(strings.Contains(cleanLower, "calc") && (strings.Contains(wLower, "calculadora") || strings.Contains(wLower, "calc"))) {
+
+					_ = nav.CloseWindow(ctx, w.Handle)
+					_ = nav.KillProcess(ctx, w.ProcessID, true)
+					return fmt.Sprintf("Ventana '%s' (HWND %d, PID %d) cerrada exitosamente.", w.Title, w.Handle, w.ProcessID), true
+				}
+			}
+		}
+
+		// Fallback automático por si no está visible en GetActiveWindows
+		return execOSKillProcess(ctx, tc)
+	}
+
+	// 3. Si se especificó PID
+	if params.PID > 0 {
+		wins, _ := nav.GetActiveWindows(ctx)
+		closedAny := false
+		for _, w := range wins {
+			if w.ProcessID == params.PID {
+				_ = nav.CloseWindow(ctx, w.Handle)
+				closedAny = true
+			}
+		}
+		_ = nav.KillProcess(ctx, params.PID, true)
+		if closedAny {
+			return fmt.Sprintf("Ventana asociada al proceso PID %d cerrada exitosamente.", params.PID), true
+		}
+		return fmt.Sprintf("Proceso PID %d terminado exitosamente.", params.PID), true
+	}
+
+	return "Debes proporcionar 'hwnd', 'title' o 'pid' para cerrar la ventana.", false
+}
+
 func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool) {
 	var params struct {
 		PID     uint32 `json:"pid"`
 		Name    string `json:"name"`
 		AppName string `json:"appName"`
+		Title   string `json:"title"`
 		Force   bool   `json:"force"`
 	}
 	_ = json.Unmarshal(tc.Input, &params)
@@ -1513,6 +1591,9 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 	if target == "" {
 		target = strings.TrimSpace(params.AppName)
 	}
+	if target == "" {
+		target = strings.TrimSpace(params.Title)
+	}
 
 	cleanLower := strings.ToLower(target)
 	for _, prefix := range []string{"cerrar ", "cierra ", "matar ", "mata ", "el ", "la ", "los ", "las "} {
@@ -1524,22 +1605,40 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 
 	targetsToKill := []string{}
 	switch cleanLower {
+	case "administrador de tareas", "administrador de tarea", "task manager", "taskmgr", "taskmgr.exe":
+		targetsToKill = []string{"Taskmgr.exe", "taskmgr.exe"}
+	case "configuración", "configuracion", "settings", "systemsettings":
+		targetsToKill = []string{"SystemSettings.exe"}
 	case "bloc de notas", "bloc", "notas", "notepad", "notepad.exe":
 		targetsToKill = []string{"notepad.exe", "Notepad.exe"}
 	case "calculadora", "calc", "calc.exe", "calculator", "calculatorapp":
 		targetsToKill = []string{"CalculatorApp.exe", "calc.exe", "Calculator.exe"}
 	case "explorador", "explorador de archivos", "explorer", "explorer.exe":
 		targetsToKill = []string{"explorer.exe"}
+	case "consola", "cmd", "símbolo del sistema", "simbolo del sistema":
+		targetsToKill = []string{"cmd.exe"}
+	case "terminal", "powershell", "windows terminal":
+		targetsToKill = []string{"powershell.exe", "pwsh.exe", "WindowsTerminal.exe"}
 	case "chrome", "google chrome":
 		targetsToKill = []string{"chrome.exe"}
 	case "edge", "microsoft edge":
 		targetsToKill = []string{"msedge.exe"}
+	case "brave":
+		targetsToKill = []string{"brave.exe"}
 	case "spotify":
 		targetsToKill = []string{"spotify.exe"}
 	case "paint", "mspaint":
 		targetsToKill = []string{"mspaint.exe"}
+	case "word":
+		targetsToKill = []string{"WINWORD.EXE", "winword.exe"}
 	case "excel":
-		targetsToKill = []string{"excel.exe", "EXCEL.EXE"}
+		targetsToKill = []string{"EXCEL.EXE", "excel.exe"}
+	case "powerpoint":
+		targetsToKill = []string{"POWERPNT.EXE", "powerpnt.exe"}
+	case "discord":
+		targetsToKill = []string{"Discord.exe"}
+	case "steam":
+		targetsToKill = []string{"steam.exe"}
 	default:
 		if cleanLower != "" {
 			if !strings.HasSuffix(cleanLower, ".exe") {
@@ -1562,26 +1661,47 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 		}
 	}
 
-	// Fallback adicional con PowerShell Stop-Process para procesos UWP
+	// Fallback 1: PowerShell Stop-Process
 	if !killedAny {
 		for _, img := range targetsToKill {
 			procBase := strings.TrimSuffix(img, ".exe")
 			psCmd := fmt.Sprintf("Stop-Process -Name '%s' -Force -ErrorAction SilentlyContinue", procBase)
-			_ = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Run()
+			if err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Run(); err == nil {
+				killedAny = true
+			}
+		}
+	}
+
+	// Fallback 2: WMI / CIM Terminate (capaz de cerrar procesos elevados como Taskmgr.exe sin requerir elevación manual)
+	if !killedAny {
+		for _, img := range targetsToKill {
+			wmiCmd := fmt.Sprintf("Get-CimInstance Win32_Process -Filter \"Name = '%s'\" | Invoke-CimMethod -MethodName Terminate", img)
+			out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", wmiCmd).CombinedOutput()
+			if err == nil && strings.Contains(string(out), "0") {
+				killedAny = true
+			}
 		}
 	}
 
 	if killedAny {
-		return fmt.Sprintf("Aplicación %s cerrada exitosamente.", target), true
+		return fmt.Sprintf("Aplicación '%s' cerrada exitosamente.", target), true
 	}
 
-	// Fallback inteligente: buscar en las ventanas activas por coincidencia de título
+	// Fallback 3 inteligente: buscar en las ventanas activas por coincidencia de título
 	if wins, err := nav.GetActiveWindows(ctx); err == nil && cleanLower != "" {
 		for _, w := range wins {
-			if strings.Contains(strings.ToLower(w.Title), cleanLower) {
+			wLower := strings.ToLower(w.Title)
+			if strings.Contains(wLower, cleanLower) ||
+				(strings.Contains(cleanLower, "administrador") && (strings.Contains(wLower, "administrador") || strings.Contains(wLower, "task manager"))) ||
+				(strings.Contains(cleanLower, "tarea") && (strings.Contains(wLower, "tarea") || strings.Contains(wLower, "task"))) ||
+				(strings.Contains(cleanLower, "bloc") && (strings.Contains(wLower, "bloc") || strings.Contains(wLower, "notepad"))) ||
+				(strings.Contains(cleanLower, "calc") && (strings.Contains(wLower, "calc") || strings.Contains(wLower, "calculadora"))) {
+
+				_ = nav.CloseWindow(ctx, w.Handle)
 				if err := nav.KillProcess(ctx, w.ProcessID, true); err == nil {
 					return fmt.Sprintf("Ventana '%s' (PID %d) cerrada exitosamente.", w.Title, w.ProcessID), true
 				}
+				return fmt.Sprintf("Orden de cierre enviada a la ventana '%s' (HWND %d, PID %d).", w.Title, w.Handle, w.ProcessID), true
 			}
 		}
 	}

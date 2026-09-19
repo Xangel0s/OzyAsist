@@ -61,6 +61,17 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Inspección de puertos TCP en escucha, asociación a PID y nombre de proceso, con opción de liberación forzada (`kill`).
 - **Native Web Downloader (`os_download_file`)**:
   - Descarga directa y segura de archivos y recursos web hacia carpetas locales de usuario con auto-detección de nombre.
+- **Graceful Window & High-Integrity Process Control (`os_close_window`, `os_kill_process`)**:
+  - Cierre elegante de ventanas visibles mediante mensajes Win32 `WM_CLOSE` (0x0010) y `SC_CLOSE` al manejador `HWND`.
+  - Mapeo multi-idioma de nombres coloquiales a ejecutables reales (`"administrador de tareas"` -> `Taskmgr.exe`, `"bloc de notas"` -> `notepad.exe`, `"calculadora"` -> `calc.exe` / `CalculatorApp.exe`, etc.).
+  - Terminación multinivel con fallback a WMI / CIM (`Get-CimInstance Win32_Process | Invoke-CimMethod -MethodName Terminate`) para finalizar procesos elevados con permisos de administrador sin bloqueos de `Acceso denegado`.
+  - Directiva estricta anti-alucinación: prohibido confirmar cierres de ventanas sin ejecutar la herramienta correspondiente.
+- **Windows Service Inspector & Controller (`os_service_manager`)**:
+  - Consulta y administración nativa de servicios de Windows (`list`, `status`, `start`, `stop`, `restart`) con filtrado en tiempo real.
+- **Host Docker Container Manager (`os_docker_manager`)**:
+  - Control e inspección del daemon de Docker local y contenedores (`status`, `list`, `logs`, `start`, `stop`, `restart`, `stats`).
+- **Intelligent Log & Event Analyzer (`os_analyze_logs`)**:
+  - Extracción y análisis de trazas, excepciones y pánicos en archivos locales `.log`/`.txt` con filtrado regex y lectura del Visor de Eventos de Windows (`Get-WinEvent`).
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`

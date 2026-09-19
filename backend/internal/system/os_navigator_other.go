@@ -136,6 +136,10 @@ func (u *UnixNavigator) FocusWindow(_ context.Context, _ uintptr) error {
 	return nil
 }
 
+func (u *UnixNavigator) CloseWindow(_ context.Context, _ uintptr) error {
+	return nil
+}
+
 func (u *UnixNavigator) KillProcess(_ context.Context, _ uint32, _ bool) error {
 	return nil
 }

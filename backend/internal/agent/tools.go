@@ -356,6 +356,27 @@ var AgentTools = []providers.ToolDef{
 		}`),
 	},
 	{
+		Name:        "os_close_window",
+		Description: "Cierra elegantemente una ventana visible enviando el mensaje Win32 WM_CLOSE a su manejador (HWND) o cerrando el proceso correspondiente por título o PID. Úsala siempre que el usuario pida cerrar un programa o ventana visible (ej: 'cierra el administrador de tareas', 'cierra la calculadora', etc.).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"hwnd": {
+					"type": "integer",
+					"description": "Handle numérico de la ventana obtenido con os_active_windows"
+				},
+				"title": {
+					"type": "string",
+					"description": "Título o nombre de la ventana a cerrar (ej: 'Administrador de tareas', 'Calculadora', 'Bloc de notas')"
+				},
+				"pid": {
+					"type": "integer",
+					"description": "Process ID (PID) asociado a la ventana"
+				}
+			}
+		}`),
+	},
+	{
 		Name:        "os_kill_process",
 		Description: "Cierra o termina un proceso o aplicación en ejecución por su PID o por su nombre (ej: 'notepad', 'notepad.exe', 'calc').",
 		InputSchema: mustJSON(`{
@@ -1074,6 +1095,76 @@ var AgentTools = []providers.ToolDef{
 			"required": ["path", "title", "sections"]
 		}`),
 	},
+	{
+		Name:        "os_service_manager",
+		Description: "Inspecciona y administra servicios de Windows (listar servicios, consultar estado detallado, iniciar, detener o reiniciar).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["list", "status", "start", "stop", "restart"],
+					"description": "Acción a realizar sobre los servicios (default: 'list')"
+				},
+				"name": {
+					"type": "string",
+					"description": "Nombre del servicio de Windows a consultar o controlar (ej: 'wuauserv', 'docker', 'Spooler')"
+				},
+				"filter": {
+					"type": "string",
+					"description": "Filtro opcional para buscar servicios por nombre al listar (ej: 'docker', 'sql', 'update')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_docker_manager",
+		Description: "Administra e inspecciona contenedores Docker en el host (ver estado del motor Docker, listar contenedores, leer logs, iniciar, detener, reiniciar o ver consumo de CPU/RAM).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "list", "logs", "start", "stop", "restart", "stats"],
+					"description": "Acción a ejecutar con Docker (default: 'status')"
+				},
+				"container": {
+					"type": "string",
+					"description": "Nombre o ID del contenedor (requerido para 'logs', 'start', 'stop', 'restart')"
+				},
+				"tail": {
+					"type": "integer",
+					"description": "Número de líneas de log a obtener (default: 50)"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_analyze_logs",
+		Description: "Analiza y extrae errores, excepciones y trazas críticas de archivos de registro locales o del Visor de Eventos de Windows.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"source": {
+					"type": "string",
+					"description": "Ruta de un archivo de log local (.log, .txt), o 'application', 'system', 'windows-events' para eventos de Windows"
+				},
+				"lines": {
+					"type": "integer",
+					"description": "Cantidad de líneas a inspeccionar (default: 60, máx: 300)"
+				},
+				"filter": {
+					"type": "string",
+					"description": "Palabra clave o expresión regular de búsqueda (ej: 'error', 'panic', 'timeout')"
+				},
+				"severity": {
+					"type": "string",
+					"enum": ["ERROR", "WARNING", "ALL"],
+					"description": "Filtro de severidad predefinido (default: 'ERROR')"
+				}
+			}
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.
@@ -1186,6 +1277,11 @@ var VoiceAgentTools = []providers.ToolDef{
 		Name:        "os_list_alarms",
 		Description: "Lista los recordatorios activos pendientes.",
 		InputSchema: mustJSON(`{"type":"object","properties":{}}`),
+	},
+	{
+		Name:        "os_close_window",
+		Description: "Cierra una ventana de Windows por título (ej: 'Administrador de tareas', 'Calculadora') o por su HWND/PID.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"title":{"type":"string"},"hwnd":{"type":"integer"},"pid":{"type":"integer"}}}`),
 	},
 	{
 		Name:        "os_kill_process",

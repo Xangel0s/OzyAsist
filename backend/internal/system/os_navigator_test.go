@@ -241,3 +241,58 @@ func TestOSNavigator_DetectDialogs(t *testing.T) {
 	}
 }
 
+func TestOSNavigator_CloseWindow(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("skipping Windows close window test on non-windows")
+	}
+
+	nav := NewWindowsNavigator()
+	ctx := context.Background()
+
+	_ = exec.Command("powershell", "-NoProfile", "-Command", "Stop-Process -Name Notepad, notepad, calc, CalculatorApp -Force -ErrorAction SilentlyContinue").Run()
+	time.Sleep(300 * time.Millisecond)
+
+	err := nav.LaunchApplication(ctx, "calc.exe", nil)
+	if err != nil {
+		t.Fatalf("Failed to launch calc.exe: %v", err)
+	}
+
+	var foundWin *WindowInfo
+	for attempt := 0; attempt < 10; attempt++ {
+		time.Sleep(400 * time.Millisecond)
+		wins, err := nav.GetActiveWindows(ctx)
+		if err != nil {
+			continue
+		}
+		for _, w := range wins {
+			if strings.Contains(strings.ToLower(w.Title), "calculadora") || strings.Contains(strings.ToLower(w.Title), "calc") {
+				copyW := w
+				foundWin = &copyW
+				break
+			}
+		}
+		if foundWin != nil {
+			break
+		}
+	}
+
+	if foundWin == nil {
+		t.Fatalf("Calculator window was not found")
+	}
+
+	t.Logf("Found Calculator window HWND=%d, PID=%d. Sending CloseWindow...", foundWin.Handle, foundWin.ProcessID)
+	if err := nav.CloseWindow(ctx, foundWin.Handle); err != nil {
+		t.Fatalf("CloseWindow returned error: %v", err)
+	}
+
+	// Esperar que la ventana se cierre
+	time.Sleep(1000 * time.Millisecond)
+	winsAfter, _ := nav.GetActiveWindows(ctx)
+	for _, w := range winsAfter {
+		if w.Handle == foundWin.Handle {
+			t.Errorf("Window HWND=%d still found active after CloseWindow", foundWin.Handle)
+		}
+	}
+}
+
+
