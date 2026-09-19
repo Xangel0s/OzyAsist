@@ -325,6 +325,12 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSNetworkDiagnostics(ctx, tc)
 	case "os_smart_organizer":
 		return execOSSmartOrganizer(ctx, tc)
+	case "os_keyboard_layout":
+		return execOSKeyboardLayout(ctx, tc)
+	case "os_startup_manager":
+		return execOSStartupManager(ctx, tc)
+	case "os_notification_focus":
+		return execOSNotificationFocus(ctx, tc)
 	case "os_run_command":
 		return execOSRunCommand(ctx, tc)
 	case "os_draft_email":
@@ -427,7 +433,7 @@ func toolNameToActionType(name string) string {
 	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file", "os_disk_cleaner":
 		return "os_mutate"
 
-	case "os_launch_app", "os_focus_window", "os_close_window", "os_tile_windows", "os_kill_process", "os_service_manager", "os_docker_manager", "os_audio_device", "os_schedule_task", "os_power_profile", "os_toast_notify", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
+	case "os_launch_app", "os_focus_window", "os_close_window", "os_tile_windows", "os_kill_process", "os_service_manager", "os_docker_manager", "os_audio_device", "os_schedule_task", "os_power_profile", "os_toast_notify", "os_keyboard_layout", "os_startup_manager", "os_notification_focus", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
 		return "os_exec"
 	case "web_search", "deep_search", "web_fetch", "web_dns_lookup":
 		return "web_search"

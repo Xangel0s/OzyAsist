@@ -49,7 +49,7 @@ func execOSGetClipboard(_ context.Context) (string, bool) {
 	if text == "" {
 		return "El portapapeles está vacío o contiene datos no textuales (como imágenes).", true
 	}
-	return fmt.Sprintf("📋 [CONTENIDO DEL PORTAPAPELES]:\n%s", text), true
+	return fmt.Sprintf("[CONTENIDO DEL PORTAPAPELES]:\n%s", text), true
 }
 
 // execOSSetClipboard escribe en el portapapeles del sistema
@@ -63,7 +63,7 @@ func execOSSetClipboard(_ context.Context, tc providers.ToolCall) (string, bool)
 	if err := system.WriteClipboardContent(params.Text); err != nil {
 		return fmt.Sprintf("Error escribiendo en portapapeles: %v", err), false
 	}
-	return fmt.Sprintf("✓ Texto copiado al portapapeles exitosamente (%d caracteres).", len(params.Text)), true
+	return fmt.Sprintf("Texto copiado al portapapeles exitosamente (%d caracteres).", len(params.Text)), true
 }
 
 // SendToastNotification envía una notificación toast nativa en Windows

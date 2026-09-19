@@ -97,6 +97,14 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Telemetría en vivo de interfaces inalámbricas (SSID, señal %, canal, tipo de radio, velocidad Mbps) y escaneo de redes disponibles.
 - **Persistent Task Scheduler (`os_schedule_task`)**:
   - Creación, listado y eliminación de tareas programadas persistentes en segundo plano mediante `schtasks.exe` nativo de Windows.
+- **Windows Keyboard Layout & Input Method Controller (`os_keyboard_layout`)**:
+  - Inspección en tiempo real de la distribución activa y culturas de entrada (`status`), listado de teclados e idiomas instalados (`list`), y conmutación instantánea (`set` con `latam`, `spain`, `us` o código KLID hex `0000080A`) mediante Win32 `LoadKeyboardLayout` y difusión `WM_INPUTLANGCHANGEREQUEST` a nivel de sistema.
+- **Windows Startup & Autostart Program Manager (`os_startup_manager`)**:
+  - Consulta y auditoría de programas que arrancan con el sistema (`list` en `HKCU\Run`, `HKLM\Run` y carpeta `Startup`), adición de nuevas aplicaciones (`add`), y deshabilitación o eliminación de software que ralentiza el arranque (`remove`).
+- **Focus Assist & Global Notification Controller (`os_notification_focus`)**:
+  - Inspección del estado de notificaciones de Windows (`status`) y alternancia del modo silencioso / no molestar (`set` con `enabled: true/false`), bloqueando banners emergentes durante sesiones de desarrollo intenso.
+- **Native System Clipboard Access (`os_get_clipboard`, `os_set_clipboard`)**:
+  - Lectura directa y segura del texto copiado en el portapapeles de Windows y escritura programática sin emojis.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`

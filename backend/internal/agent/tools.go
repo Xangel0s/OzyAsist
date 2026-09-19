@@ -1367,6 +1367,83 @@ var AgentTools = []providers.ToolDef{
 			}
 		}`),
 	},
+	{
+		Name:        "os_keyboard_layout",
+		Description: "Inspecciona la distribución de teclado activa ('status'), lista las distribuciones instaladas ('list') o cambia la distribución de teclado de Windows al instante ('set' con 'latam', 'spain', 'us' o código KLID hex ej. '0000080A').",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "list", "set"],
+					"description": "Acción a realizar: 'status' (ver activo), 'list' (ver disponibles) o 'set' (cambiar teclado)"
+				},
+				"layout": {
+					"type": "string",
+					"description": "Distribución deseada para 'set' (ej: 'latam', 'spain', 'us', o KLID hex ej: '0000080A')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_startup_manager",
+		Description: "Administra las aplicaciones que inician automáticamente al arrancar sesión en Windows. 'list' muestra programas en HKCU\\Run, HKLM\\Run y carpeta Startup; 'add' registra una aplicación en el inicio; 'remove' la retira.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["list", "add", "remove"],
+					"description": "Acción a realizar: 'list', 'add' o 'remove' (default: 'list')"
+				},
+				"name": {
+					"type": "string",
+					"description": "Nombre de la aplicación o entrada de inicio"
+				},
+				"command": {
+					"type": "string",
+					"description": "Ruta o comando ejecutable a iniciar con Windows (requerido para 'add')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_notification_focus",
+		Description: "Consulta o configura el estado de las notificaciones emergentes de Windows y el modo silencioso/no molestar ('status' consulta el estado; 'set' con enabled: true/false las activa o silencia).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "set"],
+					"description": "Acción: 'status' para ver el estado, 'set' para cambiarlo"
+				},
+				"enabled": {
+					"type": "boolean",
+					"description": "true para activar notificaciones normalmente, false para silenciarlas (modo no molestar)"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_get_clipboard",
+		Description: "Lee y obtiene el texto actualmente copiado en el portapapeles de Windows.",
+		InputSchema: mustJSON(`{"type":"object","properties":{}}`),
+	},
+	{
+		Name:        "os_set_clipboard",
+		Description: "Copia o escribe una cadena de texto directamente en el portapapeles de Windows.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"text": {
+					"type": "string",
+					"description": "Texto a copiar al portapapeles"
+				}
+			},
+			"required": ["text"]
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.
@@ -1580,6 +1657,21 @@ var VoiceAgentTools = []providers.ToolDef{
 		Name:        "os_detect_dialogs",
 		Description: "Inspecciona cuadros de diálogo modales y errores activos en pantalla (#32770).",
 		InputSchema: mustJSON(`{"type":"object","properties":{"app_filter":{"type":"string","description":"Filtro por app o título"}}}`),
+	},
+	{
+		Name:        "os_keyboard_layout",
+		Description: "Inspecciona o cambia la distribución de teclado de Windows ('status', 'set' con 'latam', 'spain', 'us').",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string","enum":["status","list","set"]},"layout":{"type":"string"}}}`),
+	},
+	{
+		Name:        "os_notification_focus",
+		Description: "Consulta o configura notificaciones emergentes y modo no molestar ('status', 'set' con enabled: true/false).",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string","enum":["status","set"]},"enabled":{"type":"boolean"}}}`),
+	},
+	{
+		Name:        "os_get_clipboard",
+		Description: "Obtiene el texto actual copiado en el portapapeles de Windows.",
+		InputSchema: mustJSON(`{"type":"object","properties":{}}`),
 	},
 }
 
