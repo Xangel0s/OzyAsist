@@ -226,5 +226,138 @@ func TestExecOSHardwareInspector_Modes(t *testing.T) {
 	if !strings.Contains(outTelem, "TELEMETRÍA DE HARDWARE") || !strings.Contains(outTelem, "CPU:") || !strings.Contains(outTelem, "RAM:") {
 		t.Errorf("Se esperaba telemetría de CPU y RAM: %s", outTelem)
 	}
+
+	// 4. Modo health / salud
+	tcHealth := providers.ToolCall{
+		ID:    "call-hw-health",
+		Name:  "os_hardware_inspector",
+		Input: json.RawMessage(`{"action": "health"}`),
+	}
+	outHealth, okHealth := execOSHardwareInspector(ctx, tcHealth)
+	if !okHealth {
+		t.Fatalf("execOSHardwareInspector health falló: %s", outHealth)
+	}
+	t.Logf("Auditoría de salud de hardware: %s", outHealth)
+	if !strings.Contains(outHealth, "AUDITORÍA Y SALUD DEL HARDWARE") || !strings.Contains(outHealth, "Diagnóstico General:") {
+		t.Errorf("Se esperaba reporte de auditoría de salud: %s", outHealth)
+	}
 }
+
+func TestExecOSPowerProfile_StatusAndValidation(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. status
+	tcStatus := providers.ToolCall{
+		ID:    "call-power-status",
+		Name:  "os_power_profile",
+		Input: json.RawMessage(`{"action": "status"}`),
+	}
+	outStatus, okStatus := execOSPowerProfile(ctx, tcStatus)
+	if !okStatus {
+		t.Fatalf("execOSPowerProfile status falló: %s", outStatus)
+	}
+	t.Logf("Perfil de energía: %s", outStatus)
+	if !strings.Contains(outStatus, "PERFIL DE ENERGÍA Y PANTALLA") {
+		t.Errorf("Se esperaba encabezado de perfil de energía: %s", outStatus)
+	}
+
+	// 2. Plan inválido
+	tcInvalid := providers.ToolCall{
+		ID:    "call-power-invalid",
+		Name:  "os_power_profile",
+		Input: json.RawMessage(`{"action": "set_plan", "plan": "plan_inexistente"}`),
+	}
+	outInvalid, okInvalid := execOSPowerProfile(ctx, tcInvalid)
+	if okInvalid {
+		t.Errorf("Se esperaba fallo con plan inexistente, pero tuvo éxito: %s", outInvalid)
+	}
+}
+
+func TestExecOSToastNotify_ValidationAndSend(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Fallo sin mensaje
+	tcNoMsg := providers.ToolCall{
+		ID:    "call-toast-nomsg",
+		Name:  "os_toast_notify",
+		Input: json.RawMessage(`{"title": "Test"}`),
+	}
+	outNoMsg, okNoMsg := execOSToastNotify(ctx, tcNoMsg)
+	if okNoMsg {
+		t.Errorf("Se esperaba fallo sin message, pero tuvo éxito: %s", outNoMsg)
+	}
+
+	// 2. Notificación válida
+	tcValid := providers.ToolCall{
+		ID:    "call-toast-valid",
+		Name:  "os_toast_notify",
+		Input: json.RawMessage(`{"title": "Ozy Test", "message": "Verificación de prueba unitaria"}`),
+	}
+	outValid, okValid := execOSToastNotify(ctx, tcValid)
+	if !okValid {
+		t.Fatalf("execOSToastNotify falló: %s", outValid)
+	}
+	if !strings.Contains(outValid, "Notificación Toast nativa enviada") {
+		t.Errorf("Se esperaba confirmación de toast enviado: %s", outValid)
+	}
+}
+
+func TestExecOSNetworkDiagnostics_PingAndIPInfo(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. IP info
+	tcIP := providers.ToolCall{
+		ID:    "call-net-ip",
+		Name:  "os_network_diagnostics",
+		Input: json.RawMessage(`{"action": "ip_info"}`),
+	}
+	outIP, okIP := execOSNetworkDiagnostics(ctx, tcIP)
+	if !okIP {
+		t.Fatalf("execOSNetworkDiagnostics ip_info falló: %s", outIP)
+	}
+	t.Logf("IP Info: %s", outIP)
+	if !strings.Contains(outIP, "CONFIGURACIÓN DE RED LOCAL") {
+		t.Errorf("Se esperaba encabezado de configuración de red: %s", outIP)
+	}
+
+	// 2. Ping
+	tcPing := providers.ToolCall{
+		ID:    "call-net-ping",
+		Name:  "os_network_diagnostics",
+		Input: json.RawMessage(`{"action": "test", "host": "1.1.1.1"}`),
+	}
+	outPing, okPing := execOSNetworkDiagnostics(ctx, tcPing)
+	if !okPing {
+		t.Fatalf("execOSNetworkDiagnostics ping falló: %s", outPing)
+	}
+	t.Logf("Diagnóstico de red: %s", outPing)
+	if !strings.Contains(outPing, "DIAGNÓSTICO DE RED Y LATENCIA") {
+		t.Errorf("Se esperaba resultado de diagnóstico de red: %s", outPing)
+	}
+}
+
+func TestExecOSSmartOrganizer_Duplicates(t *testing.T) {
+	ctx := context.Background()
+
+	tmpDir := t.TempDir()
+	// Crear 2 archivos idénticos mayores a 50KB
+	dummyContent := strings.Repeat("AlineacionDePruebaDeArchivosDuplicadosParaOzyAssist1234567890\n", 1500) // ~90KB
+	_ = os.WriteFile(filepath.Join(tmpDir, "archivo_original.bin"), []byte(dummyContent), 0644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "archivo_copia.bin"), []byte(dummyContent), 0644)
+
+	tcDup := providers.ToolCall{
+		ID:    "call-dup-test",
+		Name:  "os_smart_organizer",
+		Input: json.RawMessage(`{"action": "duplicates", "target_dir": "` + strings.ReplaceAll(tmpDir, `\`, `\\`) + `"}`),
+	}
+	outDup, okDup := execOSSmartOrganizer(ctx, tcDup)
+	if !okDup {
+		t.Fatalf("execOSSmartOrganizer duplicates falló: %s", outDup)
+	}
+	t.Logf("Duplicados: %s", outDup)
+	if !strings.Contains(outDup, "ARCHIVOS DUPLICADOS DETECTADOS") || !strings.Contains(outDup, "Grupo #1") {
+		t.Errorf("Se esperaba detección de duplicados en la carpeta temporal: %s", outDup)
+	}
+}
+
 

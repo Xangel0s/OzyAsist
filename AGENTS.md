@@ -84,6 +84,15 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Detección y clasificación de puertos y dispositivos físicos USB conectados (memorias, hubs, teclados, mouse, Bluetooth, cámaras, discos).
   - Auditoría de periféricos sensibles en uso activo (cámara web y micrófono) consultando Windows `CapabilityAccessManager\ConsentStore` para reportar en tiempo real si transmiten y qué proceso/aplicación los ocupa.
   - Telemetría de hardware profunda: modelo y núcleos de CPU con carga %, memoria RAM total/usada/libre, desglose de almacenamiento por volumen (C:, D:, G:), tarjetas GPU NVIDIA/Intel con VRAM y temperatura en °C (`nvidia-smi`), temperatura térmica ACPI del sistema y estado de batería (CA/descarga).
+  - **Auditoría Preventiva de Salud del Hardware (`health`)**: Evaluación automática de integridad SMART de discos físicos, umbrales de saturación de almacenamiento (<10% libre), temperaturas críticas (>85°C), presión severa de RAM y eventos de arquitectura de hardware WHEA en Windows Event Log, generando diagnósticos y recomendaciones proactivas.
+- **Power Schemes & Display Brightness Controller (`os_power_profile`)**:
+  - Inspección del plan de energía activo de Windows (`powercfg /getactivescheme`), estado de la fuente de alimentación (CA/Batería), consulta y ajuste de porcentaje de brillo de pantalla en monitores compatibles vía WMI (`WmiMonitorBrightnessMethods`).
+- **Native Windows Toast Banner Notifier (`os_toast_notify`)**:
+  - Emisión de notificaciones emergentes Toast en el Centro de Notificaciones de Windows 10/11 mediante Windows Runtime (`Windows.UI.Notifications.ToastNotificationManager`) sin depender de binarios de terceros.
+- **Network Diagnostics & Latency Inspector (`os_network_diagnostics`)**:
+  - Pruebas de conectividad ICMP con cálculo de latencia media en ms y tasa de pérdida de paquetes, detección de puerta de enlace predeterminada, consulta de direcciones IPv4 locales y servidores DNS, y vaciado de la caché del cliente DNS (`Clear-DnsClientCache`).
+- **Smart Duplicate & Clutter File Organizer (`os_smart_organizer`)**:
+  - Detección de archivos duplicados mediante cálculo de hash criptográfico SHA-256 con reporte de espacio recuperable en MB, y categorización de archivos pesados e instaladores huérfanos (`.exe`, `.msi`, `.iso`, `.zip`).
 - **Wi-Fi & Network Inspector (`os_wifi_manager`)**:
   - Telemetría en vivo de interfaces inalámbricas (SSID, señal %, canal, tipo de radio, velocidad Mbps) y escaneo de redes disponibles.
 - **Persistent Task Scheduler (`os_schedule_task`)**:

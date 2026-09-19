@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -619,7 +621,9 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 	_ = json.Unmarshal(tc.Input, &params)
 
 	action := strings.ToLower(strings.TrimSpace(params.Action))
-	if action == "" || strings.Contains(action, "usb") || strings.Contains(action, "device") || strings.Contains(action, "periferic") || strings.Contains(action, "puerto") {
+	if strings.Contains(action, "health") || strings.Contains(action, "salud") || strings.Contains(action, "diagnos") || strings.Contains(action, "audit") || strings.Contains(action, "smart") {
+		action = "health"
+	} else if action == "" || strings.Contains(action, "usb") || strings.Contains(action, "device") || strings.Contains(action, "periferic") || strings.Contains(action, "puerto") {
 		action = "devices"
 	} else if strings.Contains(action, "use") || strings.Contains(action, "uso") || strings.Contains(action, "cam") || strings.Contains(action, "mic") || strings.Contains(action, "privac") {
 		action = "in_use"
@@ -628,6 +632,108 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 	}
 
 	switch action {
+	case "health", "salud", "diagnostico", "audit":
+		psCmd := `
+			# 1. SMART Disks
+			$disks = Get-CimInstance -ClassName Win32_DiskDrive -ErrorAction SilentlyContinue | Select-Object Model, Status
+			$badDisks = @()
+			foreach ($d in $disks) {
+				if ($d.Status -ne "OK") {
+					$badDisks += "$($d.Model) (Estado: $($d.Status))"
+				}
+			}
+
+			# 2. Storage Capacity Alerts
+			$volAlerts = @()
+			Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object {
+				$size = [Math]::Round($_.Size / 1GB, 1)
+				$free = [Math]::Round($_.FreeSpace / 1GB, 1)
+				if ($size -gt 0) {
+					$pct = [Math]::Round((($size - $free) / $size) * 100, 1)
+					if ($pct -ge 90) {
+						$volAlerts += "Disco $($_.DeviceID) saturado: $free GB libres de $size GB ($pct% ocupado)"
+					}
+				}
+			}
+
+			# 3. Thermal Alerts
+			$thermalAlerts = @()
+			if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+				try {
+					$nv = nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>$null
+					$gpuT = [int]($nv.Trim())
+					if ($gpuT -ge 85) {
+						$thermalAlerts += "Temperatura de GPU elevada: $gpuT °C (riesgo de thermal throttling)"
+					}
+				} catch {}
+			}
+			$tz = Get-CimInstance -Namespace "root/cimv2" -ClassName "Win32_PerfFormattedData_Counters_ThermalZoneInformation" -ErrorAction SilentlyContinue | Select-Object -First 1
+			if ($tz -and $tz.Temperature) {
+				$sysT = [Math]::Round($tz.Temperature - 273.15, 1)
+				if ($sysT -ge 85) {
+					$thermalAlerts += "Temperatura del sistema ACPI elevada: $sysT °C"
+				}
+			}
+
+			# 4. RAM Pressure
+			$ramAlerts = @()
+			$os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+			$freeRAM_MB = [Math]::Round($os.FreePhysicalMemory / 1024, 0)
+			if ($freeRAM_MB -lt 1500) {
+				$ramAlerts += "Memoria RAM libre baja: $freeRAM_MB MB disponibles"
+			}
+
+			# 5. Battery
+			$batAlerts = @()
+			$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+			if ($bat -and $bat.BatteryStatus -ne 2 -and $bat.EstimatedChargeRemaining -le 20) {
+				$batAlerts += "Batería baja y desconectada de la corriente: $($bat.EstimatedChargeRemaining)%"
+			}
+
+			# 6. WHEA Events
+			$whea = Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName=@('Microsoft-Windows-WHEA-Logger', 'disk'); Level=2; StartTime=(Get-Date).AddDays(-3)} -MaxEvents 3 -ErrorAction SilentlyContinue
+
+			# Formar Reporte
+			$alerts = @()
+			$alerts += $badDisks
+			$alerts += $volAlerts
+			$alerts += $thermalAlerts
+			$alerts += $ramAlerts
+			$alerts += $batAlerts
+
+			$statusSymbol = if ($alerts.Count -eq 0) { "🟢 HARDWARE SALUDABLE" } else { "🟡 ATENCIÓN PREVENTIVA REQUERIDA" }
+			if ($badDisks.Count -gt 0 -or $whea) {
+				$statusSymbol = "🔴 ALERTA DE FALLO DE HARDWARE"
+			}
+
+			Write-Output "=== AUDITORÍA Y SALUD DEL HARDWARE ==="
+			Write-Output "Diagnóstico General: $statusSymbol"
+			Write-Output ""
+			Write-Output "1. Integridad SMART de Discos: $(if ($badDisks.Count -eq 0) { 'Todos los discos en estado OK' } else { ($badDisks -join '; ') })"
+			Write-Output "2. Estado Térmico: $(if ($thermalAlerts.Count -eq 0) { 'Temperaturas dentro de los rangos seguros' } else { ($thermalAlerts -join '; ') })"
+			Write-Output "3. Almacenamiento: $(if ($volAlerts.Count -eq 0) { 'Espacio suficiente en todos los volúmenes' } else { ($volAlerts -join '; ') })"
+			Write-Output "4. Memoria RAM: $(if ($ramAlerts.Count -eq 0) { "RAM disponible saludable ($([Math]::Round($freeRAM_MB/1024, 2)) GB libres)" } else { ($ramAlerts -join '; ') })"
+			Write-Output "5. Energía / Batería: $(if ($batAlerts.Count -eq 0) { 'Alimentación estable' } else { ($batAlerts -join '; ') })"
+			if ($whea) {
+				Write-Output "6. Eventos Críticos WHEA: Se detectaron $(@($whea).Count) alertas de hardware en el registro del sistema."
+			} else {
+				Write-Output "6. Eventos Críticos WHEA: 0 errores de arquitectura de hardware registrados."
+			}
+
+			if ($alerts.Count -gt 0) {
+				Write-Output ""
+				Write-Output "⚠️ RECOMENDACIONES DE OZY:"
+				foreach ($a in $alerts) {
+					Write-Output " - $a"
+				}
+			}
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error diagnosticando salud del hardware: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
 	case "devices", "usb":
 		psCmd := `
 			$pnp = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.Class -in @('USB', 'Camera', 'Image', 'Media', 'Bluetooth', 'Mouse', 'Keyboard', 'DiskDrive', 'Ports') } | Select-Object FriendlyName, Class, Status
@@ -774,7 +880,368 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 		return strings.TrimSpace(string(out)), true
 
 	default:
-		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'devices', 'in_use' o 'telemetry'.", action), false
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'health', 'devices', 'in_use' o 'telemetry'.", action), false
+	}
+}
+
+// execOSPowerProfile consulta o cambia planes de energía de Windows y ajusta el brillo de pantalla
+func execOSPowerProfile(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action     string `json:"action"`     // status, set_plan, set_brightness
+		Plan       string `json:"plan"`       // balanced, high_performance, power_saver
+		Brightness *int   `json:"brightness"` // 0..100
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" {
+		if params.Brightness != nil {
+			action = "set_brightness"
+		} else if params.Plan != "" {
+			action = "set_plan"
+		} else {
+			action = "status"
+		}
+	}
+
+	switch action {
+	case "status", "list":
+		psCmd := `
+			$active = powercfg /getactivescheme
+			$planName = if ($active -match '\((.*)\)') { $matches[1] } else { $active }
+			$b = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CurrentBrightness -First 1
+			$bStr = if ($b -ne $null) { "$b%" } else { "No regulable o externo" }
+			$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+			$pwr = if ($bat) { if ($bat.BatteryStatus -eq 2) { "Conectado a CA" } else { "Batería ($($bat.EstimatedChargeRemaining)%)" } } else { "Alimentación CA (Desktop)" }
+			Write-Output "=== PERFIL DE ENERGÍA Y PANTALLA ==="
+			Write-Output "⚡ Plan de energía activo: $planName"
+			Write-Output "☀️ Brillo de pantalla:     $bStr"
+			Write-Output "🔌 Fuente de poder:       $pwr"
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando perfil de energía: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "set_plan":
+		plan := strings.ToLower(strings.TrimSpace(params.Plan))
+		guidMap := map[string]string{
+			"balanced":         "381b4222-f694-41f0-9685-ff5bb260df2e",
+			"equilibrado":      "381b4222-f694-41f0-9685-ff5bb260df2e",
+			"high_performance": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+			"alto_rendimiento": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
+			"power_saver":      "a1841308-3541-4fab-bc81-f71556f20b4a",
+			"economizador":     "a1841308-3541-4fab-bc81-f71556f20b4a",
+			"ahorro":           "a1841308-3541-4fab-bc81-f71556f20b4a",
+		}
+		guid, ok := guidMap[plan]
+		if !ok {
+			return fmt.Sprintf("Plan desconocido: '%s'. Opciones: 'balanced' (equilibrado), 'high_performance' (alto rendimiento), 'power_saver' (economizador).", plan), false
+		}
+		out, err := exec.CommandContext(ctx, "powercfg", "/setactive", guid).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error cambiando plan de energía: %s", strings.TrimSpace(string(out))), false
+		}
+		return fmt.Sprintf("Plan de energía cambiado exitosamente a: %s (GUID: %s).", plan, guid), true
+
+	case "set_brightness":
+		if params.Brightness == nil {
+			return "Debes indicar el porcentaje de brillo ('brightness', de 0 a 100).", false
+		}
+		b := *params.Brightness
+		if b < 0 {
+			b = 0
+		}
+		if b > 100 {
+			b = 100
+		}
+		psCmd := fmt.Sprintf(`
+			$m = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods -ErrorAction SilentlyContinue
+			if ($m) {
+				Invoke-CimMethod -InputObject $m -MethodName WmiSetBrightness -Arguments @{Timeout = 1; Brightness = %d} | Out-Null
+				Write-Output "Brillo de pantalla ajustado exitosamente al %d%%."
+			} else {
+				Write-Output "El control de brillo por software no está soportado en este monitor o adaptador."
+			}
+		`, b, b)
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error ajustando brillo: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	default:
+		return fmt.Sprintf("Acción de energía desconocida: '%s'. Usa 'status', 'set_plan' o 'set_brightness'.", action), false
+	}
+}
+
+// execOSToastNotify emite una notificación emergente Toast nativa en Windows 10/11
+func execOSToastNotify(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Title   string `json:"title"`
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	title := strings.TrimSpace(params.Title)
+	if title == "" {
+		title = "OzyAssist"
+	}
+	message := strings.TrimSpace(params.Message)
+	if message == "" {
+		return "Debes proporcionar un 'message' para la notificación.", false
+	}
+
+	escTitle := strings.ReplaceAll(strings.ReplaceAll(title, "'", "''"), "`", "")
+	escMessage := strings.ReplaceAll(strings.ReplaceAll(message, "'", "''"), "`", "")
+
+	psCmd := fmt.Sprintf(`
+		[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+		$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+		$textNodes = $template.GetElementsByTagName('text')
+		$textNodes.Item(0).AppendChild($template.CreateTextNode('%s')) | Out-Null
+		$textNodes.Item(1).AppendChild($template.CreateTextNode('%s')) | Out-Null
+		$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+		$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+		[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
+		Write-Output "OK"
+	`, escTitle, escMessage)
+
+	out, err := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error enviando notificación Toast: %s", strings.TrimSpace(string(out))), false
+	}
+	return fmt.Sprintf("Notificación Toast nativa enviada a Windows: '%s - %s'.", title, message), true
+}
+
+// execOSNetworkDiagnostics evalúa latencia de red, IPs locales y vacía caché DNS
+func execOSNetworkDiagnostics(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action string `json:"action"` // test (ping), flush_dns, ip_info
+		Host   string `json:"host"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" || strings.Contains(action, "ping") || strings.Contains(action, "test") || strings.Contains(action, "latenc") {
+		action = "test"
+	} else if strings.Contains(action, "flush") || strings.Contains(action, "dns") {
+		action = "flush_dns"
+	} else if strings.Contains(action, "ip") || strings.Contains(action, "info") {
+		action = "ip_info"
+	}
+
+	switch action {
+	case "test", "ping":
+		target := strings.TrimSpace(params.Host)
+		if target == "" {
+			target = "1.1.1.1"
+		}
+		escTarget := strings.ReplaceAll(target, "'", "''")
+
+		psCmd := fmt.Sprintf(`
+			$p = Test-Connection -ComputerName '%s' -Count 3 -ErrorAction SilentlyContinue
+			$gw = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+			if ($p) {
+				$latProp = if ($p.PSObject.Properties['Latency']) { 'Latency' } else { 'ResponseTime' }
+				$avgLat = [Math]::Round(($p | Measure-Object -Property $latProp -Average).Average, 1)
+				$loss = 3 - ($p | Measure-Object).Count
+				Write-Output "=== DIAGNÓSTICO DE RED Y LATENCIA ==="
+				Write-Output "🌐 Destino:          %s"
+				Write-Output "⚡ Latencia media:   $avgLat ms"
+				Write-Output "📦 Paquetes perdidos: $loss de 3"
+				Write-Output "🚪 Puerta de enlace: $gw"
+				Write-Output "✅ Estado: Conectividad a internet operativa."
+			} else {
+				Write-Output "❌ No se pudo establecer conexión con '%s'. Puerta de enlace: $gw. Posible corte de red o bloqueo ICMP."
+			}
+		`, escTarget, escTarget, escTarget)
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error diagnosticando red: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "flush_dns":
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", "Clear-DnsClientCache").CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error vaciando caché DNS: %s", strings.TrimSpace(string(out))), false
+		}
+		return "Caché DNS de Windows vaciada exitosamente (Clear-DnsClientCache).", true
+
+	case "ip_info":
+		psCmd := `
+			$ips = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceAlias -match 'Wi-Fi|Ethernet' -and $_.IPAddress -notmatch '^169\.' } | Select-Object InterfaceAlias, IPAddress, PrefixLength
+			$gw = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Select-Object -First 1).NextHop
+			$dns = (Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.ServerAddresses.Count -gt 0 } | Select-Object -First 1).ServerAddresses -join ', '
+			Write-Output "=== CONFIGURACIÓN DE RED LOCAL ==="
+			foreach ($i in $ips) {
+				Write-Output " - Interfaz: $($i.InterfaceAlias) | IPv4: $($i.IPAddress)/$($i.PrefixLength)"
+			}
+			Write-Output "🚪 Puerta de enlace predeterminada: $gw"
+			Write-Output "🔍 Servidores DNS: $dns"
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando IPs: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	default:
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'test', 'flush_dns' o 'ip_info'.", action), false
+	}
+}
+
+// execOSSmartOrganizer detecta archivos duplicados por hash SHA256 e instaladores huérfanos
+func execOSSmartOrganizer(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action    string `json:"action"` // duplicates, clutter
+		TargetDir string `json:"target_dir"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" || strings.Contains(action, "dup") {
+		action = "duplicates"
+	} else if strings.Contains(action, "clutter") || strings.Contains(action, "old") || strings.Contains(action, "instal") {
+		action = "clutter"
+	}
+
+	targetDir := strings.TrimSpace(params.TargetDir)
+	if targetDir == "" {
+		targetDir = system.ResolveUserPath("Downloads")
+	} else {
+		targetDir = system.ResolveUserPath(targetDir)
+	}
+
+	switch action {
+	case "duplicates":
+		// Agrupar archivos por tamaño primero para evitar hashear archivos innecesarios
+		type fileMeta struct {
+			path string
+			size int64
+		}
+		bySize := make(map[int64][]fileMeta)
+
+		err := filepath.Walk(targetDir, func(p string, info os.FileInfo, err error) error {
+			if err != nil || info == nil {
+				return nil
+			}
+			if info.IsDir() {
+				name := info.Name()
+				if name != filepath.Base(targetDir) && (strings.HasPrefix(name, ".") || name == "node_modules" || name == ".git") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if info.Size() > 50*1024 { // Archivos mayores a 50KB
+				bySize[info.Size()] = append(bySize[info.Size()], fileMeta{path: p, size: info.Size()})
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Sprintf("Error examinando carpeta: %v", err), false
+		}
+
+		type dupGroup struct {
+			hash  string
+			size  int64
+			files []string
+		}
+		byHash := make(map[string]*dupGroup)
+
+		hashFile := func(path string) string {
+			f, err := os.Open(path)
+			if err != nil {
+				return ""
+			}
+			defer f.Close()
+			h := sha256.New()
+			_, _ = io.CopyN(h, f, 2*1024*1024)
+			return fmt.Sprintf("%x", h.Sum(nil))
+		}
+
+		var totalWastedBytes int64
+		for _, files := range bySize {
+			if len(files) < 2 {
+				continue
+			}
+			for _, fm := range files {
+				h := hashFile(fm.path)
+				if h == "" {
+					continue
+				}
+				if grp, ok := byHash[h]; ok {
+					grp.files = append(grp.files, fm.path)
+					totalWastedBytes += fm.size
+				} else {
+					byHash[h] = &dupGroup{
+						hash:  h,
+						size:  fm.size,
+						files: []string{fm.path},
+					}
+				}
+			}
+		}
+
+		var foundGroups []*dupGroup
+		for _, g := range byHash {
+			if len(g.files) > 1 {
+				foundGroups = append(foundGroups, g)
+			}
+		}
+
+		if len(foundGroups) == 0 {
+			return fmt.Sprintf("No se encontraron archivos duplicados en '%s'.", targetDir), true
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("=== ARCHIVOS DUPLICADOS DETECTADOS EN: %s ===\n", targetDir))
+		sb.WriteString(fmt.Sprintf("Espacio recuperable estimado: %.2f MB\n\n", float64(totalWastedBytes)/(1024*1024)))
+		for i, g := range foundGroups {
+			if i >= 10 {
+				sb.WriteString(fmt.Sprintf("... y %d grupos más de duplicados.\n", len(foundGroups)-10))
+				break
+			}
+			sb.WriteString(fmt.Sprintf("Grupo #%d (%.2f MB cada uno):\n", i+1, float64(g.size)/(1024*1024)))
+			for _, f := range g.files {
+				sb.WriteString(fmt.Sprintf("  - %s\n", f))
+			}
+		}
+		return sb.String(), true
+
+	case "clutter":
+		psCmd := fmt.Sprintf(`
+			$dir = '%s'
+			$exts = @('.exe', '.msi', '.iso', '.zip', '.tmp')
+			$cutoff = (Get-Date).AddDays(-14)
+			$files = Get-ChildItem -Path $dir -File -ErrorAction SilentlyContinue | Where-Object {
+				$_.Extension -in $exts -and $_.LastWriteTime -lt $cutoff
+			} | Select-Object Name, Length, LastWriteTime
+			if ($files) {
+				$totalMB = [Math]::Round(($files | Measure-Object -Property Length -Sum).Sum / 1MB, 2)
+				Write-Output "=== INSTALADORES Y ARCHIVOS HUÉRFANOS (>14 DÍAS) ==="
+				Write-Output "Carpeta: $dir | Espacio recuperable: $totalMB MB"
+				foreach ($f in $files | Select-Object -First 15) {
+					$mb = [Math]::Round($f.Length / 1MB, 2)
+					$days = [Math]::Round(((Get-Date) - $f.LastWriteTime).TotalDays, 0)
+					Write-Output " - $($f.Name) ($mb MB, modificado hace $days días)"
+				}
+			} else {
+				Write-Output "No se detectaron instaladores ni temporales antiguos en $dir."
+			}
+		`, strings.ReplaceAll(targetDir, "'", "''"))
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error buscando archivos obsoletos: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	default:
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'duplicates' o 'clutter'.", action), false
 	}
 }
 

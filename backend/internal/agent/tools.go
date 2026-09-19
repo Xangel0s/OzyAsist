@@ -1278,14 +1278,91 @@ var AgentTools = []providers.ToolDef{
 	},
 	{
 		Name:        "os_hardware_inspector",
-		Description: "Inspecciona el hardware físico de la máquina: puertos físicos USB y periféricos conectados (memorias, mouse, teclado, Bluetooth, etc.), detección en tiempo real de si la cámara web o micrófono están en uso activo por alguna app, y telemetría completa de recursos y sensores (CPU modelo/núcleos/uso %, RAM total/usada/libre, desglose de espacio por disco C/D/G, tarjetas GPU NVIDIA/Intel con temperatura en °C, temperatura térmica ACPI del sistema y estado de batería).",
+		Description: "Inspecciona el hardware físico de la máquina: salud integral SMART de discos/temperaturas/alertas ('health'), puertos físicos USB y periféricos conectados ('devices'), detección de cámara web o micrófono en uso activo ('in_use'), y telemetría de CPU, RAM, discos, GPU, temperatura y batería ('telemetry').",
 		InputSchema: mustJSON(`{
 			"type": "object",
 			"properties": {
 				"action": {
 					"type": "string",
-					"enum": ["devices", "in_use", "telemetry"],
-					"description": "'devices' (o 'usb') lista puertos físicos USB y periféricos; 'in_use' (o 'privacy') verifica si la cámara web o micrófono están activos y qué app los usa; 'telemetry' (o 'system', 'sensors') reporta CPU, RAM, discos, GPU, temperatura y batería (default: 'devices')"
+					"enum": ["health", "devices", "in_use", "telemetry"],
+					"description": "'health' (o 'salud', 'audit') audita la salud SMART de discos, umbrales térmicos y saturación; 'devices' lista puertos físicos USB y periféricos; 'in_use' verifica si la cámara web o micrófono están activos; 'telemetry' reporta CPU, RAM, discos, GPU, temperatura y batería (default: 'health')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_power_profile",
+		Description: "Consulta o cambia el plan de energía de Windows (Equilibrado, Alto Rendimiento, Economizador) y ajusta el nivel de brillo de la pantalla en % (0 a 100).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "set_plan", "set_brightness"],
+					"description": "'status' consulta plan activo y brillo; 'set_plan' cambia el plan; 'set_brightness' cambia el brillo (default: 'status')"
+				},
+				"plan": {
+					"type": "string",
+					"enum": ["balanced", "high_performance", "power_saver"],
+					"description": "Nombre del plan a activar ('balanced', 'high_performance', 'power_saver')"
+				},
+				"brightness": {
+					"type": "integer",
+					"description": "Porcentaje de brillo de pantalla a establecer (0 a 100)"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_toast_notify",
+		Description: "Envía una notificación interactiva nativa Toast en el Centro de Notificaciones de Windows 10/11 (tarjeta emergente en la esquina inferior derecha) para alertar al usuario.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"title": {
+					"type": "string",
+					"description": "Título de la notificación (ej: 'OzyAssist: Alerta de Hardware')"
+				},
+				"message": {
+					"type": "string",
+					"description": "Texto del mensaje o alerta"
+				}
+			},
+			"required": ["message"]
+		}`),
+	},
+	{
+		Name:        "os_network_diagnostics",
+		Description: "Diagnóstico de red y conectividad: prueba de latencia (ping en ms a 1.1.1.1 o host destino), información de adaptadores e IPs locales/puerta de enlace, y vaciado de caché DNS de Windows (flush DNS).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["test", "flush_dns", "ip_info"],
+					"description": "'test' (ping) mide latencia y pérdida de paquetes; 'flush_dns' limpia la caché DNS; 'ip_info' muestra IPs locales y gateway (default: 'test')"
+				},
+				"host": {
+					"type": "string",
+					"description": "Host o IP de destino para la prueba de ping (default: '1.1.1.1')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_smart_organizer",
+		Description: "Identifica archivos duplicados por hash criptográfico SHA256 o instaladores huérfanos antiguos (>14 días) en Descargas o una carpeta específica para recuperar espacio en disco.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["duplicates", "clutter"],
+					"description": "'duplicates' busca archivos idénticos por hash; 'clutter' busca instaladores y zips antiguos (default: 'duplicates')"
+				},
+				"target_dir": {
+					"type": "string",
+					"description": "Ruta de la carpeta a examinar (por defecto la carpeta de Descargas del usuario)"
 				}
 			}
 		}`),
@@ -1425,8 +1502,23 @@ var VoiceAgentTools = []providers.ToolDef{
 	},
 	{
 		Name:        "os_hardware_inspector",
-		Description: "Inspecciona hardware físico: puertos USB y periféricos conectados ('devices'), cámara web/micrófono en uso ('in_use'), y telemetría de CPU, RAM, GPU, temperatura y batería ('telemetry').",
+		Description: "Inspecciona hardware: salud SMART ('health'), puertos USB ('devices'), cámara/mic en uso ('in_use'), y telemetría de CPU, RAM, GPU, temperatura y batería ('telemetry').",
 		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"}}}`),
+	},
+	{
+		Name:        "os_power_profile",
+		Description: "Consulta o cambia el plan de energía (status, set_plan) y ajusta brillo de pantalla (set_brightness).",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"},"plan":{"type":"string"},"brightness":{"type":"integer"}}}`),
+	},
+	{
+		Name:        "os_toast_notify",
+		Description: "Envía una notificación Toast nativa en la pantalla de Windows.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"title":{"type":"string"},"message":{"type":"string"}},"required":["message"]}`),
+	},
+	{
+		Name:        "os_network_diagnostics",
+		Description: "Prueba latencia de internet (test/ping), IPs locales (ip_info) y vacía caché DNS (flush_dns).",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"},"host":{"type":"string"}}}`),
 	},
 	{
 		Name:        "os_kill_process",

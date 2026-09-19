@@ -578,7 +578,11 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
    - Para administrar Docker en el host: usa 'os_docker_manager' ('status', 'list', 'logs', 'start', 'stop', 'restart', 'stats').
    - Para analizar errores en logs o eventos de Windows: usa 'os_analyze_logs'.
    - Para inspeccionar puertos de red abiertos y procesos que escuchan (TCP/UDP): usa 'os_port_inspector'. ÚNICAMENTE para sockets lógicos de red. NUNCA para puertos físicos ni dispositivos USB.
-   - Para puertos físicos USB, periféricos conectados, detectar si la cámara web o micrófono están en uso, nivel de batería, temperatura y telemetría de CPU/RAM/GPU/Discos: usa 'os_hardware_inspector' ('devices', 'in_use', 'telemetry').
+   - Para evaluar la salud del hardware (SMART de discos, umbrales térmicos, espacio crítico en disco C, memoria y eventos WHEA), puertos físicos USB, cámara/mic en uso, y telemetría de CPU/RAM/GPU/Discos: usa 'os_hardware_inspector' ('health', 'devices', 'in_use', 'telemetry').
+   - Para consultar o cambiar planes de energía de Windows (Equilibrado, Alto Rendimiento, Ahorro) y ajustar el brillo de pantalla en %%: usa 'os_power_profile'.
+   - Para emitir notificaciones interactivas Toast nativas en Windows 10/11: usa 'os_toast_notify'.
+   - Para diagnósticos de conectividad de red (ping, latencia en ms, IPs locales y vaciado de caché DNS flush): usa 'os_network_diagnostics'.
+   - Para identificar archivos duplicados por hash SHA256 e instaladores huérfanos para liberar espacio: usa 'os_smart_organizer'.
    - Para analizar y limpiar espacio en disco (temporales, papelera): usa 'os_disk_cleaner'.
    - Para controlar el sistema de audio (consultar nivel de volumen %%, subir/bajar volumen, silenciar con mute, o listar/cambiar dispositivos de salida): usa 'os_audio_device'.
    - Para revisar el estado de Wi-Fi, intensidad de señal y redes: usa 'os_wifi_manager'.
