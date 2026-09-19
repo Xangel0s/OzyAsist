@@ -6,11 +6,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 
 	"time"
 
@@ -333,60 +331,10 @@ func runExec(prov providers.Provider, _ *models.Chat, prompt string) {
 }
 
 func runVoiceConsole(prov providers.Provider, chat *models.Chat) {
-	fmt.Print(banner)
-	cfg := voice.AutoDetectConfig()
-	if !cfg.HasSTT() {
-		fmt.Println("\n[ERROR] Error: No hay motor de transcripción STT configurado.")
-		fmt.Println(">> Para usar el modo voz autónomo, configura una clave gratuita de Groq o de OpenAI en tu .env:")
-		fmt.Println("   GROQ_API_KEY=tu_clave_de_groq  (Consigue una gratis en https://console.groq.com/keys)")
-		fmt.Println("   o OPENAI_API_KEY=tu_clave_de_openai")
-		fmt.Println("\nTambién puedes iniciar 'ozy' y escribir: /key groq <tu-clave>")
+	if err := tui.RunVoiceConsole(prov, chat); err != nil {
+		fmt.Printf("[ERROR] Error ejecutando consola de voz: %v\n", err)
 		os.Exit(1)
 	}
-
-	fmt.Println("[VOZ] Modo Voz Autónomo Activado.")
-	fmt.Println("Di 'Hey Ozy' o 'Hey Osi' seguido de tu orden (ej: 'Hey Ozy ordena mis carpetas')...")
-	fmt.Println("Presiona Ctrl+C para salir.")
-
-	engine := voice.NewNativeVoiceEngine(cfg, func(ctx context.Context, command string, onDelta func(string), onComplete func(string)) {
-		fmt.Printf("\n[VOZ RECONOCIDA]: %s\n", command)
-		params := agent.AgentLoopParams{
-			Provider:        prov,
-			Chat:            chat,
-			UserMessage:     command,
-			PermissionLevel: "autonomous",
-			VoiceMode:       true,
-			Emit: func(evt agent.AgentEvent) {
-				switch evt.Type {
-				case "message:delta":
-					fmt.Print(evt.Content)
-					onDelta(evt.Content)
-				case "tool:call":
-					fmt.Printf("\n[HERRAMIENTA] %s... ", evt.ToolName)
-				case "tool:result":
-					fmt.Println("[OK]")
-				case "agent:completed":
-					fmt.Println()
-					onComplete(evt.Content)
-				}
-			},
-		}
-		_ = agent.StartAgentLoop(ctx, params)
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if err := engine.Start(ctx); err != nil {
-		log.Fatalf("Error iniciando motor de voz: %v", err)
-	}
-
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-
-	fmt.Println("\nCerrando modo voz...")
-	engine.Stop()
 }
 
 func runDaemon() {
