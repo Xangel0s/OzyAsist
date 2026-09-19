@@ -299,7 +299,7 @@ namespace OzyAudio {
 			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
 			$vol = [Math]::Round([OzyAudio.MasterAudio]::GetVolume(), 1)
 			$mute = [OzyAudio.MasterAudio]::GetMute()
-			Write-Output "🔊 Volumen maestro: $vol%% | Silencio (Mute): $(if ($mute) { 'ACTIVADO (Silenciado)' } else { 'DESACTIVADO (Con sonido)' })"
+			Write-Output "Volumen maestro: $vol%% | Silencio (Mute): $(if ($mute) { 'ACTIVADO (Silenciado)' } else { 'DESACTIVADO (Con sonido)' })"
 		`, coreAudioDef)
 
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
@@ -324,7 +324,7 @@ namespace OzyAudio {
 			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
 			[OzyAudio.MasterAudio]::SetVolume(%f)
 			$vol = [Math]::Round([OzyAudio.MasterAudio]::GetVolume(), 1)
-			Write-Output "🔊 Volumen maestro ajustado exitosamente al $vol%%."
+			Write-Output "Volumen maestro ajustado exitosamente al $vol%%."
 		`, coreAudioDef, lvl)
 
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
@@ -342,7 +342,7 @@ namespace OzyAudio {
 			$src = %s
 			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
 			[OzyAudio.MasterAudio]::SetMute($%t)
-			Write-Output $(if ($%t) { "🔇 Audio maestro silenciado (Mute ACTIVADO)." } else { "🔊 Audio maestro reactivado (Mute DESACTIVADO)." })
+			Write-Output $(if ($%t) { "Audio maestro silenciado (Mute ACTIVADO)." } else { "Audio maestro reactivado (Mute DESACTIVADO)." })
 		`, coreAudioDef, muteVal, muteVal)
 
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
@@ -356,7 +356,7 @@ namespace OzyAudio {
 			$src = %s
 			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
 			[OzyAudio.MasterAudio]::SetMute($false)
-			Write-Output "🔊 Audio maestro reactivado (Mute DESACTIVADO)."
+			Write-Output "Audio maestro reactivado (Mute DESACTIVADO)."
 		`, coreAudioDef)
 
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
@@ -403,12 +403,12 @@ namespace OzyAudio {
 			if name == "" {
 				name = dev.Name
 			}
-			badge := "🔊"
+			badge := "[ALTAVOZ]"
 			lower := strings.ToLower(name)
 			if strings.Contains(lower, "auricular") || strings.Contains(lower, "headphone") || strings.Contains(lower, "buds") {
-				badge = "🎧"
+				badge = "[AURICULAR]"
 			} else if strings.Contains(lower, "fxsound") {
-				badge = "⚡"
+				badge = "[VIRTUAL]"
 			}
 			sb.WriteString(fmt.Sprintf("%d. %s %s (Estado: %s)\n", i+1, badge, name, dev.Status))
 		}
@@ -507,7 +507,7 @@ func execOSWifiManager(ctx context.Context, tc providers.ToolCall) (string, bool
 			lTrim := strings.TrimSpace(l)
 			if strings.HasPrefix(lTrim, "SSID") {
 				currentSSID = lTrim
-				sb.WriteString("\n📶 " + currentSSID + "\n")
+				sb.WriteString("\n[RED] " + currentSSID + "\n")
 			} else if strings.HasPrefix(lTrim, "Tipo de red") || strings.HasPrefix(lTrim, "Autenticación") || strings.HasPrefix(lTrim, "Cifrado") {
 				sb.WriteString("   - " + lTrim + "\n")
 			}
@@ -701,9 +701,9 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 			$alerts += $ramAlerts
 			$alerts += $batAlerts
 
-			$statusSymbol = if ($alerts.Count -eq 0) { "🟢 HARDWARE SALUDABLE" } else { "🟡 ATENCIÓN PREVENTIVA REQUERIDA" }
+			$statusSymbol = if ($alerts.Count -eq 0) { "[HARDWARE SALUDABLE]" } else { "[ATENCION PREVENTIVA REQUERIDA]" }
 			if ($badDisks.Count -gt 0 -or $whea) {
-				$statusSymbol = "🔴 ALERTA DE FALLO DE HARDWARE"
+				$statusSymbol = "[ALERTA DE FALLO DE HARDWARE]"
 			}
 
 			Write-Output "=== AUDITORÍA Y SALUD DEL HARDWARE ==="
@@ -722,7 +722,7 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 
 			if ($alerts.Count -gt 0) {
 				Write-Output ""
-				Write-Output "⚠️ RECOMENDACIONES DE OZY:"
+				Write-Output "[RECOMENDACIONES DE OZY]"
 				foreach ($a in $alerts) {
 					Write-Output " - $a"
 				}
@@ -786,15 +786,15 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 
 			$cam = & $checkInUse "webcam"
 			$camActive = $cam | Where-Object { $_.InUse -eq $true }
-			$camTxt = if ($camActive) { "🔴 EN USO por: " + (($camActive | ForEach-Object { $_.App }) -join ", ") } else { "🟢 INACTIVA (Ninguna aplicación la está usando)" }
+			$camTxt = if ($camActive) { "[EN USO por: " + (($camActive | ForEach-Object { $_.App }) -join ", ") + "]" } else { "[INACTIVA] (Ninguna aplicación la está usando)" }
 
 			$mic = & $checkInUse "microphone"
 			$micActive = $mic | Where-Object { $_.InUse -eq $true }
-			$micTxt = if ($micActive) { "🔴 EN USO por: " + (($micActive | ForEach-Object { $_.App }) -join ", ") } else { "🟢 INACTIVO (Ninguna aplicación lo está usando)" }
+			$micTxt = if ($micActive) { "[EN USO por: " + (($micActive | ForEach-Object { $_.App }) -join ", ") + "]" } else { "[INACTIVO] (Ninguna aplicación lo está usando)" }
 
 			Write-Output "=== ESTADO DE PRIVACIDAD Y PERIFÉRICOS ACTIVOS ==="
-			Write-Output "📸 Cámara Web: $camTxt"
-			Write-Output "🎙️ Micrófono:  $micTxt"
+			Write-Output "Cámara Web: $camTxt"
+			Write-Output "Micrófono:  $micTxt"
 		`
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
@@ -838,7 +838,7 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 					$nv = nvidia-smi --query-gpu=temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv,noheader,nounits 2>$null
 					$parts = $nv -split ','
 					if ($parts.Count -ge 5) {
-						$nvidiaInfo = "   🌡️ Temp GPU NVIDIA: $($parts[0].Trim()) °C | Carga: $($parts[1].Trim())% | VRAM Usada: $($parts[4].Trim()) / $($parts[3].Trim()) MB"
+						$nvidiaInfo = "   Temp GPU NVIDIA: $($parts[0].Trim()) °C | Carga: $($parts[1].Trim())% | VRAM Usada: $($parts[4].Trim()) / $($parts[3].Trim()) MB"
 					}
 				} catch {}
 			}
@@ -848,7 +848,7 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 			$tz = Get-CimInstance -Namespace "root/cimv2" -ClassName "Win32_PerfFormattedData_Counters_ThermalZoneInformation" -ErrorAction SilentlyContinue | Select-Object -First 1
 			if ($tz -and $tz.Temperature) {
 				$celsius = [Math]::Round($tz.Temperature - 273.15, 1)
-				$acpiTemp = "🌡️ Temperatura ACPI Sistema: $celsius °C"
+				$acpiTemp = "Temperatura ACPI Sistema: $celsius °C"
 			}
 
 			# Battery
@@ -861,17 +861,17 @@ func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string
 
 			Write-Output "=== TELEMETRÍA DE HARDWARE Y RECURSOS ==="
 			if ($cpu) {
-				Write-Output "⚡ CPU: $($cpu.Name)"
+				Write-Output "CPU: $($cpu.Name)"
 				Write-Output "   Núcleos: $($cpu.NumberOfCores) físicos, $($cpu.NumberOfLogicalProcessors) lógicos | Uso actual: $cpuLoad%"
 			}
-			Write-Output "🧠 Memoria RAM: $usedRAM_GB GB usados de $totalRAM_GB GB ($ramUsagePct% en uso, $freeRAM_GB GB disponibles)"
-			Write-Output "💾 Almacenamiento:"
+			Write-Output "Memoria RAM: $usedRAM_GB GB usados de $totalRAM_GB GB ($ramUsagePct% en uso, $freeRAM_GB GB disponibles)"
+			Write-Output "Almacenamiento:"
 			$disks | ForEach-Object { Write-Output $_ }
-			Write-Output "🎮 Gráficos / GPU:"
+			Write-Output "Gráficos / GPU:"
 			$gpus | ForEach-Object { Write-Output $_ }
 			if ($nvidiaInfo) { Write-Output $nvidiaInfo }
-			if ($acpiTemp) { Write-Output "🌡️ Térmico: $acpiTemp" }
-			Write-Output "🔋 Batería: $batText"
+			if ($acpiTemp) { Write-Output "Térmico: $acpiTemp" }
+			Write-Output "Batería: $batText"
 		`
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
@@ -914,9 +914,9 @@ func execOSPowerProfile(ctx context.Context, tc providers.ToolCall) (string, boo
 			$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
 			$pwr = if ($bat) { if ($bat.BatteryStatus -eq 2) { "Conectado a CA" } else { "Batería ($($bat.EstimatedChargeRemaining)%)" } } else { "Alimentación CA (Desktop)" }
 			Write-Output "=== PERFIL DE ENERGÍA Y PANTALLA ==="
-			Write-Output "⚡ Plan de energía activo: $planName"
-			Write-Output "☀️ Brillo de pantalla:     $bStr"
-			Write-Output "🔌 Fuente de poder:       $pwr"
+			Write-Output "Plan de energía activo: $planName"
+			Write-Output "Brillo de pantalla:     $bStr"
+			Write-Output "Fuente de poder:        $pwr"
 		`
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
@@ -1048,13 +1048,13 @@ func execOSNetworkDiagnostics(ctx context.Context, tc providers.ToolCall) (strin
 				$avgLat = [Math]::Round(($p | Measure-Object -Property $latProp -Average).Average, 1)
 				$loss = 3 - ($p | Measure-Object).Count
 				Write-Output "=== DIAGNÓSTICO DE RED Y LATENCIA ==="
-				Write-Output "🌐 Destino:          %s"
-				Write-Output "⚡ Latencia media:   $avgLat ms"
-				Write-Output "📦 Paquetes perdidos: $loss de 3"
-				Write-Output "🚪 Puerta de enlace: $gw"
-				Write-Output "✅ Estado: Conectividad a internet operativa."
+				Write-Output "Destino:           %s"
+				Write-Output "Latencia media:    $avgLat ms"
+				Write-Output "Paquetes perdidos: $loss de 3"
+				Write-Output "Puerta de enlace:  $gw"
+				Write-Output "Estado: [OPERATIVO] Conectividad a internet activa."
 			} else {
-				Write-Output "❌ No se pudo establecer conexión con '%s'. Puerta de enlace: $gw. Posible corte de red o bloqueo ICMP."
+				Write-Output "Estado: [ERROR] No se pudo establecer conexión con '%s'. Puerta de enlace: $gw. Posible corte de red o bloqueo ICMP."
 			}
 		`, escTarget, escTarget, escTarget)
 
@@ -1080,8 +1080,8 @@ func execOSNetworkDiagnostics(ctx context.Context, tc providers.ToolCall) (strin
 			foreach ($i in $ips) {
 				Write-Output " - Interfaz: $($i.InterfaceAlias) | IPv4: $($i.IPAddress)/$($i.PrefixLength)"
 			}
-			Write-Output "🚪 Puerta de enlace predeterminada: $gw"
-			Write-Output "🔍 Servidores DNS: $dns"
+			Write-Output "Puerta de enlace predeterminada: $gw"
+			Write-Output "Servidores DNS: $dns"
 		`
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {

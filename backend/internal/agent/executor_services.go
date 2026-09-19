@@ -314,11 +314,11 @@ func execOSAnalyzeLogs(ctx context.Context, tc providers.ToolCall) (string, bool
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("=== EVENTOS DE WINDOWS: %s (%d encontrados) ===\n", logName, len(events)))
 		for i, ev := range events {
-			badge := "🚨 ERROR"
+			badge := "[ERROR]"
 			if strings.EqualFold(ev.LevelDisplayName, "Warning") || strings.EqualFold(ev.LevelDisplayName, "Advertencia") {
-				badge = "⚠️ ADVERTENCIA"
+				badge = "[ADVERTENCIA]"
 			} else if strings.EqualFold(ev.LevelDisplayName, "Critical") {
-				badge = "🔥 CRÍTICO"
+				badge = "[CRITICO]"
 			}
 			msgClean := strings.ReplaceAll(ev.Message, "\r\n", " ")
 			if len(msgClean) > 200 {
