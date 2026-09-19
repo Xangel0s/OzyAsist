@@ -113,6 +113,10 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Auditoría de procesos que consumen mayor cantidad de memoria RAM (`top_memory`) o CPU (`top_cpu`), con capacidad de terminación segura de procesos huérfanos o bloqueados (`kill` por PID o nombre).
 - **Native Windows Speech Synthesizer (`os_speak_text`)**:
   - Síntesis y pronunciación de voz local en tiempo real a través de los altavoces utilizando el motor nativo Windows SAPI (`System.Speech.Synthesis`) con voces locales en español sin dependencias externas ni conexión a internet.
+- **Real-Time Sentence-Chunked Streaming Voice Engine (`SentenceStreamer`, `LocalSpeakerQueue`)**:
+  - Procesamiento concurrente de deltas de tokens LLM en tiempo real (`Feed`) con detección de límites de oraciones (`. `, `? `, `! `, `\n\n`, o `, ` > 100 caracteres) para emitir habla local en ~300-400 ms sin esperar a que el modelo concluya todo el texto.
+  - Normalizador de texto para síntesis (`CleanForSpeech`) que suprime Markdown, bloques de código, URLs, viñetas y caracteres no hablables para una pronunciación natural en español.
+  - Cola secuencial de reproducción en segundo plano (`LocalSpeakerQueue`) con fallback transparente entre Piper TTS y Windows SAPI (`Microsoft Helena Desktop (es-ES)`), emisión de eventos WebSocket `voice:sentence` e interrupción inmediata (*Barge-in*) al cancelar o hablar el usuario.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`

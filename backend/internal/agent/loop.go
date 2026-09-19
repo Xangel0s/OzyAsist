@@ -170,6 +170,12 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 	var pendingRequirementPrompted bool
 	charcAuditor := NewCharcAuditor(nil)
 
+	var speakerQueue *voice.LocalSpeakerQueue
+	if params.VoiceMode {
+		speakerQueue = voice.NewLocalSpeakerQueue(ctx)
+		defer speakerQueue.Close()
+	}
+
 	for turn := 0; turn < maxAgentTurns; turn++ {
 		if ctx.Err() != nil {
 			emit(AgentEvent{Type: "error", Error: "loop cancelado por el usuario"})
@@ -215,6 +221,14 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 		var turnToolCalls []providers.ToolCall
 		var textChunks []string
 
+		var sentenceStreamer *voice.SentenceStreamer
+		if params.VoiceMode && speakerQueue != nil {
+			sentenceStreamer = voice.NewSentenceStreamer(func(sentence string) {
+				emit(AgentEvent{Type: "voice:sentence", Content: sentence})
+				speakerQueue.Enqueue(sentence)
+			})
+		}
+
 		for chunk := range chunkCh {
 			if ctx.Err() != nil {
 				emit(AgentEvent{Type: "error", Error: "cancelado"})
@@ -227,9 +241,15 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			case "text":
 				turnText += chunk.Content
 				textChunks = append(textChunks, chunk.Content)
+				if sentenceStreamer != nil && len(turnToolCalls) == 0 {
+					sentenceStreamer.Feed(chunk.Content)
+				}
 			case "tool_call":
 				if chunk.ToolCall != nil {
 					turnToolCalls = append(turnToolCalls, *chunk.ToolCall)
+				}
+				if speakerQueue != nil {
+					speakerQueue.Cancel()
 				}
 			case "error":
 				emit(AgentEvent{Type: "error", Error: chunk.Content})
@@ -271,6 +291,9 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				emit(AgentEvent{Type: "message:delta", Content: chunkStr})
 			}
 			finalContent += turnText
+			if sentenceStreamer != nil {
+				sentenceStreamer.Flush()
+			}
 		}
 		history = append(history, assistantMsg)
 
@@ -289,8 +312,11 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 			// Si hubo llamadas a herramientas y el LLM no emitió texto final explicativo
 			if strings.TrimSpace(finalContent) == "" && len(allToolCalls) > 0 {
-				finalContent = "✓ He completado la acción solicitada."
+				finalContent = "He completado la acción solicitada."
 				emit(AgentEvent{Type: "message:delta", Content: finalContent})
+				if speakerQueue != nil {
+					speakerQueue.Enqueue(finalContent)
+				}
 			}
 
 			emit(AgentEvent{Type: "state:sync", State: "idle"})
@@ -314,21 +340,9 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				extractor.ExtractAndPersistAsync(context.Background(), userForMem, params.UserMessage, finalContent)
 			}
 			
-			// --- Reproducir Voz Nativamente (Piper) ---
-			if params.VoiceMode && finalContent != "" {
-				go func(text string) {
-					// Use relative path assuming backend is CWD
-					pipe := voice.NewAudioPipeline(voice.Config{
-						PiperBinary: "tools/piper/piper/piper.exe",
-						PiperModel:  "tools/piper/es_ES-davefx-medium.onnx",
-					})
-					wav, err := pipe.SynthesizeSpeech(context.Background(), text)
-					if err == nil && len(wav) > 0 {
-						voice.PlayWAV(wav)
-					} else {
-						log.Printf("Error sintetizando voz: %v", err)
-					}
-				}(finalContent)
+			// Si no hubo stream de voz (por ejemplo respuesta instantánea sin deltas), encolar respuesta final
+			if params.VoiceMode && speakerQueue != nil && finalContent != "" && !speakerQueue.IsPlaying() {
+				speakerQueue.Enqueue(finalContent)
 			}
 			
 			return
