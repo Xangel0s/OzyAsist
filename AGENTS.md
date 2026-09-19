@@ -50,6 +50,17 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Generación directa y estilización de documentos PDF profesionales (`github.com/jung-kurt/gofpdf`) bajo la política Zero-Docker.
   - Soporte de barras de acento institucional en Neon Lime, metadatos, títulos, párrafos con viñetas y tablas con alternancia de colores.
   - Conversión de fuentes Markdown, TXT, CSV y JSON a PDF estructurado sin recurrir a renombrado de archivos.
+- **Native Pure-Go Word Engine (`os_create_docx`)**:
+  - Generación directa de documentos Microsoft Word `.docx` válidos en formato OpenXML empaquetado en ZIP en Go puro.
+  - Encabezados, estilos, viñetas y tablas estructuradas compatibles con Word, Office 365, LibreOffice y Google Docs.
+- **Native Archive Engine (`os_compress_zip`, `os_extract_zip`)**:
+  - Empaquetado recursivo y extracción segura con validación anti *Zip Slip* (path traversal) sin herramientas externas.
+- **In-File Content Search Engine (`os_search_content`)**:
+  - Grep nativo en disco para búsqueda de cadenas literales y expresiones regulares omitiendo directorios masivos (`node_modules`, `.git`, `venv`).
+- **Network Port Inspector (`os_port_inspector`)**:
+  - Inspección de puertos TCP en escucha, asociación a PID y nombre de proceso, con opción de liberación forzada (`kill`).
+- **Native Web Downloader (`os_download_file`)**:
+  - Descarga directa y segura de archivos y recursos web hacia carpetas locales de usuario con auto-detección de nombre.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`
