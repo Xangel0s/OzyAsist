@@ -182,20 +182,187 @@ func execOSDiskCleaner(ctx context.Context, tc providers.ToolCall) (string, bool
 		totalFiles, toMB(totalBytes)), true
 }
 
-// execOSAudioDevice lista o conmuta dispositivos de audio en Windows
+// execOSAudioDevice lista o conmuta dispositivos de audio y controla volumen y mute en Windows
 func execOSAudioDevice(ctx context.Context, tc providers.ToolCall) (string, bool) {
 	var params struct {
-		Action string `json:"action"` // list, status, set
-		Name   string `json:"name"`
+		Action string   `json:"action"` // list, status, set, get_volume, set_volume, mute, unmute
+		Name   string   `json:"name"`
+		Level  *float64 `json:"level"`
+		Mute   *bool    `json:"mute"`
 	}
 	_ = json.Unmarshal(tc.Input, &params)
 
 	action := strings.ToLower(strings.TrimSpace(params.Action))
 	if action == "" {
-		action = "list"
+		if params.Level != nil {
+			action = "set_volume"
+		} else if params.Mute != nil {
+			action = "mute"
+		} else {
+			action = "list"
+		}
 	}
 
+	coreAudioDef := `@'
+using System;
+using System.Runtime.InteropServices;
+namespace OzyAudio {
+    [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IAudioEndpointVolume {
+        [PreserveSig] int RegisterControlChangeNotify(IntPtr pNotify);
+        [PreserveSig] int UnregisterControlChangeNotify(IntPtr pNotify);
+        [PreserveSig] int GetChannelCount(out uint pnChannelCount);
+        [PreserveSig] int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);
+        [PreserveSig] int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
+        [PreserveSig] int GetMasterVolumeLevel(out float pfLevelDB);
+        [PreserveSig] int GetMasterVolumeLevelScalar(out float pfLevel);
+        [PreserveSig] int SetChannelVolumeLevel(uint nChannel, float fLevelDB, ref Guid pguidEventContext);
+        [PreserveSig] int SetChannelVolumeLevelScalar(uint nChannel, float fLevel, ref Guid pguidEventContext);
+        [PreserveSig] int GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);
+        [PreserveSig] int GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);
+        [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, ref Guid pguidEventContext);
+        [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool pbMute);
+        [PreserveSig] int GetVolumeStepInfo(out uint pnStep, out uint pnStepCount);
+        [PreserveSig] int VolumeStepUp(ref Guid pguidEventContext);
+        [PreserveSig] int VolumeStepDown(ref Guid pguidEventContext);
+        [PreserveSig] int QueryHardwareSupport(out uint pdwHardwareSupportMask);
+        [PreserveSig] int GetVolumeRange(out float pflVolumeMindB, out float pflVolumeMaxdB, out float pflVolumeIncrementdB);
+    }
+    [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMMDevice {
+        [PreserveSig] int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+    }
+    [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IMMDeviceEnumerator {
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, int dwStateMask, out IntPtr ppDevices);
+        [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ppEndpoint);
+    }
+    [ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+    public class MMDeviceEnumeratorComObject {}
+    public class MasterAudio {
+        public static float GetVolume() {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+            IMMDevice dev;
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out dev) != 0 || dev == null) return -1f;
+            Guid iid = typeof(IAudioEndpointVolume).GUID;
+            object epvObj;
+            if (dev.Activate(ref iid, 23, IntPtr.Zero, out epvObj) != 0 || epvObj == null) return -1f;
+            var epv = (IAudioEndpointVolume)epvObj;
+            float vol = 0;
+            epv.GetMasterVolumeLevelScalar(out vol);
+            return vol * 100f;
+        }
+        public static bool GetMute() {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+            IMMDevice dev;
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out dev) != 0 || dev == null) return false;
+            Guid iid = typeof(IAudioEndpointVolume).GUID;
+            object epvObj;
+            if (dev.Activate(ref iid, 23, IntPtr.Zero, out epvObj) != 0 || epvObj == null) return false;
+            var epv = (IAudioEndpointVolume)epvObj;
+            bool mute = false;
+            epv.GetMute(out mute);
+            return mute;
+        }
+        public static void SetVolume(float pct) {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+            IMMDevice dev;
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out dev) != 0 || dev == null) return;
+            Guid iid = typeof(IAudioEndpointVolume).GUID;
+            object epvObj;
+            if (dev.Activate(ref iid, 23, IntPtr.Zero, out epvObj) != 0 || epvObj == null) return;
+            var epv = (IAudioEndpointVolume)epvObj;
+            Guid g = Guid.Empty;
+            epv.SetMasterVolumeLevelScalar(pct / 100f, ref g);
+        }
+        public static void SetMute(bool mute) {
+            var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+            IMMDevice dev;
+            if (enumerator.GetDefaultAudioEndpoint(0, 1, out dev) != 0 || dev == null) return;
+            Guid iid = typeof(IAudioEndpointVolume).GUID;
+            object epvObj;
+            if (dev.Activate(ref iid, 23, IntPtr.Zero, out epvObj) != 0 || epvObj == null) return;
+            var epv = (IAudioEndpointVolume)epvObj;
+            Guid g = Guid.Empty;
+            epv.SetMute(mute, ref g);
+        }
+    }
+}
+'@`
+
 	switch action {
+	case "get_volume", "volume", "get":
+		psCmd := fmt.Sprintf(`
+			$src = %s
+			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
+			$vol = [Math]::Round([OzyAudio.MasterAudio]::GetVolume(), 1)
+			$mute = [OzyAudio.MasterAudio]::GetMute()
+			Write-Output "🔊 Volumen maestro: $vol%% | Silencio (Mute): $(if ($mute) { 'ACTIVADO (Silenciado)' } else { 'DESACTIVADO (Con sonido)' })"
+		`, coreAudioDef)
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error obteniendo volumen de audio: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "set_volume", "set_vol":
+		if params.Level == nil {
+			return "Debes indicar el nivel de volumen ('level', entre 0 y 100).", false
+		}
+		lvl := *params.Level
+		if lvl < 0 {
+			lvl = 0
+		}
+		if lvl > 100 {
+			lvl = 100
+		}
+		psCmd := fmt.Sprintf(`
+			$src = %s
+			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
+			[OzyAudio.MasterAudio]::SetVolume(%f)
+			$vol = [Math]::Round([OzyAudio.MasterAudio]::GetVolume(), 1)
+			Write-Output "🔊 Volumen maestro ajustado exitosamente al $vol%%."
+		`, coreAudioDef, lvl)
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error ajustando volumen de audio: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "mute", "silence":
+		muteVal := true
+		if params.Mute != nil {
+			muteVal = *params.Mute
+		}
+		psCmd := fmt.Sprintf(`
+			$src = %s
+			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
+			[OzyAudio.MasterAudio]::SetMute($%t)
+			Write-Output $(if ($%t) { "🔇 Audio maestro silenciado (Mute ACTIVADO)." } else { "🔊 Audio maestro reactivado (Mute DESACTIVADO)." })
+		`, coreAudioDef, muteVal, muteVal)
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error configurando mute: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "unmute":
+		psCmd := fmt.Sprintf(`
+			$src = %s
+			if (-not ([System.Management.Automation.PSTypeName]'OzyAudio.MasterAudio').Type) { Add-Type -TypeDefinition $src -Language CSharp }
+			[OzyAudio.MasterAudio]::SetMute($false)
+			Write-Output "🔊 Audio maestro reactivado (Mute DESACTIVADO)."
+		`, coreAudioDef)
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error reactivando sonido: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
 	case "list", "status":
 		psCmd := `Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction SilentlyContinue | Select-Object -Property FriendlyName, Status, InstanceId | ConvertTo-Json -Compress`
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Output()
@@ -279,7 +446,7 @@ func execOSAudioDevice(ctx context.Context, tc providers.ToolCall) (string, bool
 		return strings.TrimSpace(string(out)), true
 
 	default:
-		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'list' o 'set'.", action), false
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'list', 'set', 'get_volume', 'set_volume' o 'mute'.", action), false
 	}
 }
 
@@ -443,3 +610,171 @@ func execOSScheduleTask(ctx context.Context, tc providers.ToolCall) (string, boo
 		return fmt.Sprintf("Acción de tarea desconocida: '%s'. Usa 'list', 'create' o 'delete'.", action), false
 	}
 }
+
+// execOSHardwareInspector inspecciona hardware físico, puertos USB, estado de periféricos en uso (cámara/mic) y telemetría de sensores
+func execOSHardwareInspector(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action string `json:"action"` // devices (usb), in_use (privacy), telemetry (system, sensors)
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" || strings.Contains(action, "usb") || strings.Contains(action, "device") || strings.Contains(action, "periferic") || strings.Contains(action, "puerto") {
+		action = "devices"
+	} else if strings.Contains(action, "use") || strings.Contains(action, "uso") || strings.Contains(action, "cam") || strings.Contains(action, "mic") || strings.Contains(action, "privac") {
+		action = "in_use"
+	} else if strings.Contains(action, "telem") || strings.Contains(action, "syst") || strings.Contains(action, "sens") || strings.Contains(action, "temp") || strings.Contains(action, "cpu") || strings.Contains(action, "ram") || strings.Contains(action, "gpu") || strings.Contains(action, "disk") || strings.Contains(action, "bater") {
+		action = "telemetry"
+	}
+
+	switch action {
+	case "devices", "usb":
+		psCmd := `
+			$pnp = Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object { $_.Class -in @('USB', 'Camera', 'Image', 'Media', 'Bluetooth', 'Mouse', 'Keyboard', 'DiskDrive', 'Ports') } | Select-Object FriendlyName, Class, Status
+			$grouped = $pnp | Group-Object Class
+			$sb = "=== DISPOSITIVOS Y PUERTOS FÍSICOS CONECTADOS ===" + [Environment]::NewLine
+			foreach ($g in $grouped) {
+				$sb += [Environment]::NewLine + "[$($g.Name)]" + [Environment]::NewLine
+				foreach ($item in $g.Group) {
+					$sb += " - $($item.FriendlyName) ($($item.Status))" + [Environment]::NewLine
+				}
+			}
+			$sb.Trim()
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando dispositivos físicos: %s", strings.TrimSpace(string(out))), false
+		}
+		res := strings.TrimSpace(string(out))
+		if res == "" {
+			return "No se encontraron dispositivos físicos activos en los buses estándar.", true
+		}
+		return res, true
+
+	case "in_use", "privacy":
+		psCmd := `
+			$checkInUse = {
+				param($capability)
+				$results = @()
+				$paths = @(
+					"HKCU:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$capability",
+					"HKLM:\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\$capability"
+				)
+				foreach ($p in $paths) {
+					if (Test-Path $p) {
+						Get-ChildItem -Path $p -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+							$prop = Get-ItemProperty -Path $_.PSPath -ErrorAction SilentlyContinue
+							if ($prop -and $prop.LastUsedTimeStop -ne $null) {
+								$active = ($prop.LastUsedTimeStop -eq 0 -or $prop.LastUsedTimeStart -gt $prop.LastUsedTimeStop)
+								$cleanName = $_.PSChildName -replace '#', '\'
+								$results += [PSCustomObject]@{
+									App = $cleanName
+									InUse = $active
+								}
+							}
+						}
+					}
+				}
+				return $results
+			}
+
+			$cam = & $checkInUse "webcam"
+			$camActive = $cam | Where-Object { $_.InUse -eq $true }
+			$camTxt = if ($camActive) { "🔴 EN USO por: " + (($camActive | ForEach-Object { $_.App }) -join ", ") } else { "🟢 INACTIVA (Ninguna aplicación la está usando)" }
+
+			$mic = & $checkInUse "microphone"
+			$micActive = $mic | Where-Object { $_.InUse -eq $true }
+			$micTxt = if ($micActive) { "🔴 EN USO por: " + (($micActive | ForEach-Object { $_.App }) -join ", ") } else { "🟢 INACTIVO (Ninguna aplicación lo está usando)" }
+
+			Write-Output "=== ESTADO DE PRIVACIDAD Y PERIFÉRICOS ACTIVOS ==="
+			Write-Output "📸 Cámara Web: $camTxt"
+			Write-Output "🎙️ Micrófono:  $micTxt"
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando periféricos en uso: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "telemetry", "system", "sensors":
+		psCmd := `
+			# CPU
+			$cpu = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1 Name, NumberOfCores, NumberOfLogicalProcessors
+			$cpuLoad = (Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Measure-Object -Property LoadPercentage -Average).Average
+			if (-not $cpuLoad) { $cpuLoad = 0 }
+
+			# RAM
+			$os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+			$totalRAM_GB = [Math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
+			$freeRAM_GB = [Math]::Round($os.FreePhysicalMemory / 1MB, 2)
+			$usedRAM_GB = [Math]::Round($totalRAM_GB - $freeRAM_GB, 2)
+			$ramUsagePct = if ($totalRAM_GB -gt 0) { [Math]::Round(($usedRAM_GB / $totalRAM_GB) * 100, 1) } else { 0 }
+
+			# Disks
+			$disks = Get-CimInstance Win32_LogicalDisk -Filter "DriveType=3" -ErrorAction SilentlyContinue | ForEach-Object {
+				$size = [Math]::Round($_.Size / 1GB, 1)
+				$free = [Math]::Round($_.FreeSpace / 1GB, 1)
+				$used = [Math]::Round($size - $free, 1)
+				$pct = if ($size -gt 0) { [Math]::Round(($used / $size) * 100, 1) } else { 0 }
+				" - Disco $($_.DeviceID) ($($_.VolumeName)): $free GB libres de $size GB ($pct% ocupado)"
+			}
+
+			# GPU
+			$gpus = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | ForEach-Object {
+				$vram = [Math]::Round($_.AdapterRAM / 1MB, 0)
+				" - $($_.Name) ($vram MB VRAM)"
+			}
+
+			# NVIDIA Temp & Utilization
+			$nvidiaInfo = ""
+			if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+				try {
+					$nv = nvidia-smi --query-gpu=temperature.gpu,utilization.gpu,utilization.memory,memory.total,memory.used --format=csv,noheader,nounits 2>$null
+					$parts = $nv -split ','
+					if ($parts.Count -ge 5) {
+						$nvidiaInfo = "   🌡️ Temp GPU NVIDIA: $($parts[0].Trim()) °C | Carga: $($parts[1].Trim())% | VRAM Usada: $($parts[4].Trim()) / $($parts[3].Trim()) MB"
+					}
+				} catch {}
+			}
+
+			# Thermal ACPI
+			$acpiTemp = ""
+			$tz = Get-CimInstance -Namespace "root/cimv2" -ClassName "Win32_PerfFormattedData_Counters_ThermalZoneInformation" -ErrorAction SilentlyContinue | Select-Object -First 1
+			if ($tz -and $tz.Temperature) {
+				$celsius = [Math]::Round($tz.Temperature - 273.15, 1)
+				$acpiTemp = "🌡️ Temperatura ACPI Sistema: $celsius °C"
+			}
+
+			# Battery
+			$bat = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+			$batText = "No presente (Equipo de escritorio)"
+			if ($bat) {
+				$status = if ($bat.BatteryStatus -eq 2) { "Conectado a CA (Cargando / Completa)" } else { "Descargando" }
+				$batText = "$($bat.EstimatedChargeRemaining)% ($status)"
+			}
+
+			Write-Output "=== TELEMETRÍA DE HARDWARE Y RECURSOS ==="
+			if ($cpu) {
+				Write-Output "⚡ CPU: $($cpu.Name)"
+				Write-Output "   Núcleos: $($cpu.NumberOfCores) físicos, $($cpu.NumberOfLogicalProcessors) lógicos | Uso actual: $cpuLoad%"
+			}
+			Write-Output "🧠 Memoria RAM: $usedRAM_GB GB usados de $totalRAM_GB GB ($ramUsagePct% en uso, $freeRAM_GB GB disponibles)"
+			Write-Output "💾 Almacenamiento:"
+			$disks | ForEach-Object { Write-Output $_ }
+			Write-Output "🎮 Gráficos / GPU:"
+			$gpus | ForEach-Object { Write-Output $_ }
+			if ($nvidiaInfo) { Write-Output $nvidiaInfo }
+			if ($acpiTemp) { Write-Output "🌡️ Térmico: $acpiTemp" }
+			Write-Output "🔋 Batería: $batText"
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando telemetría de hardware: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	default:
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'devices', 'in_use' o 'telemetry'.", action), false
+	}
+}
+

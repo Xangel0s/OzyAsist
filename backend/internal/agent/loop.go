@@ -577,9 +577,10 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
    - Para administrar servicios de Windows: usa 'os_service_manager' ('list', 'status', 'start', 'stop', 'restart').
    - Para administrar Docker en el host: usa 'os_docker_manager' ('status', 'list', 'logs', 'start', 'stop', 'restart', 'stats').
    - Para analizar errores en logs o eventos de Windows: usa 'os_analyze_logs'.
-   - Para inspeccionar puertos de red abiertos y procesos que escuchan: usa 'os_port_inspector'.
+   - Para inspeccionar puertos de red abiertos y procesos que escuchan (TCP/UDP): usa 'os_port_inspector'. ÚNICAMENTE para sockets lógicos de red. NUNCA para puertos físicos ni dispositivos USB.
+   - Para puertos físicos USB, periféricos conectados, detectar si la cámara web o micrófono están en uso, nivel de batería, temperatura y telemetría de CPU/RAM/GPU/Discos: usa 'os_hardware_inspector' ('devices', 'in_use', 'telemetry').
    - Para analizar y limpiar espacio en disco (temporales, papelera): usa 'os_disk_cleaner'.
-   - Para consultar o conmutar dispositivos de audio (auriculares, altavoces, FxSound): usa 'os_audio_device'.
+   - Para controlar el sistema de audio (consultar nivel de volumen %%, subir/bajar volumen, silenciar con mute, o listar/cambiar dispositivos de salida): usa 'os_audio_device'.
    - Para revisar el estado de Wi-Fi, intensidad de señal y redes: usa 'os_wifi_manager'.
    - Para programar tareas autónomas persistentes en segundo plano: usa 'os_schedule_task'.
 4. INVESTIGACIÓN WEB Y SITIOS EN VIVO (SUPERPODERES):
@@ -651,8 +652,9 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
    - Para extraer o descomprimir un archivo .zip: usa 'os_extract_zip'.
 21. BÚSQUEDA RÁPIDA DE CONTENIDO EN ARCHIVOS (GREP NATIVO):
    - Para buscar texto, claves de configuración, variables o fragmentos de código dentro de los archivos de una carpeta o proyecto: usa 'os_search_content'. Es instantáneo, multi-hilo y omite carpetas masivas (node_modules, .git, venv).
-22. CONTROL E INSPECCIÓN DE PUERTOS DE RED:
-   - Para averiguar qué proceso (PID y ejecutable) tiene ocupado un puerto (ej: 3000, 8080, 5432) o listar los puertos en escucha: usa 'os_port_inspector'. Puedes pasar 'kill': true si el usuario pide liberarlo o finalizar la app que lo ocupa.
+22. CONTROL E INSPECCIÓN DE PUERTOS DE RED VS PUERTOS FÍSICOS Y HARDWARE:
+   - Para averiguar qué proceso (PID y ejecutable) tiene ocupado un puerto de red (ej: 3000, 8080, 5432) o listar los puertos TCP/UDP en escucha: usa 'os_port_inspector'. NUNCA uses 'os_port_inspector' si la pregunta es sobre puertos físicos o USB.
+   - Para puertos físicos USB, dispositivos conectados, periféricos en uso (cámara web, micrófono) y telemetría de hardware (CPU, RAM, Discos, GPU, temperatura, batería): usa 'os_hardware_inspector'.
 23. DESCARGA DIRECTA DE ARCHIVOS WEB:
    - Para descargar archivos, imágenes, PDFs o paquetes desde una URL HTTP/HTTPS directo al disco: usa 'os_download_file'.
 24. AUDITORÍA COGNITIVA CHARC Y DETECCIÓN ESTRICTA DE ERRORES EN APLICACIONES (ANTI-ALUCINACIÓN):

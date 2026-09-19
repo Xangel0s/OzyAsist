@@ -148,3 +148,83 @@ func TestExecOSScheduleTask_ValidationAndList(t *testing.T) {
 		t.Errorf("Se esperaba fallo por parámetros vacíos, pero tuvo éxito: %s", outCreate)
 	}
 }
+
+func TestExecOSAudioDevice_VolumeAndMute(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. get_volume
+	tcGet := providers.ToolCall{
+		ID:    "call-audio-get-vol",
+		Name:  "os_audio_device",
+		Input: json.RawMessage(`{"action": "get_volume"}`),
+	}
+	outGet, okGet := execOSAudioDevice(ctx, tcGet)
+	if !okGet {
+		t.Fatalf("execOSAudioDevice get_volume falló: %s", outGet)
+	}
+	t.Logf("Volumen actual: %s", outGet)
+	if !strings.Contains(outGet, "Volumen maestro:") {
+		t.Errorf("Se esperaba reporte de volumen maestro, se obtuvo: %s", outGet)
+	}
+
+	// 2. set_volume sin level
+	tcSetInvalid := providers.ToolCall{
+		ID:    "call-audio-set-invalid",
+		Name:  "os_audio_device",
+		Input: json.RawMessage(`{"action": "set_volume"}`),
+	}
+	outSetInvalid, okSetInvalid := execOSAudioDevice(ctx, tcSetInvalid)
+	if okSetInvalid {
+		t.Errorf("Se esperaba fallo por falta de level en set_volume, pero tuvo éxito: %s", outSetInvalid)
+	}
+}
+
+func TestExecOSHardwareInspector_Modes(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Modo devices / usb
+	tcDevices := providers.ToolCall{
+		ID:    "call-hw-devices",
+		Name:  "os_hardware_inspector",
+		Input: json.RawMessage(`{"action": "devices"}`),
+	}
+	outDev, okDev := execOSHardwareInspector(ctx, tcDevices)
+	if !okDev {
+		t.Fatalf("execOSHardwareInspector devices falló: %s", outDev)
+	}
+	t.Logf("Dispositivos físicos: %s", outDev)
+	if !strings.Contains(outDev, "DISPOSITIVOS Y PUERTOS FÍSICOS CONECTADOS") {
+		t.Errorf("Se esperaba encabezado de dispositivos conectados: %s", outDev)
+	}
+
+	// 2. Modo in_use / privacy
+	tcInUse := providers.ToolCall{
+		ID:    "call-hw-inuse",
+		Name:  "os_hardware_inspector",
+		Input: json.RawMessage(`{"action": "in_use"}`),
+	}
+	outInUse, okInUse := execOSHardwareInspector(ctx, tcInUse)
+	if !okInUse {
+		t.Fatalf("execOSHardwareInspector in_use falló: %s", outInUse)
+	}
+	t.Logf("Estado de periféricos en uso: %s", outInUse)
+	if !strings.Contains(outInUse, "Cámara Web:") || !strings.Contains(outInUse, "Micrófono:") {
+		t.Errorf("Se esperaba estado de cámara y micrófono: %s", outInUse)
+	}
+
+	// 3. Modo telemetry / system
+	tcTelem := providers.ToolCall{
+		ID:    "call-hw-telemetry",
+		Name:  "os_hardware_inspector",
+		Input: json.RawMessage(`{"action": "telemetry"}`),
+	}
+	outTelem, okTelem := execOSHardwareInspector(ctx, tcTelem)
+	if !okTelem {
+		t.Fatalf("execOSHardwareInspector telemetry falló: %s", outTelem)
+	}
+	t.Logf("Telemetría de hardware: %s", outTelem)
+	if !strings.Contains(outTelem, "TELEMETRÍA DE HARDWARE") || !strings.Contains(outTelem, "CPU:") || !strings.Contains(outTelem, "RAM:") {
+		t.Errorf("Se esperaba telemetría de CPU y RAM: %s", outTelem)
+	}
+}
+

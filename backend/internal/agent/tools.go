@@ -1003,7 +1003,7 @@ var AgentTools = []providers.ToolDef{
 	},
 	{
 		Name:        "os_port_inspector",
-		Description: "Inspecciona qué proceso (PID y ejecutable) tiene ocupado un puerto TCP de red (ej: 3000, 8080, 5432) o lista todos los puertos en escucha activa. Permite liberar el puerto inmediatamente si se especifica kill: true.",
+		Description: "Inspecciona qué proceso (PID y ejecutable) tiene ocupado un puerto TCP de red (ej: 3000, 8080, 5432) o lista todos los puertos de red en escucha activa. ÚNICAMENTE para puertos de red/sockets lógicos. NUNCA usar para puertos físicos ni dispositivos USB (para USB o periféricos usa 'os_hardware_inspector'). Permite liberar el puerto inmediatamente si se especifica kill: true.",
 		InputSchema: mustJSON(`{
 			"type": "object",
 			"properties": {
@@ -1207,14 +1207,22 @@ var AgentTools = []providers.ToolDef{
 	},
 	{
 		Name:        "os_audio_device",
-		Description: "Lista los dispositivos de salida de sonido activos (altavoces, auriculares Bluetooth, FxSound) o cambia el endpoint de audio predeterminado.",
+		Description: "Controla el sistema de audio de Windows: consulta el nivel de volumen master actual (0-100%) y estado Mute, ajusta el nivel de volumen, silencia/reactiva sonido, lista dispositivos de salida o cambia el dispositivo de salida predeterminado.",
 		InputSchema: mustJSON(`{
 			"type": "object",
 			"properties": {
 				"action": {
 					"type": "string",
-					"enum": ["list", "set"],
-					"description": "Acción a realizar: 'list' para ver dispositivos, 'set' para cambiar el predeterminado (default: 'list')"
+					"enum": ["list", "set", "get_volume", "set_volume", "mute", "unmute"],
+					"description": "Acción a realizar: 'get_volume' para ver el volumen actual y si está silenciado; 'set_volume' para ajustar nivel; 'mute' o 'unmute' para silenciar/reactivar; 'list' para ver endpoints; 'set' para cambiar endpoint (default: 'list')"
+				},
+				"level": {
+					"type": "number",
+					"description": "Porcentaje de volumen maestro a establecer (0 a 100, requerido para set_volume)"
+				},
+				"mute": {
+					"type": "boolean",
+					"description": "true para silenciar el sonido, false para reactivarlo (para action: 'mute')"
 				},
 				"name": {
 					"type": "string",
@@ -1264,6 +1272,20 @@ var AgentTools = []providers.ToolDef{
 				"time": {
 					"type": "string",
 					"description": "Hora de ejecución en formato 24h 'HH:mm' (ej: '20:00', default: '09:00')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_hardware_inspector",
+		Description: "Inspecciona el hardware físico de la máquina: puertos físicos USB y periféricos conectados (memorias, mouse, teclado, Bluetooth, etc.), detección en tiempo real de si la cámara web o micrófono están en uso activo por alguna app, y telemetría completa de recursos y sensores (CPU modelo/núcleos/uso %, RAM total/usada/libre, desglose de espacio por disco C/D/G, tarjetas GPU NVIDIA/Intel con temperatura en °C, temperatura térmica ACPI del sistema y estado de batería).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["devices", "in_use", "telemetry"],
+					"description": "'devices' (o 'usb') lista puertos físicos USB y periféricos; 'in_use' (o 'privacy') verifica si la cámara web o micrófono están activos y qué app los usa; 'telemetry' (o 'system', 'sensors') reporta CPU, RAM, discos, GPU, temperatura y batería (default: 'devices')"
 				}
 			}
 		}`),
@@ -1394,6 +1416,16 @@ var VoiceAgentTools = []providers.ToolDef{
 	{
 		Name:        "os_wifi_manager",
 		Description: "Muestra el estado de la conexión Wi-Fi actual y señal.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"}}}`),
+	},
+	{
+		Name:        "os_audio_device",
+		Description: "Controla audio, volumen y silencio (mute): get_volume, set_volume, mute, unmute o list.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"},"level":{"type":"number"},"mute":{"type":"boolean"}}}`),
+	},
+	{
+		Name:        "os_hardware_inspector",
+		Description: "Inspecciona hardware físico: puertos USB y periféricos conectados ('devices'), cámara web/micrófono en uso ('in_use'), y telemetría de CPU, RAM, GPU, temperatura y batería ('telemetry').",
 		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string"}}}`),
 	},
 	{

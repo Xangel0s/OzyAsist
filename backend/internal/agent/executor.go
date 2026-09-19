@@ -315,6 +315,8 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSWifiManager(ctx, tc)
 	case "os_schedule_task":
 		return execOSScheduleTask(ctx, tc)
+	case "os_hardware_inspector":
+		return execOSHardwareInspector(ctx, tc)
 	case "os_run_command":
 		return execOSRunCommand(ctx, tc)
 	case "os_draft_email":
@@ -412,7 +414,7 @@ func toolNameToActionType(name string) string {
 		return "command_exec"
 	case "list_files", "search_text":
 		return "file_read"
-	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector", "os_analyze_logs", "os_wifi_manager":
+	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector", "os_analyze_logs", "os_wifi_manager", "os_hardware_inspector":
 		return "os_inspect"
 	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file", "os_disk_cleaner":
 		return "os_mutate"

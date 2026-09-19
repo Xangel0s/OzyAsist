@@ -32,9 +32,8 @@ func NewOpenAI(apiKey string) *OpenAIProvider {
 			baseURL:      "https://api.openai.com/v1",
 			model:        "gpt-4o",
 			client: &http.Client{
-				Timeout: 120 * time.Second,
 				Transport: &http.Transport{
-					ResponseHeaderTimeout: 45 * time.Second,
+					ResponseHeaderTimeout: 60 * time.Second,
 					IdleConnTimeout:       90 * time.Second,
 				},
 			},

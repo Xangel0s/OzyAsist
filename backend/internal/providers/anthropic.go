@@ -30,9 +30,8 @@ func NewAnthropic(apiKey string) *AnthropicProvider {
 			baseURL: "https://api.anthropic.com/v1",
 			model:   "claude-sonnet-4-20250514",
 			client: &http.Client{
-				Timeout: 120 * time.Second,
 				Transport: &http.Transport{
-					ResponseHeaderTimeout: 45 * time.Second,
+					ResponseHeaderTimeout: 60 * time.Second,
 					IdleConnTimeout:       90 * time.Second,
 				},
 			},

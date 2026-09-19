@@ -78,8 +78,12 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Acomodo y división de ventanas en pantalla en tiempo real (`left`, `right`, `maximize`, `minimize`, `restore`, `center`, `show_desktop`) mediante APIs Win32 `MoveWindow` y `ShowWindow` calculando el área de trabajo del monitor (`SPI_GETWORKAREA`).
 - **Autonomous Disk Purge & Sentinel (`os_disk_cleaner`)**:
   - Análisis y purga segura de archivos temporales huérfanos (`%TEMP%`, cachés de compilación) protegiendo procesos activos, con opción de vaciado de Papelera y telemetría de MB liberados.
-- **Audio Output Endpoint Controller (`os_audio_device`)**:
-  - Detección, listado y conmutación de dispositivos de salida de sonido (altavoces, auriculares Bluetooth, FxSound).
+- **Audio Output & Master Volume Controller (`os_audio_device`)**:
+  - Detección, listado y conmutación de dispositivos de salida de sonido (altavoces, auriculares Bluetooth, FxSound), lectura del volumen maestro en % y estado Mute, ajuste de volumen y silenciamiento nativo vía WASAPI CoreAudio (`IAudioEndpointVolume`).
+- **Physical Hardware, USB & Sensor Inspector (`os_hardware_inspector`)**:
+  - Detección y clasificación de puertos y dispositivos físicos USB conectados (memorias, hubs, teclados, mouse, Bluetooth, cámaras, discos).
+  - Auditoría de periféricos sensibles en uso activo (cámara web y micrófono) consultando Windows `CapabilityAccessManager\ConsentStore` para reportar en tiempo real si transmiten y qué proceso/aplicación los ocupa.
+  - Telemetría de hardware profunda: modelo y núcleos de CPU con carga %, memoria RAM total/usada/libre, desglose de almacenamiento por volumen (C:, D:, G:), tarjetas GPU NVIDIA/Intel con VRAM y temperatura en °C (`nvidia-smi`), temperatura térmica ACPI del sistema y estado de batería (CA/descarga).
 - **Wi-Fi & Network Inspector (`os_wifi_manager`)**:
   - Telemetría en vivo de interfaces inalámbricas (SSID, señal %, canal, tipo de radio, velocidad Mbps) y escaneo de redes disponibles.
 - **Persistent Task Scheduler (`os_schedule_task`)**:
