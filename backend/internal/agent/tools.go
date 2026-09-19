@@ -908,6 +908,172 @@ var AgentTools = []providers.ToolDef{
 			"required": ["src"]
 		}`),
 	},
+	{
+		Name:        "os_compress_zip",
+		Description: "Comprime uno o más archivos o carpetas en un archivo .zip estándar de forma nativa e instantánea. Úsalo para empaquetar proyectos, documentos o backups.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"src_paths": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "Lista de rutas de archivos o carpetas a incluir en el zip"
+				},
+				"src": {
+					"type": "string",
+					"description": "Ruta de un archivo o carpeta individual a comprimir (alternativa a src_paths)"
+				},
+				"dest_zip": {
+					"type": "string",
+					"description": "Ruta de destino del archivo .zip (ej: 'C:\\Users\\User\\Desktop\\backup.zip')"
+				}
+			},
+			"required": ["dest_zip"]
+		}`),
+	},
+	{
+		Name:        "os_extract_zip",
+		Description: "Descomprime un archivo .zip en una carpeta de destino de forma segura y con protección contra vulnerabilidades de path traversal.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"zip_path": {
+					"type": "string",
+					"description": "Ruta del archivo .zip a descomprimir"
+				},
+				"dest_dir": {
+					"type": "string",
+					"description": "Carpeta donde se extraerán los archivos (si se omite, se extrae en una subcarpeta junto al zip)"
+				}
+			},
+			"required": ["zip_path"]
+		}`),
+	},
+	{
+		Name:        "os_search_content",
+		Description: "Busca palabras clave, patrones de texto o expresiones regulares dentro del contenido de archivos en una carpeta o proyecto (Grep nativo ultrarrápido).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"query": {
+					"type": "string",
+					"description": "Término, palabra o patrón de texto a buscar dentro de los archivos"
+				},
+				"root": {
+					"type": "string",
+					"description": "Directorio raíz donde buscar (ej: '.', 'C:\\Users\\User\\Documents\\crmgeofal')"
+				},
+				"is_regex": {
+					"type": "boolean",
+					"description": "true si 'query' es una expresión regular, false para coincidencia literal (default: false)"
+				},
+				"extensions": {
+					"type": "array",
+					"items": {"type": "string"},
+					"description": "Filtro opcional de extensiones (ej: ['.go', '.env', '.json', '.md'])"
+				},
+				"max_results": {
+					"type": "integer",
+					"description": "Máximo número de coincidencias a retornar (default: 50)"
+				}
+			},
+			"required": ["query"]
+		}`),
+	},
+	{
+		Name:        "os_port_inspector",
+		Description: "Inspecciona qué proceso (PID y ejecutable) tiene ocupado un puerto TCP de red (ej: 3000, 8080, 5432) o lista todos los puertos en escucha activa. Permite liberar el puerto inmediatamente si se especifica kill: true.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"port": {
+					"type": "integer",
+					"description": "Número de puerto TCP a consultar (ej: 3000, 8080). Si se omite, lista todos los puertos en escucha."
+				},
+				"kill": {
+					"type": "boolean",
+					"description": "true para terminar forzosamente el proceso que ocupa el puerto y liberarlo inmediatamente"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_download_file",
+		Description: "Descarga un archivo, imagen, documento o instalador desde una URL web directamente al disco del usuario (por defecto en Downloads o Escritorio).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"url": {
+					"type": "string",
+					"description": "URL directa de descarga (http:// o https://)"
+				},
+				"path": {
+					"type": "string",
+					"description": "Ruta o carpeta donde guardar el archivo descargado (opcional)"
+				}
+			},
+			"required": ["url"]
+		}`),
+	},
+	{
+		Name:        "os_create_docx",
+		Description: "Crea un documento de Microsoft Word (.docx) formal y editable con formato profesional nativo OpenXML (título, subtítulo, autor, secciones con viñetas y tablas estructuradas). NUNCA renombres un .txt a .docx; usa esta herramienta para generar documentos Word válidos.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"path": {
+					"type": "string",
+					"description": "Ruta completa donde se guardará el archivo Word (debe terminar en .docx)"
+				},
+				"title": {
+					"type": "string",
+					"description": "Título principal del documento"
+				},
+				"subtitle": {
+					"type": "string",
+					"description": "Subtítulo opcional"
+				},
+				"author": {
+					"type": "string",
+					"description": "Nombre del autor o empresa emisora"
+				},
+				"sections": {
+					"type": "array",
+					"description": "Lista de secciones con títulos, párrafos y viñetas",
+					"items": {
+						"type": "object",
+						"properties": {
+							"title": {"type": "string"},
+							"content": {"type": "string"},
+							"bullets": {
+								"type": "array",
+								"items": {"type": "string"}
+							}
+						},
+						"required": ["title"]
+					}
+				},
+				"table": {
+					"type": "object",
+					"description": "Tabla estructurada opcional",
+					"properties": {
+						"headers": {
+							"type": "array",
+							"items": {"type": "string"}
+						},
+						"rows": {
+							"type": "array",
+							"items": {
+								"type": "array",
+								"items": {"type": "string"}
+							}
+						}
+					}
+				}
+			},
+			"required": ["path", "title", "sections"]
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.

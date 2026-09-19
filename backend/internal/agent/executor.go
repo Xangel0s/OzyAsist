@@ -345,6 +345,18 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execOSCreatePDF(ctx, tc)
 	case "os_convert_to_pdf":
 		return execOSConvertToPDF(ctx, tc)
+	case "os_compress_zip":
+		return execOSCompressZip(ctx, tc)
+	case "os_extract_zip":
+		return execOSExtractZip(ctx, tc)
+	case "os_search_content":
+		return execOSSearchContent(ctx, tc)
+	case "os_port_inspector":
+		return execOSPortInspector(ctx, tc)
+	case "os_download_file":
+		return execOSDownloadFile(ctx, tc)
+	case "os_create_docx":
+		return execOSCreateDocx(ctx, tc)
 	default:
 		return fmt.Sprintf("herramienta desconocida: %s", tc.Name), false
 	}
@@ -376,16 +388,17 @@ func toolNameToActionType(name string) string {
 	switch name {
 	case "read_file":
 		return "file_read"
-	case "write_file", "apply_diff", "os_create_excel", "os_create_pdf", "os_convert_to_pdf":
+	case "write_file", "apply_diff", "os_create_excel", "os_create_pdf", "os_convert_to_pdf", "os_create_docx":
 		return "file_write"
 	case "run_command":
 		return "command_exec"
 	case "list_files", "search_text":
 		return "file_read"
-	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs":
+	case "os_get_desktop", "os_list_apps", "os_explore", "os_find_files", "os_active_windows", "os_take_screenshot", "browser_list_profiles", "os_get_clipboard", "os_read_document", "os_list_alarms", "os_query_db", "os_analyze_screen", "os_detect_dialogs", "os_search_content", "os_port_inspector":
 		return "os_inspect"
-	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder":
+	case "os_create_dir", "os_move_item", "os_copy_item", "os_delete_item", "os_organize_folder", "os_compress_zip", "os_extract_zip", "os_download_file":
 		return "os_mutate"
+
 	case "os_launch_app", "os_focus_window", "os_kill_process", "os_run_command", "os_draft_email", "os_draft_whatsapp", "os_draft_telegram", "telegram_send_message", "os_mouse_click", "os_type_text", "os_set_clipboard", "os_notify", "os_schedule_alarm", "browser_open_groq", "os_setup_groq_key", "os_watchdog":
 		return "os_exec"
 	case "web_search", "deep_search", "web_fetch", "web_dns_lookup":
@@ -1139,7 +1152,162 @@ func execOSDetectDialogs(ctx context.Context, tc providers.ToolCall) (string, bo
 	return sb.String(), true
 }
 
+func execOSCompressZip(_ context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Src     string   `json:"src"`
+		Srcs    []string `json:"src_paths"`
+		DestZip string   `json:"dest_zip"`
+		Path    string   `json:"path"`
+	}
+	if err := json.Unmarshal(tc.Input, &params); err != nil {
+		return fmt.Sprintf("parámetros inválidos para os_compress_zip: %v", err), false
+	}
+
+	var sources []string
+	if len(params.Srcs) > 0 {
+		sources = params.Srcs
+	} else if params.Src != "" {
+		sources = []string{params.Src}
+	} else if params.Path != "" {
+		sources = []string{params.Path}
+	} else {
+		return "Se requiere especificar al menos un archivo o carpeta en 'src_paths' o 'src'", false
+	}
+
+	dest := params.DestZip
+	if dest == "" {
+		dest = sources[0] + ".zip"
+	}
+
+	err := system.CompressZip(sources, dest)
+	if err != nil {
+		return fmt.Sprintf("Error comprimiendo archivo ZIP: %v", err), false
+	}
+
+	return fmt.Sprintf("📦 === ARCHIVO ZIP CREADO EXITOSAMENTE ===\n"+
+		"• Destino:          %s\n"+
+		"• Elementos origen: %d (%s)",
+		system.ResolveUserPath(dest), len(sources), strings.Join(sources, ", ")), true
+}
+
+func execOSExtractZip(_ context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		ZipPath string `json:"zip_path"`
+		Path    string `json:"path"`
+		DestDir string `json:"dest_dir"`
+	}
+	if err := json.Unmarshal(tc.Input, &params); err != nil {
+		return fmt.Sprintf("parámetros inválidos para os_extract_zip: %v", err), false
+	}
+
+	zipPath := params.ZipPath
+	if zipPath == "" {
+		zipPath = params.Path
+	}
+	if zipPath == "" {
+		return "Se requiere especificar la ruta del archivo zip en 'zip_path'", false
+	}
+
+	files, err := system.ExtractZip(zipPath, params.DestDir)
+	if err != nil {
+		return fmt.Sprintf("Error descomprimiendo archivo ZIP: %v", err), false
+	}
+
+	return fmt.Sprintf("📂 === ARCHIVO ZIP DESCOMPRIMIDO EXITOSAMENTE ===\n"+
+		"• Archivo origen:     %s\n"+
+		"• Archivos extraídos: %d\n"+
+		"• Destino:            %s",
+		zipPath, len(files), system.ResolveUserPath(params.DestDir)), true
+}
+
+func execOSSearchContent(_ context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Root       string   `json:"root"`
+		Path       string   `json:"path"`
+		Query      string   `json:"query"`
+		IsRegex    bool     `json:"is_regex"`
+		Extensions []string `json:"extensions"`
+		MaxResults int      `json:"max_results"`
+	}
+	if err := json.Unmarshal(tc.Input, &params); err != nil {
+		return fmt.Sprintf("parámetros inválidos para os_search_content: %v", err), false
+	}
+
+	root := params.Root
+	if root == "" {
+		root = params.Path
+	}
+
+	matches, err := system.SearchContent(system.SearchContentParams{
+		RootDir:    root,
+		Query:      params.Query,
+		IsRegex:    params.IsRegex,
+		Extensions: params.Extensions,
+		MaxResults: params.MaxResults,
+	})
+	if err != nil {
+		return fmt.Sprintf("Error buscando contenido: %v", err), false
+	}
+
+	if len(matches) == 0 {
+		return fmt.Sprintf("No se encontraron coincidencias para '%s' en %s", params.Query, root), true
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("🔍 === COINCIDENCIAS DE TEXTO ENCONTRADAS (%d) ===\n", len(matches)))
+	for i, m := range matches {
+		sb.WriteString(fmt.Sprintf("%d. %s:%d\n   %s\n", i+1, m.Path, m.LineNumber, m.LineContent))
+	}
+	return sb.String(), true
+}
+
+func execOSPortInspector(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Port int  `json:"port"`
+		Kill bool `json:"kill"`
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	if params.Kill && params.Port > 0 {
+		msg, err := system.KillPortProcess(ctx, params.Port)
+		if err != nil {
+			return fmt.Sprintf("Error liberando puerto %d: %v", params.Port, err), false
+		}
+		return fmt.Sprintf("🛑 === PUERTO %d LIBERADO ===\n%s", params.Port, msg), true
+	}
+
+	bindings, err := system.InspectPorts(params.Port)
+	if err != nil {
+		return fmt.Sprintf("Error inspeccionando puertos: %v", err), false
+	}
+
+	if len(bindings) == 0 {
+		if params.Port > 0 {
+			return fmt.Sprintf("El puerto %d está completamente LIBRE (ningún proceso en escucha).", params.Port), true
+		}
+		return "No se detectaron puertos TCP en estado LISTENING.", true
+	}
+
+	var sb strings.Builder
+	title := "PUERTOS EN ESCUCHA ACTIVOS"
+	if params.Port > 0 {
+		title = fmt.Sprintf("ESTADO DEL PUERTO %d", params.Port)
+	}
+	sb.WriteString(fmt.Sprintf("🌐 === %s (%d) ===\n", title, len(bindings)))
+	for i, b := range bindings {
+		procInfo := "Proceso desconocido"
+		if b.ProcessName != "" {
+			procInfo = fmt.Sprintf("%s (PID: %d)", b.ProcessName, b.ProcessID)
+		} else if b.ProcessID != 0 {
+			procInfo = fmt.Sprintf("PID: %d", b.ProcessID)
+		}
+		sb.WriteString(fmt.Sprintf("%d. Puerto %d (%s) → %s [%s]\n", i+1, b.Port, b.Protocol, procInfo, b.State))
+	}
+	return sb.String(), true
+}
+
 func execOSSystemInfo(ctx context.Context) (string, bool) {
+
 	collector := system.NewCollector()
 	metrics, err := collector.Collect(ctx)
 	if err != nil {

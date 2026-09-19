@@ -94,8 +94,8 @@ La conversión automática a PDF funciona de forma nativa sin Docker ni librerí
 }
 
 func TestGenerateNeonPillReport(t *testing.T) {
-	destPath := `C:\Users\Lenovo\Desktop\Cage The Elephant - Neon Pill\Informe Neon Pill.pdf`
-	_ = os.MkdirAll(filepath.Dir(destPath), 0755)
+	tempDir := t.TempDir()
+	destPath := filepath.Join(tempDir, "Informe Neon Pill.pdf")
 
 	opts := PDFReportOptions{
 		Title:      "Informe Discográfico: Cage The Elephant — Neon Pill",
