@@ -105,6 +105,14 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Inspección del estado de notificaciones de Windows (`status`) y alternancia del modo silencioso / no molestar (`set` con `enabled: true/false`), bloqueando banners emergentes durante sesiones de desarrollo intenso.
 - **Native System Clipboard Access (`os_get_clipboard`, `os_set_clipboard`)**:
   - Lectura directa y segura del texto copiado en el portapapeles de Windows y escritura programática sin emojis.
+- **Global Windows Media Controller (`os_media_control`)**:
+  - Control de reproducción de Spotify, YouTube, VLC y navegadores (`play_pause`, `next`, `previous`, `stop`) mediante eventos de pulsación virtual Win32 (`keybd_event` con `VK_MEDIA_*`).
+- **Display & Monitor Projection Switcher (`os_display_config`)**:
+  - Inspección de pantallas conectadas y resoluciones (`status`), y conmutación de modos de proyección (`extend`, `clone`, `internal`, `external`) vía `displayswitch.exe` nativo de Windows.
+- **Process & Memory Sentinel (`os_process_sentinel`)**:
+  - Auditoría de procesos que consumen mayor cantidad de memoria RAM (`top_memory`) o CPU (`top_cpu`), con capacidad de terminación segura de procesos huérfanos o bloqueados (`kill` por PID o nombre).
+- **Native Windows Speech Synthesizer (`os_speak_text`)**:
+  - Síntesis y pronunciación de voz local en tiempo real a través de los altavoces utilizando el motor nativo Windows SAPI (`System.Speech.Synthesis`) con voces locales en español sin dependencias externas ni conexión a internet.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`

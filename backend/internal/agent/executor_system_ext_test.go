@@ -180,3 +180,98 @@ func TestExecOSClipboard_ReadAndWrite(t *testing.T) {
 		t.Errorf("Se esperaba contenido '%s' en el portapapeles: %s", testText, outRead)
 	}
 }
+
+func TestExecOSMediaControl_PlayPauseAndValidation(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Play/Pause
+	tcPlay := providers.ToolCall{
+		ID:    "call-media-play",
+		Name:  "os_media_control",
+		Input: json.RawMessage(`{"action": "play_pause"}`),
+	}
+	outPlay, okPlay := execOSMediaControl(ctx, tcPlay)
+	if !okPlay {
+		t.Fatalf("execOSMediaControl play_pause falló: %s", outPlay)
+	}
+	t.Logf("Resultado media play_pause: %s", outPlay)
+	if !strings.Contains(outPlay, "Control multimedia ejecutado exitosamente") {
+		t.Errorf("Se esperaba confirmación de ejecución multimedia: %s", outPlay)
+	}
+
+	// 2. Acción inválida
+	tcInv := providers.ToolCall{
+		ID:    "call-media-inv",
+		Name:  "os_media_control",
+		Input: json.RawMessage(`{"action": "invalido_123"}`),
+	}
+	outInv, okInv := execOSMediaControl(ctx, tcInv)
+	if okInv {
+		t.Fatalf("Se esperaba fallo con acción inválida: %s", outInv)
+	}
+}
+
+func TestExecOSDisplayConfig_StatusAndValidation(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Status
+	tcStatus := providers.ToolCall{
+		ID:    "call-disp-status",
+		Name:  "os_display_config",
+		Input: json.RawMessage(`{"action": "status"}`),
+	}
+	outStatus, okStatus := execOSDisplayConfig(ctx, tcStatus)
+	if !okStatus {
+		t.Fatalf("execOSDisplayConfig status falló: %s", outStatus)
+	}
+	t.Logf("Resultado pantallas: %s", outStatus)
+	if !strings.Contains(outStatus, "MONITORES Y PANTALLAS CONECTADAS") {
+		t.Errorf("Se esperaba reporte de monitores: %s", outStatus)
+	}
+
+	// 2. Modo inválido
+	tcInv := providers.ToolCall{
+		ID:    "call-disp-inv",
+		Name:  "os_display_config",
+		Input: json.RawMessage(`{"action": "modo_raro_99"}`),
+	}
+	outInv, okInv := execOSDisplayConfig(ctx, tcInv)
+	if okInv {
+		t.Fatalf("Se esperaba fallo con modo de pantalla inválido: %s", outInv)
+	}
+}
+
+func TestExecOSProcessSentinel_TopMemoryAndTopCPU(t *testing.T) {
+	ctx := context.Background()
+
+	// 1. Top memory
+	tcMem := providers.ToolCall{
+		ID:    "call-proc-mem",
+		Name:  "os_process_sentinel",
+		Input: json.RawMessage(`{"action": "top_memory", "top_n": 5}`),
+	}
+	outMem, okMem := execOSProcessSentinel(ctx, tcMem)
+	if !okMem {
+		t.Fatalf("execOSProcessSentinel top_memory falló: %s", outMem)
+	}
+	t.Logf("Top memoria: %s", outMem)
+	if !strings.Contains(outMem, "MAYOR CONSUMO DE MEMORIA RAM") {
+		t.Errorf("Se esperaba reporte de memoria: %s", outMem)
+	}
+
+	// 2. Top CPU
+	tcCPU := providers.ToolCall{
+		ID:    "call-proc-cpu",
+		Name:  "os_process_sentinel",
+		Input: json.RawMessage(`{"action": "top_cpu", "top_n": 5}`),
+	}
+	outCPU, okCPU := execOSProcessSentinel(ctx, tcCPU)
+	if !okCPU {
+		t.Fatalf("execOSProcessSentinel top_cpu falló: %s", outCPU)
+	}
+	t.Logf("Top CPU: %s", outCPU)
+	if !strings.Contains(outCPU, "MAYOR CONSUMO DE CPU") {
+		t.Errorf("Se esperaba reporte de CPU: %s", outCPU)
+	}
+}
+

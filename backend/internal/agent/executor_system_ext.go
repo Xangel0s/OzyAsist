@@ -321,3 +321,246 @@ func execOSNotificationFocus(ctx context.Context, tc providers.ToolCall) (string
 		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'status' o 'set'.", action), false
 	}
 }
+
+// execOSMediaControl controla la reproducción multimedia global de Windows (Spotify, YouTube, VLC, etc.)
+func execOSMediaControl(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action string `json:"action"` // play_pause, next, previous, stop
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" {
+		action = "play_pause"
+	}
+
+	var vkCode byte
+	var actionDesc string
+	switch action {
+	case "play_pause", "play", "pause", "reproducir", "pausar":
+		vkCode = 0xB3 // VK_MEDIA_PLAY_PAUSE
+		actionDesc = "Reproducir / Pausar (Play/Pause)"
+	case "next", "siguiente", "adelantar", "skip":
+		vkCode = 0xB0 // VK_MEDIA_NEXT_TRACK
+		actionDesc = "Pista siguiente (Next Track)"
+	case "previous", "prev", "anterior", "retroceder":
+		vkCode = 0xB1 // VK_MEDIA_PREV_TRACK
+		actionDesc = "Pista anterior (Previous Track)"
+	case "stop", "detener", "parar":
+		vkCode = 0xB2 // VK_MEDIA_STOP
+		actionDesc = "Detener reproducción (Stop)"
+	default:
+		return fmt.Sprintf("Acción multimedia no reconocida: '%s'. Opciones: 'play_pause', 'next', 'previous', 'stop'.", action), false
+	}
+
+	psCmd := fmt.Sprintf(`
+		$src = @"
+using System;
+using System.Runtime.InteropServices;
+public class OzyMedia {
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+    public static void Press(byte key) {
+        keybd_event(key, 0, 0, UIntPtr.Zero);
+        keybd_event(key, 0, 2, UIntPtr.Zero);
+    }
+}
+"@
+		if (-not ([System.Management.Automation.PSTypeName]'OzyMedia').Type) {
+			Add-Type -TypeDefinition $src
+		}
+		[OzyMedia]::Press(%d)
+		Write-Output "Control multimedia ejecutado exitosamente: %s."
+	`, vkCode, actionDesc)
+
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error emitiendo comando multimedia: %s", strings.TrimSpace(string(out))), false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
+// execOSDisplayConfig consulta y conmuta la configuración de monitores y pantallas (displayswitch.exe)
+func execOSDisplayConfig(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action string `json:"action"` // status, extend, clone, internal, external
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" {
+		action = "status"
+	}
+
+	switch action {
+	case "status", "list":
+		psCmd := `
+			[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null
+			$screens = [System.Windows.Forms.Screen]::AllScreens
+			Write-Output "=== MONITORES Y PANTALLAS CONECTADAS ($($screens.Count)) ==="
+			foreach ($s in $screens) {
+				$prim = if ($s.Primary) { "[PRIMARIA]" } else { "[SECUNDARIA]" }
+				Write-Output " - $($s.DeviceName) $($prim): $($s.Bounds.Width)x$($s.Bounds.Height) @ ($($s.Bounds.X),$($s.Bounds.Y))"
+			}
+		`
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando pantallas: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "extend", "extender":
+		out, err := exec.CommandContext(ctx, "displayswitch.exe", "/extend").CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error conmutando a modo extendido: %s", strings.TrimSpace(string(out))), false
+		}
+		return "Modo de pantalla configurado a: Extender (Escritorio ampliado en monitores adicionales).", true
+
+	case "clone", "duplicate", "duplicar":
+		out, err := exec.CommandContext(ctx, "displayswitch.exe", "/clone").CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error conmutando a modo duplicado: %s", strings.TrimSpace(string(out))), false
+		}
+		return "Modo de pantalla configurado a: Duplicar (Misma imagen reflejada en todas las pantallas).", true
+
+	case "internal", "pc_only", "solo_pc":
+		out, err := exec.CommandContext(ctx, "displayswitch.exe", "/internal").CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error conmutando a solo pantalla de PC: %s", strings.TrimSpace(string(out))), false
+		}
+		return "Modo de pantalla configurado a: Solo pantalla de la PC (Monitores externos apagados).", true
+
+	case "external", "second_screen", "segunda_pantalla":
+		out, err := exec.CommandContext(ctx, "displayswitch.exe", "/external").CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error conmutando a solo segunda pantalla: %s", strings.TrimSpace(string(out))), false
+		}
+		return "Modo de pantalla configurado a: Solo segunda pantalla.", true
+
+	default:
+		return fmt.Sprintf("Modo de pantalla no reconocido: '%s'. Opciones: 'status', 'extend', 'clone', 'internal', 'external'.", action), false
+	}
+}
+
+// execOSProcessSentinel audita procesos de alto consumo de memoria o CPU y permite terminación limpia
+func execOSProcessSentinel(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Action    string `json:"action"`     // top_memory, top_cpu, kill
+		TopN      int    `json:"top_n"`      // Cantidad de procesos a devolver (default: 10)
+		ProcessID int    `json:"process_id"` // PID a finalizar si action == kill
+		Name      string `json:"name"`       // Nombre del proceso si action == kill
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	action := strings.ToLower(strings.TrimSpace(params.Action))
+	if action == "" {
+		if params.ProcessID > 0 || params.Name != "" {
+			action = "kill"
+		} else {
+			action = "top_memory"
+		}
+	}
+
+	topN := params.TopN
+	if topN <= 0 || topN > 30 {
+		topN = 10
+	}
+
+	switch action {
+	case "top_memory", "memory", "ram":
+		psCmd := fmt.Sprintf(`
+			$procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object WorkingSet64 -Descending | Select-Object -First %d
+			Write-Output "=== TOP %d PROCESOS CON MAYOR CONSUMO DE MEMORIA RAM ==="
+			foreach ($p in $procs) {
+				$mb = [Math]::Round($p.WorkingSet64 / 1MB, 1)
+				$cpuSec = [Math]::Round($p.CPU, 1)
+				Write-Output " - $($p.ProcessName) (PID $($p.Id)): $mb MB RAM | CPU acumulado: $cpuSec s"
+			}
+		`, topN, topN)
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando procesos por memoria: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "top_cpu", "cpu":
+		psCmd := fmt.Sprintf(`
+			$procs = Get-Process -ErrorAction SilentlyContinue | Sort-Object CPU -Descending | Select-Object -First %d
+			Write-Output "=== TOP %d PROCESOS CON MAYOR CONSUMO DE CPU ==="
+			foreach ($p in $procs) {
+				$mb = [Math]::Round($p.WorkingSet64 / 1MB, 1)
+				$cpuSec = [Math]::Round($p.CPU, 1)
+				Write-Output " - $($p.ProcessName) (PID $($p.Id)): $cpuSec s CPU | RAM: $mb MB"
+			}
+		`, topN, topN)
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error consultando procesos por CPU: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	case "kill", "terminate", "stop":
+		if params.ProcessID <= 0 && strings.TrimSpace(params.Name) == "" {
+			return "Debes indicar el PID ('process_id') o nombre del proceso ('name') a finalizar.", false
+		}
+
+		psCmd := ""
+		if params.ProcessID > 0 {
+			psCmd = fmt.Sprintf(`Stop-Process -Id %d -Force -ErrorAction Stop; Write-Output "Proceso con PID %d finalizado exitosamente."`, params.ProcessID, params.ProcessID)
+		} else {
+			escName := strings.ReplaceAll(params.Name, "'", "''")
+			psCmd = fmt.Sprintf(`Stop-Process -Name '%s' -Force -ErrorAction Stop; Write-Output "Proceso '%s' finalizado exitosamente."`, escName, escName)
+		}
+
+		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+		if err != nil {
+			return fmt.Sprintf("Error finalizando proceso: %s", strings.TrimSpace(string(out))), false
+		}
+		return strings.TrimSpace(string(out)), true
+
+	default:
+		return fmt.Sprintf("Acción desconocida: '%s'. Usa 'top_memory', 'top_cpu' o 'kill'.", action), false
+	}
+}
+
+// execOSSpeakText sintetiza texto en voz hablada directamente por los altavoces mediante Windows SAPI local
+func execOSSpeakText(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var params struct {
+		Text  string `json:"text"`
+		Voice string `json:"voice"` // ej: "Microsoft Helena Desktop"
+	}
+	_ = json.Unmarshal(tc.Input, &params)
+
+	text := strings.TrimSpace(params.Text)
+	if text == "" {
+		return "Debes indicar el texto a pronunciar ('text').", false
+	}
+
+	escText := strings.ReplaceAll(text, "'", "''")
+	voiceSelect := ""
+	if strings.TrimSpace(params.Voice) != "" {
+		escVoice := strings.ReplaceAll(strings.TrimSpace(params.Voice), "'", "''")
+		voiceSelect = fmt.Sprintf(`$synth.SelectVoice('%s');`, escVoice)
+	} else {
+		// Seleccionar automáticamente voz en español si está disponible
+		voiceSelect = `
+			$esVoice = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture -like 'es*' } | Select-Object -First 1
+			if ($esVoice) { $synth.SelectVoice($esVoice.VoiceInfo.Name) }
+		`
+	}
+
+	psCmd := fmt.Sprintf(`
+		Add-Type -AssemblyName System.Speech
+		$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+		%s
+		$synth.Speak('%s')
+		Write-Output "Texto pronunciado exitosamente vía Windows SAPI local."
+	`, voiceSelect, escText)
+
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
+	if err != nil {
+		return fmt.Sprintf("Error sintetizando voz hablada: %s", strings.TrimSpace(string(out))), false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+

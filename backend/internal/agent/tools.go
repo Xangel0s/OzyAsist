@@ -1444,6 +1444,78 @@ var AgentTools = []providers.ToolDef{
 			"required": ["text"]
 		}`),
 	},
+	{
+		Name:        "os_media_control",
+		Description: "Controla la reproducción multimedia global de Windows (Spotify, YouTube, VLC, navegador): pausar/reanudar ('play_pause'), siguiente pista ('next'), pista anterior ('previous') o detener ('stop').",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["play_pause", "next", "previous", "stop"],
+					"description": "Comando multimedia a ejecutar (default: 'play_pause')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_display_config",
+		Description: "Consulta o conmuta la configuración de pantallas y monitores externos en Windows: 'status' lista resoluciones y monitores conectados; 'extend' amplía el escritorio; 'clone' duplica la pantalla; 'internal' solo pantalla de la PC; 'external' solo segunda pantalla.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["status", "extend", "clone", "internal", "external"],
+					"description": "Modo de pantalla a configurar (default: 'status')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_process_sentinel",
+		Description: "Audita y administra procesos en Windows: 'top_memory' lista los procesos que consumen más memoria RAM; 'top_cpu' lista los de mayor carga de CPU; 'kill' finaliza un proceso rebelde por PID ('process_id') o nombre ('name').",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": ["top_memory", "top_cpu", "kill"],
+					"description": "Acción a realizar: 'top_memory', 'top_cpu' o 'kill' (default: 'top_memory')"
+				},
+				"top_n": {
+					"type": "integer",
+					"description": "Cantidad de procesos a mostrar (default: 10, máx: 30)"
+				},
+				"process_id": {
+					"type": "integer",
+					"description": "PID del proceso a finalizar (requerido para 'kill' si no se indica 'name')"
+				},
+				"name": {
+					"type": "string",
+					"description": "Nombre del ejecutable a finalizar (ej: 'notepad', 'chrome')"
+				}
+			}
+		}`),
+	},
+	{
+		Name:        "os_speak_text",
+		Description: "Sintetiza y pronuncia texto hablado en tiempo real a través de los altavoces de la máquina utilizando la voz en español local de Windows SAPI sin conexión externa ni Docker.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"text": {
+					"type": "string",
+					"description": "Texto a pronunciar por los altavoces"
+				},
+				"voice": {
+					"type": "string",
+					"description": "Voz local específica opcional (ej: 'Microsoft Helena Desktop')"
+				}
+			},
+			"required": ["text"]
+		}`),
+	},
 }
 
 // VoiceAgentTools es un subconjunto m\u00ednimo de herramientas para el Modo Voz.
@@ -1672,6 +1744,16 @@ var VoiceAgentTools = []providers.ToolDef{
 		Name:        "os_get_clipboard",
 		Description: "Obtiene el texto actual copiado en el portapapeles de Windows.",
 		InputSchema: mustJSON(`{"type":"object","properties":{}}`),
+	},
+	{
+		Name:        "os_media_control",
+		Description: "Control multimedia (play_pause, next, previous, stop) en Spotify/YouTube.",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string","enum":["play_pause","next","previous","stop"]}}}`),
+	},
+	{
+		Name:        "os_display_config",
+		Description: "Configura proyección de pantalla ('status', 'extend', 'clone', 'internal', 'external').",
+		InputSchema: mustJSON(`{"type":"object","properties":{"action":{"type":"string","enum":["status","extend","clone","internal","external"]}}}`),
 	},
 }
 
