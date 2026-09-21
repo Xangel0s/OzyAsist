@@ -44,13 +44,14 @@ func printUsage() {
 
 Comandos:
   ozy (o ozy run)         Inicia la TUI interactiva con streaming y control del SO
+  ozy voice               Inicia directamente la TUI en Modo Voz interactivo
   ozy exec "<orden>"      Ejecuta una orden de forma directa y autónoma (headless)
-  ozy voice               Modo consola de voz continua ("Hey Ozy")
   ozy daemon              Inicia el servicio en segundo plano (System Tray & Hotkeys)
   ozy serve               Inicia el servidor API HTTP/WebSocket tradicional
   ozy help                Muestra esta ayuda
 
 Ejemplos:
+  ozy voice
   ozy exec "ordena mis carpetas"
   ozy exec "muestra telemetría del sistema"
   ozy run
@@ -76,7 +77,10 @@ func main() {
 
 	switch cmd {
 	case "run", "tui":
-		runTUI(prov, chat)
+		runTUI(prov, chat, false)
+
+	case "voice", "-v", "--voice":
+		runTUI(prov, chat, true)
 
 	case "exec":
 		if len(args) < 2 {
@@ -85,9 +89,6 @@ func main() {
 		}
 		prompt := strings.Join(args[1:], " ")
 		runExec(prov, chat, prompt)
-
-	case "voice":
-		runVoiceConsole(prov, chat)
 
 	case "daemon":
 		runDaemon()
@@ -188,7 +189,7 @@ func initCore() (providers.Provider, *models.Chat) {
 	return prov, activeChat
 }
 
-func runTUI(prov providers.Provider, chat *models.Chat) {
+func runTUI(prov providers.Provider, chat *models.Chat, startInVoice bool) {
 	// Redirigir logs a ozy.log para evitar corromper la pantalla de Bubble Tea
 	logFile, err := os.OpenFile("ozy.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
@@ -199,7 +200,6 @@ func runTUI(prov providers.Provider, chat *models.Chat) {
 	}
 
 	cfg := voice.AutoDetectConfig()
-	voiceReady := cfg.HasSTT()
 
 	// Crear motor de escucha nativa de Wake Word unificado
 	voiceEngine := voice.NewNativeVoiceEngine(cfg, func(ctx context.Context, command string, onDelta func(string), onComplete func(string)) {
@@ -209,7 +209,9 @@ func runTUI(prov providers.Provider, chat *models.Chat) {
 		tui.SendVoiceStatus(voiceEngine.IsRunning(), desc)
 	}
 
-	m := tui.InitialModel(prov, chat, voiceReady)
+	voiceReady := voiceEngine.HasSTT()
+
+	m := tui.InitialModelWithVoice(prov, chat, voiceReady, startInVoice)
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	tui.SetProgram(p)
 
@@ -222,8 +224,8 @@ func runTUI(prov providers.Provider, chat *models.Chat) {
 	}
 	tui.SetVoiceController(adapter)
 
-	// Iniciar motor en paralelo únicamente si STT está listo
-	if voiceReady {
+	// Iniciar motor en paralelo únicamente si se solicitó Modo Voz explícito (ozy voice)
+	if startInVoice {
 		_ = voiceEngine.Start(engineCtx)
 	}
 	defer voiceEngine.Stop()
@@ -330,12 +332,7 @@ func runExec(prov providers.Provider, _ *models.Chat, prompt string) {
 	wg.Wait()
 }
 
-func runVoiceConsole(prov providers.Provider, chat *models.Chat) {
-	if err := tui.RunVoiceConsole(prov, chat); err != nil {
-		fmt.Printf("[ERROR] Error ejecutando consola de voz: %v\n", err)
-		os.Exit(1)
-	}
-}
+
 
 func runDaemon() {
 	fmt.Println("Iniciando OzyAssist en modo Daemon...")

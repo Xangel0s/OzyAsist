@@ -67,6 +67,14 @@ func (m Model) renderSidebar(width, height int) string {
 	sb.WriteString(" " + titleStyle.Render("◈ CONTEXTO & TELEMETRÍA") + "\n")
 	sb.WriteString(" " + dimStyle.Render("[Ctrl+B] Colapsar") + "\n\n")
 
+	// 0. Voice Panel (if enabled)
+	if m.voiceEnabled {
+		voiceView := renderVoiceCard(m.voiceState, m.voiceWaveFrame, m.activeUtterance, innerWidth)
+		if voiceView != "" {
+			sb.WriteString(voiceView + "\n\n")
+		}
+	}
+
 	// 1. Telemetría de Tokens y Context Window
 	usedTokens := m.estimateTokens()
 	maxTokens := m.getModelContextLimit()

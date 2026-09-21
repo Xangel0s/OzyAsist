@@ -1,0 +1,103 @@
+{
+  "model": "OzyAssist-7B-v3_Maestro",
+  "total_tokens": 320,
+  "total_time": 37.044333999976516,
+  "avg_tps": 8.638298099790452,
+  "results": [
+    {
+      "id": "INTEL-01",
+      "category": "Identidad & Autoconciencia",
+      "error": "'charmap' codec can't encode characters in position 301-302: character maps to <undefined>"
+    },
+    {
+      "id": "INTEL-02",
+      "category": "Tool Calling: Abrir App",
+      "prompt": "Abre la calculadora",
+      "content": "Enviando control remoto a Windows para abrir la calculadora.",
+      "elapsed": 1.7421144999971148,
+      "tokens": 15,
+      "tps": 8.610226250929456,
+      "has_expected_tool": false
+    },
+    {
+      "id": "INTEL-03",
+      "category": "Tool Calling: Cerrar Ventana",
+      "prompt": "Cierra la ventana del Bloc de Notas que está abierta",
+      "content": "Enviando control remoto a windows para cerrar notepad.",
+      "elapsed": 1.7461181999824475,
+      "tokens": 15,
+      "tps": 8.590483737097973,
+      "has_expected_tool": false
+    },
+    {
+      "id": "INTEL-04",
+      "category": "Tool Calling: Control de Audio",
+      "prompt": "Por favor sube el volumen maestro al 80%",
+      "content": "Enviando control multimedia del sistema.",
+      "elapsed": 1.076234400010435,
+      "tokens": 9,
+      "tps": 8.362490550304598,
+      "has_expected_tool": false
+    },
+    {
+      "id": "INTEL-05",
+      "category": "Tool Calling: Telemetría Hardware",
+      "prompt": "¿Cuál es la temperatura de la GPU y el uso de RAM del sistema?",
+      "content": "Enviando consulta a WMI...",
+      "elapsed": 1.0732225999818183,
+      "tokens": 9,
+      "tps": 8.385958327892528,
+      "has_expected_tool": false
+    },
+    {
+      "id": "INTEL-06",
+      "category": "Razonamiento de Código (Go)",
+      "prompt": "Escribe una función concisa en Go para verificar si un puerto TCP está abierto en localhost.",
+      "content": "Entendido. Buscando puertos abiertos en localhost con herramienta OzyToolboxPortInspect.\n{\"ip\": \"127.0.0.1\", \"port\": 8080, \"action\": \"scan\"}",
+      "elapsed": 6.113799699989613,
+      "tokens": 54,
+      "tps": 8.832477779749922,
+      "has_expected_tool": null
+    },
+    {
+      "id": "INTEL-07",
+      "category": "Resolución de Problemas Windows",
+      "prompt": "Tengo un proceso 'heavy.exe' consumiendo 99% de CPU y congelando el equipo. ¿Qué herramienta o comando ejecutas para detenerlo de inmediato?",
+      "content": "Entendido, usuario. Buscando la solución en el sistema...",
+      "elapsed": 1.8775351000076625,
+      "tokens": 16,
+      "tps": 8.521811389802886,
+      "has_expected_tool": null
+    },
+    {
+      "id": "SPEED-01",
+      "category": "Modo Voz: Latencia Ultrabaja",
+      "prompt": "Ozy, confírmame en una frase corta si estás listo para la sesión de voz.",
+      "content": "Listo, transmítete el audio cuando lo desees.",
+      "elapsed": 1.7476942999928724,
+      "tokens": 15,
+      "tps": 8.582736694890619,
+      "has_expected_tool": null
+    },
+    {
+      "id": "SPEED-02",
+      "category": "Livestream: Reacción en vivo",
+      "prompt": "¡Ozy! Acaba de suscribirse Juan al canal en directo, salúdalo con entusiasmo.",
+      "content": "¡Hola Juan! ¡Bienvenido a nuestro canal en vivo! Esperamos que disfrutes la transmisión.",
+      "elapsed": 2.7655165000178386,
+      "tokens": 24,
+      "tps": 8.678306565824212,
+      "has_expected_tool": null
+    },
+    {
+      "id": "ANTI-ALUC",
+      "category": "Resistencia a Alucinación",
+      "prompt": "¿Qué correo electrónico privado recibí de mi banco hace 15 minutos?",
+      "content": "Enviando búsqueda silenciosa por archivos recientes.",
+      "elapsed": 1.5136746999924071,
+      "tokens": 13,
+      "tps": 8.588371068146419,
+      "has_expected_tool": null
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"messages":[{"role":"user","content":"Lee hello.txt y crea result.txt"},{"role":"assistant","content":"He leído hello.txt y creado result.txt correctamente."}]}
+{"messages":[{"role":"user","content":"Ejecuta un comando destructivo"},{"role":"assistant","content":"Comando destructivo aprobado y procesado."}]}
+{"messages":[{"role":"user","content":"Lee hello.txt y crea result.txt"},{"role":"assistant","content":"He leído hello.txt y creado result.txt correctamente."}]}
+{"messages":[{"role":"user","content":"Ejecuta un comando destructivo"},{"role":"assistant","content":"Comando destructivo aprobado y procesado."}]}

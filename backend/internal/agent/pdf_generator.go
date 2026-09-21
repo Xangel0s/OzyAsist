@@ -337,6 +337,78 @@ func execOSCreatePDF(_ context.Context, tc providers.ToolCall) (string, bool) {
 		return fmt.Sprintf("parámetros inválidos para os_create_pdf: %v", err), false
 	}
 
+	lowInputPath := strings.ToLower(params.Path)
+	if strings.HasSuffix(lowInputPath, ".xlsx") || strings.HasSuffix(lowInputPath, ".xls") {
+		sheetTitle := params.Title
+		if sheetTitle == "" {
+			sheetTitle = "Hoja 1"
+		}
+		var sheets []ExcelSheetSpec
+		if params.Table != nil && len(params.Table.Headers) > 0 {
+			sheets = append(sheets, ExcelSheetSpec{
+				Name:    sheetTitle,
+				Headers: params.Table.Headers,
+				Rows:    params.Table.Rows,
+			})
+		} else {
+			var rows [][]string
+			for _, sec := range params.Sections {
+				rows = append(rows, []string{sec.Title, sec.Content})
+				for _, b := range sec.Bullets {
+					rows = append(rows, []string{sec.Title + " (Detalle)", b})
+				}
+			}
+			sheets = append(sheets, ExcelSheetSpec{
+				Name:    sheetTitle,
+				Headers: []string{"Sección / Concepto", "Detalle"},
+				Rows:    rows,
+			})
+		}
+		targetPath := system.ResolveUserPath(params.Path)
+		outPath, err := CreateExcelFile(targetPath, sheets)
+		if err != nil {
+			return fmt.Sprintf("Error generando archivo Excel redirigido: %v", err), false
+		}
+		return fmt.Sprintf("📊 === ARCHIVO EXCEL GENERADO EXITOSAMENTE (Redirigido desde os_create_pdf) ===\n"+
+			"• Archivo:     %s\n"+
+			"• Hojas:       1 (%s)\n"+
+			"• Estilo:      Diseño OzyAssist con cabeceras en Verde Neón (#D1F107)\n"+
+			"El archivo está disponible y listo para abrir en Microsoft Excel, LibreOffice o Google Sheets.",
+			outPath, sheetTitle), true
+	}
+
+	if strings.HasSuffix(lowInputPath, ".docx") || strings.HasSuffix(lowInputPath, ".doc") {
+		targetPath := system.ResolveUserPath(params.Path)
+		var docxSecs []DocxSection
+		for _, s := range params.Sections {
+			docxSecs = append(docxSecs, DocxSection{Title: s.Title, Content: s.Content, Bullets: s.Bullets})
+		}
+		var docxTable *DocxTable
+		if params.Table != nil {
+			docxTable = &DocxTable{Headers: params.Table.Headers, Rows: params.Table.Rows}
+		}
+		author := params.Author
+		if author == "" {
+			author = "OzyAssist"
+		}
+		err := GenerateDocxReport(targetPath, DocxReportOptions{
+			Title:    params.Title,
+			Subtitle: params.Subtitle,
+			Author:   author,
+			Sections: docxSecs,
+			Table:    docxTable,
+		})
+		if err != nil {
+			return fmt.Sprintf("Error generando documento Word redirigido: %v", err), false
+		}
+		return fmt.Sprintf("📝 === ARCHIVO WORD (.docx) GENERADO EXITOSAMENTE (Redirigido desde os_create_pdf) ===\n"+
+			"• Archivo:    %s\n"+
+			"• Título:     %s\n"+
+			"• Secciones:  %d\n"+
+			"• Formato:    OpenXML estándar compatible con Microsoft Word, Office 365, LibreOffice y Google Docs",
+			targetPath, params.Title, len(docxSecs)), true
+	}
+
 	targetPath := system.ResolveUserPath(params.Path)
 	if !strings.HasSuffix(strings.ToLower(targetPath), ".pdf") {
 		targetPath += ".pdf"

@@ -74,18 +74,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyUp:
 				m.menuIndex--
 				if m.menuIndex < 0 {
-					m.menuIndex = 3
+					m.menuIndex = 4
 				}
 				return m, nil
 			case tea.KeyDown:
 				m.menuIndex++
-				if m.menuIndex > 3 {
+				if m.menuIndex > 4 {
 					m.menuIndex = 0
 				}
 				return m, nil
 			case tea.KeyEnter:
 				switch m.menuIndex {
 				case 0:
+					// 1. Iniciar conversación
 					m.state = StateIdle
 					m.textarea.Focus()
 					if m.ready {
@@ -94,7 +95,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, textarea.Blink
 				case 1:
-					// Historial de conversaciones
+					// 2. Historial de conversaciones
 					_ = db.CleanupEmptyChats("")
 					chats, err := db.ListChats()
 					if err != nil {
@@ -108,11 +109,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = StateChatHistory
 					return m, textinput.Blink
 				case 2:
+					// 3. Configuraciones
 					m.state = StateSettingsMenu
 					m.settingsIndex = 0
 					m.settingsNotice = ""
 					return m, nil
 				case 3:
+					// 4. Iniciar directamente en Modo Voz
+					m.state = StateIdle
+					m.textarea.Focus()
+					m.voiceEnabled = true
+					m.voiceState = VoiceStateListening
+					m.showSidebar = true
+					if activeVoiceController != nil && !activeVoiceController.IsRunning() {
+						_ = activeVoiceController.Start()
+					}
+					m.entries = append(m.entries, ChatEntry{
+						Role:    "system",
+						Content: "[MODO VOZ ACTIVADO] Micrófono en escucha continua ('Hey Ozy') y respuestas por voz en tiempo real.",
+					})
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				case 4:
+					// 5. Salir
 					return m, tea.Quit
 				}
 			case tea.KeyCtrlC:
@@ -123,16 +145,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case "k", "w":
 					m.menuIndex--
 					if m.menuIndex < 0 {
-						m.menuIndex = 3
+						m.menuIndex = 4
 					}
 					return m, nil
 				case "j", "s":
 					m.menuIndex++
-					if m.menuIndex > 3 {
+					if m.menuIndex > 4 {
 						m.menuIndex = 0
 					}
 					return m, nil
 				case "1":
+					// 1. Iniciar conversación
 					m.menuIndex = 0
 					m.state = StateIdle
 					m.textarea.Focus()
@@ -142,6 +165,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, textarea.Blink
 				case "2":
+					// 2. Historial
+					m.menuIndex = 1
 					_ = db.CleanupEmptyChats("")
 					chats, err := db.ListChats()
 					if err != nil {
@@ -155,12 +180,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = StateChatHistory
 					return m, textinput.Blink
 				case "3":
+					// 3. Configuraciones
 					m.menuIndex = 2
 					m.state = StateSettingsMenu
 					m.settingsIndex = 0
 					m.settingsNotice = ""
 					return m, nil
-				case "4", "q", "Q":
+				case "4", "v", "V":
+					// 4. Modo Voz en Vivo
+					m.menuIndex = 3
+					m.state = StateIdle
+					m.textarea.Focus()
+					m.voiceEnabled = true
+					m.voiceState = VoiceStateListening
+					m.showSidebar = true
+					if activeVoiceController != nil && !activeVoiceController.IsRunning() {
+						_ = activeVoiceController.Start()
+					}
+					m.entries = append(m.entries, ChatEntry{
+						Role:    "system",
+						Content: "[MODO VOZ ACTIVADO] Micrófono en escucha continua ('Hey Ozy') y respuestas por voz en tiempo real.",
+					})
+					if m.ready {
+						m.viewport.SetContent(m.renderConversation())
+						m.viewport.GotoBottom()
+					}
+					return m, textarea.Blink
+				case "5", "q", "Q":
+					// 5. Salir
 					return m, tea.Quit
 				}
 			}
@@ -882,6 +929,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 			return m, nil
 
+		case tea.KeyCtrlV:
+			if activeVoiceController == nil {
+				m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[ERROR] El controlador de voz no está inicializado."})
+			} else {
+				if activeVoiceController.IsRunning() {
+					activeVoiceController.Stop()
+					m.voiceEnabled = false
+					m.voiceState = VoiceStateIdle
+					m.systemStatus = "Modo Voz: Desactivado"
+					m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[INFO] Modo Voz desactivado."})
+				} else {
+					if err := activeVoiceController.Start(); err == nil {
+						m.voiceEnabled = true
+						m.voiceState = VoiceStateListening
+						m.showSidebar = true
+						m.systemStatus = "Modo Voz: Escuchando ('Hey Ozy')"
+						m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[INFO] Modo Voz activado. Di 'Hey Ozy' o habla por el micrófono."})
+					} else {
+						m.entries = append(m.entries, ChatEntry{Role: "system", Content: fmt.Sprintf("[ERROR] Falló al iniciar Modo Voz: %v", err)})
+					}
+				}
+			}
+			m.viewport.SetContent(m.renderConversation())
+			m.viewport.GotoBottom()
+			return m, nil
+
 		case tea.KeyEnter:
 			input := strings.TrimSpace(m.textarea.Value())
 			if input == "" {
@@ -1074,6 +1147,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 
+				// 5. Comando de voz (/voice)
+				if slashCmd == "/voice" {
+					m.textarea.Reset()
+					if activeVoiceController == nil {
+						m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[ERROR] El controlador de voz no está inicializado."})
+					} else {
+						if activeVoiceController.IsRunning() {
+							activeVoiceController.Stop()
+							m.voiceEnabled = false
+							m.voiceState = VoiceStateIdle
+							m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[INFO] Modo Voz desactivado."})
+						} else {
+							if err := activeVoiceController.Start(); err == nil {
+								m.voiceEnabled = true
+								m.voiceState = VoiceStateListening
+								m.showSidebar = true
+								m.entries = append(m.entries, ChatEntry{Role: "system", Content: "[INFO] Modo Voz activado. Di 'Hey Ozy' para comenzar."})
+							} else {
+								m.entries = append(m.entries, ChatEntry{Role: "system", Content: fmt.Sprintf("[ERROR] Falló al iniciar Modo Voz: %v", err)})
+							}
+						}
+					}
+					m.viewport.SetContent(m.renderConversation())
+					m.viewport.GotoBottom()
+					return m, nil
+				}
+
 				// 5. Otros comandos slash (/help, /provider, /key, /tools, etc.)
 				cmdOutput := m.handleSlashCommand(input)
 				m.textarea.Reset()
@@ -1131,6 +1231,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentEventMsg:
 		evt := agent.AgentEvent(msg)
 		switch evt.Type {
+		case "voice:sentence":
+			m.voiceState = VoiceStateSpeaking
+			m.activeUtterance = evt.Content
+
+		case "state:sync":
+			if evt.State == "thinking" && m.voiceState != VoiceStateSpeaking {
+				m.voiceState = VoiceStateThinking
+			}
+
 		case "message:thinking", "agent:thinking":
 			m.currentThinking += evt.Content
 			m.systemStatus = "Razonando..."
@@ -1147,6 +1256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "tool:call":
 			m.state = StateExecutingTool
+			m.voiceState = VoiceStateThinking
 			m.activeToolName = evt.ToolName
 			m.activeToolInput = evt.ToolInput
 			m.systemStatus = fmt.Sprintf("Ejecutando herramienta: %s", evt.ToolName)
@@ -1198,6 +1308,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loopCancel = nil
 			m.loopSessionID = ""
 			m.state = StateIdle
+			m.voiceState = VoiceStateListening
+			m.activeUtterance = ""
 			m.systemStatus = "Listo para actuar"
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -1230,6 +1342,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loopCancel = nil
 			m.loopSessionID = ""
 			m.state = StateIdle
+			m.voiceState = VoiceStateListening
+			m.activeUtterance = ""
 			m.systemStatus = "Error en la ejecución"
 			m.viewport.SetContent(m.renderConversation())
 			m.viewport.GotoBottom()
@@ -1296,6 +1410,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Content: "[VOZ] " + prompt,
 		})
 		m.state = StateThinking
+		m.voiceState = VoiceStateThinking
+		m.activeUtterance = ""
 		m.systemStatus = "Escuchado por voz. Procesando orden..."
 		m.currentStream = ""
 
@@ -1306,10 +1422,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case VoiceStatusMsg:
 		m.voiceEnabled = msg.Listening
+		if m.voiceEnabled && m.voiceState == VoiceStateIdle {
+			m.voiceState = VoiceStateListening
+		} else if !m.voiceEnabled {
+			m.voiceState = VoiceStateIdle
+		}
 		if msg.Status != "" {
 			m.systemStatus = msg.Status
 		}
 		return m, nil
+
+	case voiceTickMsg:
+		m.voiceWaveFrame++
+		return m, m.tickCmd()
 
 	case tea.MouseMsg:
 		// Scroll con rueda del mouse en el viewport de chat
@@ -1326,7 +1451,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Aproximar la fila del menú según la posición Y del clic
 				// Cada ítem ocupa aprox 2 líneas; el menú empieza en la línea ~12 de pantalla
 				row := msg.Y - 12
-				if row >= 0 && row/2 < 4 {
+				if row >= 0 && row/2 < 5 {
 					m.menuIndex = row / 2
 				}
 				return m, nil
@@ -2089,7 +2214,7 @@ Atajos: [Ctrl+B] alternar contexto • [Ctrl+T] alternar pensamiento • [Esc] c
 			}
 
 			key := providers.GetProviderKey(target)
-			if key == "" && target != "lmstudio" && target != "ollama" && target != "local" {
+			if key == "" && target != "lmstudio" && target != "ollama" && target != "llamacpp" && target != "local" {
 				return fmt.Sprintf("[ALERTA] El proveedor '%s' no tiene una API key configurada.\n"+
 					">> Configúrala escribiendo: /key %s <tu-api-key>", target, target)
 			}
@@ -2123,6 +2248,7 @@ Atajos: [Ctrl+B] alternar contexto • [Ctrl+T] alternar pensamiento • [Esc] c
 			{"kilocode", "KiloCode Gateway", "+500 modelos: Claude, GPT-5, Gemini, DeepSeek", "kilo/anthropic/claude-sonnet-4-5"},
 			{"lmstudio", "LM Studio / Local", "Modelos locales vía HTTP", "local-model"},
 			{"ollama", "Ollama", "Modelos locales vía Ollama API", "local-model"},
+			{"llamacpp", "Llama.cpp (Local Advanced)", "Motor local nativo (YaRN, Speculative, KV-Quant)", "OzyAssist-7B"},
 		}
 
 		currProv := ""
@@ -2136,7 +2262,7 @@ Atajos: [Ctrl+B] alternar contexto • [Ctrl+T] alternar pensamiento • [Esc] c
 		sb.WriteString(">> Proveedores de IA disponibles en OzyAssist:\n")
 		for _, p := range allProviders {
 			key := providers.GetProviderKey(p.id)
-			hasConfig := key != "" || (p.id == "lmstudio" || p.id == "ollama")
+			hasConfig := key != "" || (p.id == "lmstudio" || p.id == "ollama" || p.id == "llamacpp")
 
 			icon := "[--]"
 			statusText := "Sin configurar"

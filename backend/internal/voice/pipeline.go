@@ -20,6 +20,20 @@ type Config struct {
 	OpenAIAPIKey   string // API Key de OpenAI para Whisper-1 fallback
 }
 
+func hasLocalSTT() bool {
+	candidates := []string{
+		filepath.Join("training", "venv", "Scripts", "python.exe"),
+		filepath.Join("..", "training", "venv", "Scripts", "python.exe"),
+		filepath.Join("..", "..", "training", "venv", "Scripts", "python.exe"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 // HasSTT indica si hay algún motor de transcripción configurado
 func (c Config) HasSTT() bool {
 	return c.GroqAPIKey != "" || c.OpenAIAPIKey != "" || c.WhisperBinary != "" || os.Getenv("GROQ_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != ""
@@ -193,6 +207,14 @@ func (ap *AudioPipeline) TranscribeAudio(ctx context.Context, wavData []byte) (s
 		}
 
 		return strings.TrimSpace(string(out)), nil
+	}
+
+	// 4. Fallback a Python Whisper local en training/venv
+	if hasLocalSTT() {
+		text, err := TranscribeLocal(ctx, wavData)
+		if err == nil && text != "" {
+			return text, nil
+		}
 	}
 
 	return "", fmt.Errorf("no hay motor de transcripción (STT) configurado: configure GROQ_API_KEY o OPENAI_API_KEY con /key groq <key>")

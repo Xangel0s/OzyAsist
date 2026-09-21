@@ -61,3 +61,42 @@ func TestCreateExcel_AndReadBack(t *testing.T) {
 		t.Errorf("El contenido debería contener 'Gastos' y 'Servidores Cloud', obtuve:\n%s", content)
 	}
 }
+
+func TestCreateExcel_FormulasAndMultiSheet(t *testing.T) {
+	tempDir := t.TempDir()
+	excelFile := filepath.Join(tempDir, "finanzas_2026.xlsx")
+
+	sheets := []ExcelSheetSpec{
+		{
+			Name:    "Ingresos",
+			Headers: []string{"Mes", "Monto"},
+			Rows: [][]string{
+				{"Enero", "10000"},
+				{"Febrero", "12500"},
+				{"Total", "=SUM(B2:B3)"},
+			},
+		},
+		{
+			Name:    "Métricas",
+			Headers: []string{"Indicador", "Valor"},
+			Rows: [][]string{
+				{"Promedio", "=AVERAGE(B2:B3)"},
+			},
+		},
+	}
+
+	createdPath, err := CreateExcelFile(excelFile, sheets)
+	if err != nil {
+		t.Fatalf("CreateExcelFile con fórmulas falló: %v", err)
+	}
+
+	// Extraer y validar contenido
+	docRes, err := ExtractTextFromDocument(createdPath, 4000)
+	if err != nil {
+		t.Fatalf("ExtractTextFromDocument falló: %v", err)
+	}
+
+	if !strings.Contains(docRes.Content, "Ingresos") || !strings.Contains(docRes.Content, "Métricas") {
+		t.Errorf("Esperaba ambas pestañas, obtuve: %s", docRes.Content)
+	}
+}

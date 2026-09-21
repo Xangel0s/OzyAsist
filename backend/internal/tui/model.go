@@ -56,6 +56,15 @@ type ChatEntry struct {
 	Card        *InteractiveCard // Tarjeta interactiva de decisión/pregunta
 }
 
+type VoiceConsoleState int
+
+const (
+	VoiceStateIdle VoiceConsoleState = iota
+	VoiceStateListening
+	VoiceStateThinking
+	VoiceStateSpeaking
+)
+
 // Custom Bubble Tea Messages
 type agentEventMsg agent.AgentEvent
 type loopStartedMsg struct {
@@ -64,6 +73,7 @@ type loopStartedMsg struct {
 }
 type loopFinishedMsg struct{}
 type errMsg struct{ err error }
+type voiceTickMsg time.Time
 
 // VoiceCommandMsg transporta una orden reconocida por voz a la TUI
 type VoiceCommandMsg struct {
@@ -125,6 +135,9 @@ type Model struct {
 	chat            *models.Chat
 	permissionLevel string
 	voiceEnabled    bool
+	voiceState      VoiceConsoleState
+	voiceWaveFrame  int
+	activeUtterance string
 	systemStatus    string
 
 	width           int
@@ -222,6 +235,23 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	return m
 }
 
+// InitialModelWithVoice crea el modelo TUI con opción de iniciar directamente en Modo Voz
+func InitialModelWithVoice(prov providers.Provider, chat *models.Chat, voiceActive bool, startInVoice bool) Model {
+	m := InitialModel(prov, chat, voiceActive)
+	if startInVoice {
+		m.state = StateIdle
+		m.voiceEnabled = true
+		m.voiceState = VoiceStateListening
+		m.showSidebar = true
+		m.systemStatus = "Modo Voz: Escuchando ('Hey Ozy')"
+		m.entries = append(m.entries, ChatEntry{
+			Role:    "system",
+			Content: "[MODO VOZ ACTIVADO] Micrófono en escucha continua ('Hey Ozy') y respuestas por voz en tiempo real.",
+		})
+	}
+	return m
+}
+
 func (m Model) isWelcomeState() bool {
 	return false
 }
@@ -235,7 +265,14 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textarea.Blink,
 		m.spinner.Tick,
+		m.tickCmd(),
 	)
+}
+
+func (m Model) tickCmd() tea.Cmd {
+	return tea.Tick(90*time.Millisecond, func(t time.Time) tea.Msg {
+		return voiceTickMsg(t)
+	})
 }
 
 // EnqueuePrompt añade un prompt a la cola de espera y retorna la nueva longitud.

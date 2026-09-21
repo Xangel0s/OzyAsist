@@ -754,15 +754,15 @@ func (m Model) renderFooter() string {
 	} else if m.activeCard != nil {
 		hintsText = " [↑ / ↓] Elegir opción  •  [Enter] Confirmar  •  [Esc] Escribir texto libre  •  [/help] Comandos"
 	} else {
-		hintsText = " [Enter] Enviar  •  [/menu | Esc] Menú  •  [Ctrl+B] Contexto  •  [Ctrl+T] Hilo Ejec.  •  [/help] Ayuda"
+		hintsText = " [Enter] Enviar  •  [Ctrl+V] Voz  •  [Ctrl+B] Contexto  •  [/menu | Esc] Menú  •  [/help] Ayuda"
 		if m.width > 0 && m.width < 95 {
-			hintsText = " [Enter] Enviar  •  [Ctrl+B] Contexto  •  [Esc] Menú  •  [/help] Ayuda"
+			hintsText = " [Enter] Enviar  •  [Ctrl+V] Voz  •  [Esc] Menú  •  [/help] Ayuda"
 		}
 	}
 
 	// Indicador discreto de voz si está activa
 	if m.voiceEnabled {
-		hintsText += "  •  voz: on"
+		hintsText += "  •  voz: on ('Hey Ozy')"
 	}
 
 	hints := MutedStyle.Render(hintsText)
@@ -944,7 +944,8 @@ func (m Model) renderStartMenuView() string {
 		{"1", "INICIAR CONVERSACION", "Abre la terminal de chat interactivo y control agéntico del sistema"},
 		{"2", "HISTORIAL DE CONVERSACIONES", "Retomar o eliminar sesiones previas guardadas en SQLite"},
 		{"3", "CONFIGURACIONES", "Ajusta proveedor LLM, permisos de seguridad, voz y diagnósticos"},
-		{"4", "SALIR", "Cierra la sesión y apaga el asistente de consola"},
+		{"4", "MODO VOZ EN VIVO", "Activa la consola interactiva con escucha ('Hey Ozy') y respuestas por voz"},
+		{"5", "SALIR", "Cierra la sesión y apaga el asistente de consola"},
 	}
 
 	var menuSb strings.Builder

@@ -98,8 +98,16 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 			return &AppLaunchInfo{Command: candidate}, nil
 		}
 
-	case "explorer", "explorador", "explorador de archivos", "archivos", "mis documentos":
+	case "explorer", "explorador", "explorador de archivos", "archivos":
 		return &AppLaunchInfo{Command: "explorer.exe"}, nil
+
+	case "documents", "documentos", "mis documentos":
+		docsDir := filepath.Join(userProfile, "Documents")
+		return &AppLaunchInfo{Command: docsDir}, nil
+
+	case "downloads", "descargas", "mis descargas":
+		downDir := filepath.Join(userProfile, "Downloads")
+		return &AppLaunchInfo{Command: downDir}, nil
 
 	case "chrome", "google chrome", "navegador":
 		candidates := []string{

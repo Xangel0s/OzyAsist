@@ -29,10 +29,13 @@ backend/internal/api/dist/assets/
 *.onnx
 training/*.gguf
 training/venv/
-training/outputs/
+training/outputs*/
 training/exports/
-training/unsloth_compiled_cache/
-training/_unsloth_sentencepiece_temp/
+**/unsloth_compiled_cache/
+**/_unsloth_sentencepiece_temp/
+*.wav
+*.raw
+backend/.pdf
 
 # Runtime data
 data/qdrant/

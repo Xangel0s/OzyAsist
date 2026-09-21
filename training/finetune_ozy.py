@@ -44,7 +44,12 @@ def formatting_prompts_func(examples):
     texts = [tokenizer.apply_chat_template(convo, tokenize = False, add_generation_prompt = False) for convo in convos]
     return { "text" : texts }
 
-dataset = load_dataset("json", data_files="dataset/ozy_dataset_v2.jsonl", split="train", download_mode="force_redownload")
+script_dir = os.path.dirname(os.path.abspath(__file__))
+dataset_path = os.path.join(script_dir, "dataset", "ozy_dataset_v3.jsonl")
+output_lora = os.path.join(script_dir, "exports", "lora_model_v3")
+output_dir = os.path.join(script_dir, "outputs")
+
+dataset = load_dataset("json", data_files=dataset_path, split="train", download_mode="force_redownload")
 dataset = dataset.map(formatting_prompts_func, batched = True)
 
 trainer = SFTTrainer(
@@ -58,7 +63,7 @@ trainer = SFTTrainer(
         per_device_train_batch_size = 1,
         gradient_accumulation_steps = 8,
         warmup_steps = 5,
-        max_steps = 60, # Corto para pruebas, subir a 500+ para el real
+        max_steps = 100, # ~3 épocas completas para el dataset v3
         learning_rate = 2e-4,
         fp16 = not is_bfloat16_supported(),
         bf16 = is_bfloat16_supported(),
@@ -67,7 +72,7 @@ trainer = SFTTrainer(
         weight_decay = 0.01,
         lr_scheduler_type = "linear",
         seed = 3407,
-        output_dir = "outputs",
+        output_dir = output_dir,
     ),
 )
 
@@ -76,10 +81,10 @@ print("Iniciando Fine-Tuning de OzyAssist...")
 trainer_stats = trainer.train()
 
 # Guardar el modelo localmente en formato LoRA
-model.save_pretrained("exports/lora_model")
-tokenizer.save_pretrained("exports/lora_model")
+model.save_pretrained(output_lora)
+tokenizer.save_pretrained(output_lora)
 
-print("Fine-tuning completado y guardado en exports/lora_model")
+print(f"Fine-tuning completado y guardado en {output_lora}")
 
 # NOTA: Para convertir a GGUF usar unsloth (opcional, requiere llama.cpp)
 # model.save_pretrained_gguf("exports/OzyAssist-7B-Agent", tokenizer, quantization_method = "q4_k_m")
