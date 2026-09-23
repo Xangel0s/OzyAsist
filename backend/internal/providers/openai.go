@@ -108,10 +108,7 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	}
 
 	// Tool calling — OpenAI usa "tools" con "function.parameters" (JSON Schema)
-	// Para servidores locales (llama-server/Ollama con modelos OzyAssist fine-tuned),
-	// las herramientas ya están optimizadas en el System Prompt Few-Shot para evitar
-	// que el servidor local inyecte gramáticas o plantillas incompatibles.
-	if len(opts.Tools) > 0 && !isLocalServer {
+	if len(opts.Tools) > 0 {
 		body["tools"] = toOpenAITools(opts.Tools)
 		body["tool_choice"] = "auto"
 	}

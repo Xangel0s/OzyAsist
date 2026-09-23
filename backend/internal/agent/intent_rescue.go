@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -71,6 +72,12 @@ func checkPendingTaskRequirements(userMessage string, executedCalls []providers.
 // a pesar de que el usuario emitió una orden explícita y directa de acción en el sistema.
 func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 	u := strings.TrimSpace(strings.ToLower(userMessage))
+	cleanU := u
+	for _, p := range []string{"hola ozy ", "hola ", "por favor ", "porfa ", "oye ozy ", "oye ", "buenas tardes ", "buenos dias ", "buenas "} {
+		if strings.HasPrefix(cleanU, p) {
+			cleanU = strings.TrimSpace(cleanU[len(p):])
+		}
+	}
 
 	// No interceptar preguntas informativas o conceptuales salvo que indaguen hardware o estado del sistema
 	isSystemInquiry := strings.Contains(u, "usb") || strings.Contains(u, "wifi") || strings.Contains(u, "wi-fi") ||
@@ -150,23 +157,24 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 		{"calculadora", "calc"}, {"calc", "calc"}, {"bloc de notas", "notepad"}, {"notepad", "notepad"},
 		{"antigravity ide", "antigravity"}, {"antigravity", "antigravity"}, {"administrador de tareas", "taskmgr"},
 		{"taskmgr", "taskmgr"}, {"explorador de archivos", "explorer"}, {"explorador", "explorer"},
-		{"spotify", "spotify"}, {"paint", "mspaint"}, {"terminal", "wt"}, {"documentos", "documents"}, {"descargas", "downloads"},
+		{"spotify", "spotify"}, {"paint", "mspaint"}, {"terminal", "wt"}, {"roblox", "roblox"},
+		{"documentos", "documents"}, {"descargas", "downloads"},
 	}
 
 	var calls []providers.ToolCall
 	seenTargets := make(map[string]bool)
 
 	// 1. Detectar intención de apertura explícita (abre, abrir, inicia, iniciar, ejecuta, ejecutar, lanza, lanzar)
-	isOpenIntent := strings.HasPrefix(u, "abre ") || strings.HasPrefix(u, "abrir ") ||
-		strings.HasPrefix(u, "inicia ") || strings.HasPrefix(u, "iniciar ") ||
-		strings.HasPrefix(u, "ejecuta ") || strings.HasPrefix(u, "ejecutar ") ||
-		strings.HasPrefix(u, "lanza ") || strings.HasPrefix(u, "lanzar ") ||
-		u == "ábrelo" || u == "abrelo" || u == "ábrela" || u == "abrela" || u == "abrirlo" ||
-		strings.HasPrefix(u, "ábrelo") || strings.HasPrefix(u, "abrelo")
+	isOpenIntent := strings.HasPrefix(cleanU, "abre ") || strings.HasPrefix(cleanU, "abrir ") ||
+		strings.HasPrefix(cleanU, "inicia ") || strings.HasPrefix(cleanU, "iniciar ") ||
+		strings.HasPrefix(cleanU, "ejecuta ") || strings.HasPrefix(cleanU, "ejecutar ") ||
+		strings.HasPrefix(cleanU, "lanza ") || strings.HasPrefix(cleanU, "lanzar ") ||
+		cleanU == "ábrelo" || cleanU == "abrelo" || cleanU == "ábrela" || cleanU == "abrela" || cleanU == "abrirlo" ||
+		strings.HasPrefix(cleanU, "ábrelo") || strings.HasPrefix(cleanU, "abrelo")
 
 	if isOpenIntent {
 		for _, app := range knownAppAliases {
-			if strings.Contains(u, app.Pattern) {
+			if strings.Contains(cleanU, app.Pattern) {
 				if seenTargets[app.Target] {
 					continue
 				}
@@ -252,28 +260,24 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 	}
 
 	// 2. Detectar intención de cierre explícito (cierra, cerrar, mata, matar, termina, terminar)
-	isCloseIntent := strings.HasPrefix(u, "cierra ") || strings.HasPrefix(u, "cerrar ") ||
-		strings.HasPrefix(u, "mata ") || strings.HasPrefix(u, "matar ") ||
-		strings.HasPrefix(u, "termina ") || strings.HasPrefix(u, "terminar ")
+	isCloseIntent := strings.HasPrefix(cleanU, "cierra ") || strings.HasPrefix(cleanU, "cerrar ") ||
+		strings.HasPrefix(cleanU, "mata ") || strings.HasPrefix(cleanU, "matar ") ||
+		strings.HasPrefix(cleanU, "termina ") || strings.HasPrefix(cleanU, "terminar ")
 
 	if isCloseIntent {
 		for _, app := range knownAppAliases {
-			if strings.Contains(u, app.Pattern) {
+			if strings.Contains(cleanU, app.Pattern) {
 				if seenTargets[app.Target] {
 					continue
 				}
 				seenTargets[app.Target] = true
 				inputBytes, _ := json.Marshal(map[string]string{"title": app.Pattern})
-				calls = append(calls, providers.ToolCall{
-					ID:    uuid.NewString(),
-					Name:  "os_close_window",
-					Input: inputBytes,
-				})
+				calls = append(calls, providers.ToolCall{ID: uuid.NewString(), Name: "os_close_window", Input: inputBytes})
 			}
 		}
 		// Si no coincidió con ningún alias conocido, extraer el título arbitrario directamente
 		if len(calls) == 0 {
-			cleanTitle := u
+			cleanTitle := cleanU
 			for _, prefix := range []string{"cierra ", "cerrar ", "mata ", "matar ", "termina ", "terminar "} {
 				if strings.HasPrefix(cleanTitle, prefix) {
 					cleanTitle = strings.TrimSpace(cleanTitle[len(prefix):])
@@ -289,11 +293,7 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 			cleanTitle = strings.Trim(cleanTitle, " .,!?:;\"'")
 			if cleanTitle != "" && len(cleanTitle) > 1 && !isInvalidAppTarget(cleanTitle) {
 				inputBytes, _ := json.Marshal(map[string]string{"title": cleanTitle})
-				calls = append(calls, providers.ToolCall{
-					ID:    uuid.NewString(),
-					Name:  "os_close_window",
-					Input: inputBytes,
-				})
+				calls = append(calls, providers.ToolCall{ID: uuid.NewString(), Name: "os_close_window", Input: inputBytes})
 			}
 		}
 		if len(calls) > 0 {
@@ -301,19 +301,55 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 		}
 	}
 
+	// 2.8 Detectar intención de eliminación de archivos ("elimina los pdf", "borra los 3 pdf en documentos")
+	isDeleteIntent := strings.HasPrefix(cleanU, "elimina ") || strings.HasPrefix(cleanU, "eliminar ") ||
+		strings.HasPrefix(cleanU, "borra ") || strings.HasPrefix(cleanU, "borrar ")
+	if isDeleteIntent && (strings.Contains(cleanU, "pdf") || strings.Contains(cleanU, "archivo") || strings.Contains(cleanU, "documento")) {
+		docsDir := filepath.Join(os.Getenv("USERPROFILE"), "Documents")
+		if entries, err := os.ReadDir(docsDir); err == nil {
+			type fileEntry struct { path string; modTime time.Time }
+			var pdfs []fileEntry
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".pdf") {
+					if info, err := e.Info(); err == nil {
+						pdfs = append(pdfs, fileEntry{path: filepath.Join(docsDir, e.Name()), modTime: info.ModTime()})
+					}
+				}
+			}
+			sort.Slice(pdfs, func(i, j int) bool { return pdfs[i].modTime.After(pdfs[j].modTime) })
+			var matched []fileEntry
+			var searchWord string
+			for _, w := range strings.Fields(cleanU) {
+				if len(w) > 3 && !strings.Contains("elimina eliminar borra borrar los las un una el la pdf pdfs archivo archivos documento documentos en de del", w) {
+					searchWord = w; break
+				}
+			}
+			if searchWord != "" {
+				for _, p := range pdfs {
+					if strings.Contains(strings.ToLower(filepath.Base(p.path)), searchWord) { matched = append(matched, p) }
+				}
+				if len(matched) > 0 { pdfs = matched }
+			}
+			count := len(pdfs)
+			if strings.Contains(cleanU, " 1 ") || strings.Contains(cleanU, " un ") { count = 1 }
+			if strings.Contains(cleanU, " 2 ") || strings.Contains(cleanU, " dos ") { count = 2 }
+			if strings.Contains(cleanU, " 3 ") || strings.Contains(cleanU, " tres ") { count = 3 }
+			if count > len(pdfs) { count = len(pdfs) }
+			for i := 0; i < count; i++ {
+				inBytes, _ := json.Marshal(map[string]any{"path": pdfs[i].path, "permanent": false})
+				calls = append(calls, providers.ToolCall{ID: uuid.NewString(), Name: "os_delete_item", Input: inBytes})
+			}
+			if len(calls) > 0 { return calls }
+		}
+	}
+
 	// 3. Detectar intención de Hardware / Puertos USB y Puertos Físicos
-	isUSBIntent := strings.Contains(u, "usb") || strings.Contains(u, "puerto usb") || strings.Contains(u, "puertos usb") ||
-		strings.Contains(u, "puerto fisico") || strings.Contains(u, "puertos fisicos") ||
-		strings.Contains(u, "puerto físico") || strings.Contains(u, "puertos físicos") ||
-		strings.Contains(u, "dispositivos fisicos") || strings.Contains(u, "dispositivos físicos")
-	if isUSBIntent {
+	if strings.Contains(u, "usb") || strings.Contains(u, "puerto fisico") || strings.Contains(u, "puerto físico") || strings.Contains(u, "dispositivos fisicos") || strings.Contains(u, "dispositivos físicos") {
 		return []providers.ToolCall{{ID: uuid.NewString(), Name: "os_hardware_inspector", Input: []byte(`{"action": "usb"}`)}}
 	}
 
 	// 3.5 Detectar intención de puertos lógicos / puertos de red
-	isPortIntent := (strings.Contains(u, "puerto") || strings.Contains(u, "puertos")) &&
-		!strings.Contains(u, "usb") && !strings.Contains(u, "fisic") && !strings.Contains(u, "físic")
-	if isPortIntent {
+	if (strings.Contains(u, "puerto") || strings.Contains(u, "puertos")) && !strings.Contains(u, "usb") && !strings.Contains(u, "fisic") && !strings.Contains(u, "físic") {
 		return []providers.ToolCall{{ID: uuid.NewString(), Name: "os_port_inspector", Input: []byte(`{"action": "list"}`)}}
 	}
 
@@ -350,14 +386,8 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 		strings.HasPrefix(u, "busca información sobre ") || strings.HasPrefix(u, "busca informacion sobre ")
 	if isSearchIntent {
 		query := u
-		for _, prefix := range []string{
-			"busca en la web ", "busca en internet ", "buscar en la web ", "buscar en internet ",
-			"investiga sobre ", "investigar sobre ", "busca información sobre ", "busca informacion sobre ",
-		} {
-			if strings.HasPrefix(query, prefix) {
-				query = strings.TrimSpace(query[len(prefix):])
-				break
-			}
+		for _, prefix := range []string{"busca en la web ", "busca en internet ", "buscar en la web ", "buscar en internet ", "investiga sobre ", "investigar sobre ", "busca información sobre ", "busca informacion sobre "} {
+			if strings.HasPrefix(query, prefix) { query = strings.TrimSpace(query[len(prefix):]); break }
 		}
 		if query != "" {
 			inputBytes, _ := json.Marshal(map[string]string{"query": query})
@@ -366,30 +396,18 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 	}
 
 	// 6.8 Detectar intención de creación de archivo Excel (.xlsx)
-	isExcelIntent := (strings.Contains(u, "excel") || strings.Contains(u, "xlsx") || strings.Contains(u, "hoja de c") || strings.Contains(u, "hoja de c")) &&
+	isExcelIntent := (strings.Contains(u, "excel") || strings.Contains(u, "xlsx") || strings.Contains(u, "hoja de c")) &&
 		(strings.Contains(u, "crea") || strings.Contains(u, "haz") || strings.Contains(u, "genera") || strings.Contains(u, "construye"))
 	if isExcelIntent {
 		fileName := "Hoja_Calculo_2026.xlsx"
-		nameRe := regexp.MustCompile(`([a-zA-Z0-9_\-]+\.xlsx)`)
-		if m := nameRe.FindString(userMessage); m != "" {
-			fileName = m
-		}
+		if m := regexp.MustCompile(`([a-zA-Z0-9_\-]+\.xlsx)`).FindString(userMessage); m != "" { fileName = m }
 		excelPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", fileName)
 		inputBytes, _ := json.Marshal(map[string]any{
-			"path":    excelPath,
-			"title":   strings.TrimSuffix(fileName, ".xlsx"),
+			"path": excelPath, "title": strings.TrimSuffix(fileName, ".xlsx"),
 			"headers": []string{"Concepto", "Categoría", "Monto"},
-			"rows": [][]string{
-				{"Operaciones", "Infraestructura", "1500"},
-				{"Licencias", "Software", "750"},
-				{"Servidores", "Cloud", "1200"},
-			},
+			"rows": [][]string{{"Operaciones", "Infraestructura", "1500"}, {"Licencias", "Software", "750"}, {"Servidores", "Cloud", "1200"}},
 		})
-		return []providers.ToolCall{{
-			ID:    uuid.NewString(),
-			Name:  "os_create_excel",
-			Input: inputBytes,
-		}}
+		return []providers.ToolCall{{ID: uuid.NewString(), Name: "os_create_excel", Input: inputBytes}}
 	}
 
 	// 6.9 Detectar intención de creación de archivo Word (.docx)
@@ -397,21 +415,13 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 		(strings.Contains(u, "crea") || strings.Contains(u, "haz") || strings.Contains(u, "genera"))
 	if isWordIntent {
 		fileName := "Documento_2026.docx"
-		nameRe := regexp.MustCompile(`([a-zA-Z0-9_\-]+\.docx)`)
-		if m := nameRe.FindString(userMessage); m != "" {
-			fileName = m
-		}
+		if m := regexp.MustCompile(`([a-zA-Z0-9_\-]+\.docx)`).FindString(userMessage); m != "" { fileName = m }
 		targetPages := 1
-		pRe := regexp.MustCompile(`(\d+)\s*p[aá]g`)
-		if pm := pRe.FindStringSubmatch(u); len(pm) > 1 {
-			fmt.Sscanf(pm[1], "%d", &targetPages)
-		}
+		if pm := regexp.MustCompile(`(\d+)\s*p[aá]g`).FindStringSubmatch(u); len(pm) > 1 { fmt.Sscanf(pm[1], "%d", &targetPages) }
 		docxPath := filepath.Join(os.Getenv("USERPROFILE"), "Documents", fileName)
 		inputBytes, _ := json.Marshal(map[string]any{
-			"path":         docxPath,
-			"title":        strings.TrimSuffix(fileName, ".docx"),
-			"target_pages": targetPages,
-			"sections":     []map[string]string{{"title": "Resumen Ejecutivo", "content": "Documento generado autónomamente por OzyAssist."}},
+			"path": docxPath, "title": strings.TrimSuffix(fileName, ".docx"), "target_pages": targetPages,
+			"sections": []map[string]string{{"title": "Resumen Ejecutivo", "content": "Documento generado autónomamente por OzyAssist."}},
 		})
 		return []providers.ToolCall{{ID: uuid.NewString(), Name: "os_create_docx", Input: inputBytes}}
 	}

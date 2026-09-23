@@ -224,6 +224,8 @@ func executeToolCall(ctx context.Context, tc providers.ToolCall, auth *Authorize
 		return execSearchMemory(ctx, tc)
 	case "update_user_profile":
 		return execUpdateUserProfile(ctx, tc)
+	case "learn_engram":
+		return execLearnEngram(ctx, tc)
 	case "read_file":
 		return execReadFile(ctx, tc, sandbox)
 	case "write_file":
