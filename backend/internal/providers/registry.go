@@ -44,9 +44,14 @@ func Get(name string) (Provider, error) {
 	return p, nil
 }
 
-// GetDefaultOrFirstProvider busca el primer proveedor configurado con clave válida
+// GetDefaultOrFirstProvider busca el primer proveedor configurado con clave válida o el especificado en DEFAULT_PROVIDER
 func GetDefaultOrFirstProvider() Provider {
-	priorityOrder := []string{"cohere", "groq", "openai", "openrouter", "anthropic", "deepseek", "opencode", "lmstudio", "ollama"}
+	if def := strings.TrimSpace(os.Getenv("DEFAULT_PROVIDER")); def != "" {
+		if p, err := Get(strings.ToLower(def)); err == nil && p != nil {
+			return p
+		}
+	}
+	priorityOrder := []string{"cohere", "groq", "openai", "openrouter", "anthropic", "deepseek", "opencode", "llamacpp", "lmstudio", "ollama"}
 	for _, name := range priorityOrder {
 		if p, err := Get(name); err == nil && GetProviderKey(name) != "" {
 			return p
@@ -179,6 +184,7 @@ func RegisterLocalHostURL(url string) {
 	if url == "" {
 		Unregister("lmstudio")
 		Unregister("ollama")
+		Unregister("llamacpp")
 		return
 	}
 	normalizedURL := strings.TrimRight(url, "/")
@@ -187,6 +193,15 @@ func RegisterLocalHostURL(url string) {
 	}
 	Register("lmstudio", NewLMStudio(normalizedURL))
 	Register("ollama", NewOllama(normalizedURL))
+	Register("llamacpp", NewLlamaCpp(GetLlamaCppURL()))
+}
+
+// GetLlamaCppURL returns the active llama.cpp server endpoint (defaulting to env or http://localhost:8080)
+func GetLlamaCppURL() string {
+	if url := strings.TrimSpace(os.Getenv("LLAMACPP_URL")); url != "" {
+		return url
+	}
+	return "http://localhost:8080"
 }
 
 // GetLocalHostURL returns the active local host endpoint (defaulting to env or http://localhost:11434)
@@ -236,8 +251,9 @@ func InitProviders() {
 		RegisterProviderKey("kilocode", key)
 	}
 
-	// Registrar host local (LM Studio / Ollama)
+	// Registrar host local (LM Studio / Ollama / Llama.cpp)
 	RegisterLocalHostURL(GetLocalHostURL())
+	Register("llamacpp", NewLlamaCpp(GetLlamaCppURL()))
 
 	log.Printf("Providers disponibles iniciales: %v", Available())
 }
@@ -310,6 +326,13 @@ func GetSupportedCatalog() []ProviderCatalogItem {
 			Description:  "Servidor local http://localhost:11434/v1 (Sin API Key)",
 			IsLocal:      true,
 		},
+		{
+			ID:           "llamacpp",
+			DisplayName:  "Llama.cpp (Local Advanced)",
+			DefaultModel: "OzyAssist-7B",
+			Description:  "Servidor http://localhost:8080/v1 (YaRN, Speculative, KV-Quant)",
+			IsLocal:      true,
+		},
 	}
 }
 
@@ -348,6 +371,12 @@ func CreateProvider(name, key string) Provider {
 			url = strings.TrimRight(url, "/") + "/v1"
 		}
 		return NewOllama(url)
+	case "llamacpp":
+		url := GetLlamaCppURL()
+		if !strings.HasSuffix(url, "/v1") {
+			url = strings.TrimRight(url, "/") + "/v1"
+		}
+		return NewLlamaCpp(url)
 	default:
 		return nil
 	}

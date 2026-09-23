@@ -480,25 +480,32 @@ func TestStartMenu_InteractiveArrowNavigation(t *testing.T) {
 		t.Fatalf("KeyDown debió avanzar a index 3, obtenido: %d", m.menuIndex)
 	}
 
-	// 4. Wrap-around hacia abajo (KeyDown en index 3 -> index 0)
+	// 4. Navegación hacia abajo (KeyDown: index 3 -> index 4)
+	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = res.(Model)
+	if m.menuIndex != 4 {
+		t.Fatalf("KeyDown debió avanzar a index 4, obtenido: %d", m.menuIndex)
+	}
+
+	// 5. Wrap-around hacia abajo (KeyDown en index 4 -> index 0)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = res.(Model)
 	if m.menuIndex != 0 {
 		t.Fatalf("wrap-around hacia abajo debió volver a index 0, obtenido: %d", m.menuIndex)
 	}
 
-	// 5. Wrap-around hacia arriba (KeyUp en index 0 -> index 3)
+	// 6. Wrap-around hacia arriba (KeyUp en index 0 -> index 4)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = res.(Model)
-	if m.menuIndex != 3 {
-		t.Fatalf("wrap-around hacia arriba debió ir a index 3, obtenido: %d", m.menuIndex)
+	if m.menuIndex != 4 {
+		t.Fatalf("wrap-around hacia arriba debió ir a index 4, obtenido: %d", m.menuIndex)
 	}
 
-	// 6. Tecla 'k' hacia arriba (index 3 -> index 2)
+	// 7. Tecla 'k' hacia arriba (index 4 -> index 3)
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
 	m = res.(Model)
-	if m.menuIndex != 2 {
-		t.Fatalf("tecla 'k' debió retroceder a index 2, obtenido: %d", m.menuIndex)
+	if m.menuIndex != 3 {
+		t.Fatalf("tecla 'k' debió retroceder a index 3, obtenido: %d", m.menuIndex)
 	}
 
 	// 7. Acceso numérico directo ('1' para iniciar conversación)
@@ -1021,9 +1028,9 @@ func TestHeader_ReferenceStyleLayout(t *testing.T) {
 	}
 }
 
-// TestStartMenu_FourOptions verifica que el menú principal tiene exactamente 4 opciones
-// y que el wrap circular cubre el rango 0-3.
-func TestStartMenu_FourOptions(t *testing.T) {
+// TestStartMenu_FiveOptions verifica que el menú principal tiene exactamente 5 opciones (incluyendo MODO VOZ)
+// y que el wrap circular cubre el rango 0-4.
+func TestStartMenu_FiveOptions(t *testing.T) {
 	m := InitialModel(nil, nil, false)
 	m.state = StateStartMenu
 	m.width = 120
@@ -1032,11 +1039,12 @@ func TestStartMenu_FourOptions(t *testing.T) {
 
 	view := m.renderStartMenuView()
 
-	// Las 4 opciones deben estar presentes en el render
+	// Las 5 opciones deben estar presentes en el render
 	expectedOptions := []string{
 		"INICIAR CONVERSACION",
 		"HISTORIAL DE CONVERSACIONES",
 		"CONFIGURACIONES",
+		"MODO VOZ EN VIVO",
 		"SALIR",
 	}
 	for _, opt := range expectedOptions {
@@ -1045,20 +1053,27 @@ func TestStartMenu_FourOptions(t *testing.T) {
 		}
 	}
 
-	// Verificar wrap circular: desde índice 0 navegar arriba debe ir a 3
+	// Verificar wrap circular: desde índice 0 navegar arriba debe ir a 4
 	m.menuIndex = 0
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	updatedM := updated.(Model)
-	if updatedM.menuIndex != 3 {
-		t.Errorf("Wrap desde 0 hacia arriba debe ir a 3, got %d", updatedM.menuIndex)
+	if updatedM.menuIndex != 4 {
+		t.Errorf("Wrap desde 0 hacia arriba debe ir a 4, got %d", updatedM.menuIndex)
 	}
 
-	// Desde índice 3 navegar abajo debe ir a 0
-	m.menuIndex = 3
+	// Desde índice 4 navegar abajo debe ir a 0
+	m.menuIndex = 4
 	updated2, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	updatedM2 := updated2.(Model)
 	if updatedM2.menuIndex != 0 {
-		t.Errorf("Wrap desde 3 hacia abajo debe ir a 0, got %d", updatedM2.menuIndex)
+		t.Errorf("Wrap desde 4 hacia abajo debe ir a 0, got %d", updatedM2.menuIndex)
+	}
+
+	// Presionar 'v' o '4' debe iniciar directamente en Modo Voz
+	updatedVoice, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("v")})
+	updatedVM := updatedVoice.(Model)
+	if updatedVM.state != StateIdle || !updatedVM.voiceEnabled {
+		t.Errorf("Presionar 'v' debe iniciar en StateIdle con voiceEnabled=true, got state=%v, voiceEnabled=%v", updatedVM.state, updatedVM.voiceEnabled)
 	}
 }
 

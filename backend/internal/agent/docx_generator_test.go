@@ -82,3 +82,51 @@ func TestGenerateDocxReport(t *testing.T) {
 		t.Errorf("el archivo .docx no contiene [Content_Types].xml")
 	}
 }
+
+func TestGenerateDocxReport_MultiPage(t *testing.T) {
+	tempDir := t.TempDir()
+	outDocx := filepath.Join(tempDir, "manual_arquitectura_10p.docx")
+
+	var sections []DocxSection
+	for i := 1; i <= 10; i++ {
+		sections = append(sections, DocxSection{
+			Title:     strings.Repeat("A", 10),
+			Content:   "Contenido de prueba para página.",
+			PageBreak: i > 1,
+		})
+	}
+
+	opts := DocxReportOptions{
+		Title:       "Manual de Arquitectura de Sistemas Distribuidos",
+		Author:      "OzyAssist Testing Suite",
+		TargetPages: 10,
+		Sections:    sections,
+	}
+
+	err := GenerateDocxReport(outDocx, opts)
+	if err != nil {
+		t.Fatalf("GenerateDocxReport multi-página falló: %v", err)
+	}
+
+	zr, err := zip.OpenReader(outDocx)
+	if err != nil {
+		t.Fatalf("no se pudo abrir el zip generado: %v", err)
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.Name == "word/document.xml" {
+			rc, err := f.Open()
+			if err != nil {
+				t.Fatalf("error abriendo word/document.xml: %v", err)
+			}
+			content, _ := io.ReadAll(rc)
+			rc.Close()
+
+			brCount := strings.Count(string(content), `w:br w:type="page"`)
+			if brCount < 9 {
+				t.Errorf("Esperaba al menos 9 saltos de página para 10 páginas, obtuve: %d", brCount)
+			}
+		}
+	}
+}

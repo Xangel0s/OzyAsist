@@ -87,6 +87,28 @@ func TestOSNavigator_FindFiles(t *testing.T) {
 	}
 }
 
+func TestOSNavigator_FindFiles_Sub100ms(t *testing.T) {
+	nav := NewWindowsNavigator()
+	ctx := context.Background()
+
+	queries := []string{"*.go", "*.json", "main", "*.mod"}
+	for _, q := range queries {
+		start := time.Now()
+		matches, err := nav.FindFiles(ctx, ".", q, 20)
+		elapsed := time.Since(start)
+
+		if err != nil {
+			t.Fatalf("FindFiles('%s') failed: %v", q, err)
+		}
+		t.Logf("Query '%s' -> %d matches found in %v", q, len(matches), elapsed)
+
+		// Assert sub-100ms guarantee
+		if elapsed >= 100*time.Millisecond {
+			t.Errorf("Query '%s' took %v, expected < 100ms", q, elapsed)
+		}
+	}
+}
+
 func TestOSNavigator_FileManipulation(t *testing.T) {
 	nav := NewWindowsNavigator()
 	ctx := context.Background()

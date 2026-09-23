@@ -168,9 +168,12 @@ func CreateExcelFile(targetPath string, sheets []ExcelSheetSpec) (string, error)
 			for colIdx, val := range row {
 				ref := fmt.Sprintf("%s%d", colName(colIdx), rowNum)
 				trimmed := strings.TrimSpace(val)
-
-				// Detectar números para preservar tipo numérico nativo en Excel
-				if isNumeric(trimmed) {
+				// Detectar fórmulas de Excel (=SUM, =AVERAGE, etc.)
+				if strings.HasPrefix(trimmed, "=") {
+					formula := strings.TrimPrefix(trimmed, "=")
+					wsSB.WriteString(fmt.Sprintf(`      <c r="%s"><f>%s</f></c>`+"\n", ref, xmlEscape(formula)))
+				} else if isNumeric(trimmed) {
+					// Detectar números para preservar tipo numérico nativo en Excel
 					wsSB.WriteString(fmt.Sprintf(`      <c r="%s"><v>%s</v></c>`+"\n", ref, trimmed))
 				} else {
 					wsSB.WriteString(fmt.Sprintf(`      <c r="%s" t="inlineStr"><is><t>%s</t></is></c>`+"\n", ref, xmlEscape(val)))
@@ -198,6 +201,64 @@ func execOSCreateExcel(_ context.Context, tc providers.ToolCall) (string, bool) 
 	var params CreateExcelParams
 	if err := json.Unmarshal(tc.Input, &params); err != nil {
 		return fmt.Sprintf("parámetros inválidos para os_create_excel: %v", err), false
+	}
+
+	lowInputPath := strings.ToLower(params.Path)
+	if strings.HasSuffix(lowInputPath, ".pdf") {
+		targetPath := system.ResolveUserPath(params.Path)
+		var pdfSections []PDFSection
+		var pdfTable *PDFTable
+		if len(params.Headers) > 0 && len(params.Rows) > 0 {
+			pdfTable = &PDFTable{Headers: params.Headers, Rows: params.Rows}
+		}
+		title := params.Title
+		if title == "" {
+			title = "Reporte"
+		}
+		pdfSections = append(pdfSections, PDFSection{
+			Title:   title,
+			Content: "Generado automáticamente desde datos tabulares.",
+		})
+		err := GeneratePDFReport(targetPath, PDFReportOptions{
+			Title:    title,
+			Author:   "OzyAssist",
+			Sections: pdfSections,
+			Table:    pdfTable,
+		})
+		if err != nil {
+			return fmt.Sprintf("Error generando PDF redirigido: %v", err), false
+		}
+		return fmt.Sprintf("📄 === ARCHIVO PDF GENERADO EXITOSAMENTE (Redirigido desde os_create_excel) ===\n"+
+			"• Archivo: %s\n"+
+			"• Título:  %s\n"+
+			"• Estado:  Válido (formato nativo PDF-1.3)", targetPath, title), true
+	}
+
+	if strings.HasSuffix(lowInputPath, ".docx") || strings.HasSuffix(lowInputPath, ".doc") {
+		targetPath := system.ResolveUserPath(params.Path)
+		var docxTable *DocxTable
+		if len(params.Headers) > 0 && len(params.Rows) > 0 {
+			docxTable = &DocxTable{Headers: params.Headers, Rows: params.Rows}
+		}
+		title := params.Title
+		if title == "" {
+			title = "Documento"
+		}
+		err := GenerateDocxReport(targetPath, DocxReportOptions{
+			Title:  title,
+			Author: "OzyAssist",
+			Sections: []DocxSection{
+				{Title: title, Content: "Generado automáticamente desde datos tabulares."},
+			},
+			Table: docxTable,
+		})
+		if err != nil {
+			return fmt.Sprintf("Error generando Word redirigido: %v", err), false
+		}
+		return fmt.Sprintf("📝 === ARCHIVO WORD (.docx) GENERADO EXITOSAMENTE (Redirigido desde os_create_excel) ===\n"+
+			"• Archivo: %s\n"+
+			"• Título:  %s\n"+
+			"• Formato: OpenXML estándar compatible con Microsoft Word", targetPath, title), true
 	}
 
 	sheets := params.Sheets

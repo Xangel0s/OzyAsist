@@ -551,6 +551,91 @@ func TestExtractToolCallsFromText_KnownToolsOnly(t *testing.T) {
 	if len(fakeCalls) != 0 {
 		t.Fatalf("Esperaba 0 llamadas para herramienta inexistente, obtuve: %+v", fakeCalls)
 	}
+
+	// Tool en formato JSON directo (como emite el modelo fine-tuneado OzyAssist-7B-v3)
+	rawJsonText := `{"name": "os_close_window", "arguments": {"title": "Calculadora"}}`
+	rawCalls := extractToolCallsFromText(rawJsonText)
+	if len(rawCalls) != 1 || rawCalls[0].Name != "os_close_window" {
+		t.Fatalf("Esperaba 1 llamada a os_close_window desde raw JSON, obtuve: %+v", rawCalls)
+	}
+}
+
+func TestExtractToolCallsFromText_CodeFunctionStyle(t *testing.T) {
+	codeText := `\nos_launch_app("notepad", "C:\Users\User")`
+	calls := extractToolCallsFromText(codeText)
+	if len(calls) != 1 || calls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba 1 llamada a os_launch_app, obtuve: %+v", calls)
+	}
+	var params struct {
+		Target string `json:"target"`
+		Path   string `json:"path"`
+	}
+	_ = json.Unmarshal(calls[0].Input, &params)
+	if params.Target != "notepad" || params.Path != "C:\\Users\\User" {
+		t.Fatalf("Parámetros incorrectos: %+v", params)
+	}
+
+	closeText := `ANTI-ALUCINACIÓN:\n\nos_close_window() administrador de tareas`
+	closeCalls := extractToolCallsFromText(closeText)
+	if len(closeCalls) != 1 || closeCalls[0].Name != "os_close_window" {
+		t.Fatalf("Esperaba 1 llamada a os_close_window, obtuve: %+v", closeCalls)
+	}
+
+	// Test caso sensible reportado por el usuario: Os_launch_app("calc") con mayúscula
+	mixedCaseText := `Os_launch_app("calc")`
+	mixedCalls := extractToolCallsFromText(mixedCaseText)
+	if len(mixedCalls) != 1 || mixedCalls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba que Os_launch_app se resolviera a os_launch_app, obtuve: %+v", mixedCalls)
+	}
+	var mixedParams struct {
+		Target string `json:"target"`
+	}
+	_ = json.Unmarshal(mixedCalls[0].Input, &mixedParams)
+	if mixedParams.Target != "calc" {
+		t.Fatalf("Esperaba target 'calc', obtuve '%s'", mixedParams.Target)
+	}
+
+	// Test fallback heurístico para modelo local conversacional: "Ozy ha abierto calc."
+	convText := `Ozy ha abierto calc.`
+	convCalls := extractToolCallsFromText(convText)
+	if len(convCalls) != 1 || convCalls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba que el fallback heurístico capturara os_launch_app, obtuve: %+v", convCalls)
+	}
+	var convParams struct {
+		Target string `json:"target"`
+	}
+	_ = json.Unmarshal(convCalls[0].Input, &convParams)
+	if convParams.Target != "calc" {
+		t.Fatalf("Esperaba target 'calc', obtuve '%s'", convParams.Target)
+	}
+
+	// Test caso exacto del usuario: "Invoqué a os_launch_app con calc"
+	userCaseText := `Invoqué a os_launch_app con calc`
+	userCalls := extractToolCallsFromText(userCaseText)
+	if len(userCalls) != 1 || userCalls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba que 'Invoqué a os_launch_app con calc' generara 1 llamada a os_launch_app, obtuve: %+v", userCalls)
+	}
+	var userParams struct {
+		Target string `json:"target"`
+	}
+	_ = json.Unmarshal(userCalls[0].Input, &userParams)
+	if userParams.Target != "calc" {
+		t.Fatalf("Esperaba target 'calc', obtuve '%s'", userParams.Target)
+	}
+
+	// Test caso con artículo: "Abriendo la calculadora"
+	articleText := `Abriendo la calculadora`
+	artCalls := extractToolCallsFromText(articleText)
+	if len(artCalls) != 1 || artCalls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba que 'Abriendo la calculadora' generara 1 llamada a os_launch_app, obtuve: %+v", artCalls)
+	}
+	var artParams struct {
+		Target string `json:"target"`
+	}
+	_ = json.Unmarshal(artCalls[0].Input, &artParams)
+	if artParams.Target != "calculadora" {
+		t.Fatalf("Esperaba target 'calculadora', obtuve '%s'", artParams.Target)
+	}
 }
 
 func TestCheckPendingTaskRequirements_ConversationalExclusion(t *testing.T) {
@@ -575,4 +660,139 @@ func TestBuildAgentSystemPrompt_IncludesTriad(t *testing.T) {
 		t.Fatalf("System prompt debe incluir a los subagentes CHARC y NINE, obtuve: %s", prompt)
 	}
 }
+
+func TestRescueDirectUserIntent(t *testing.T) {
+	// Caso multi-app: "abre la calculadora y el bloc de notas"
+	multiCalls := rescueDirectUserIntent("abre la calculadora y el bloc de notas", "Ya tengo abierto calculadora y el bloc de notas.")
+	if len(multiCalls) != 2 {
+		t.Fatalf("Esperaba 2 tool calls para multi-app, obtuve %d: %+v", len(multiCalls), multiCalls)
+	}
+	if multiCalls[0].Name != "os_launch_app" || multiCalls[1].Name != "os_launch_app" {
+		t.Fatalf("Herramientas incorrectas: %+v", multiCalls)
+	}
+
+	// Caso cierre: "cierra la calculadora"
+	closeCalls := rescueDirectUserIntent("cierra la calculadora", "...")
+	if len(closeCalls) != 1 || closeCalls[0].Name != "os_close_window" {
+		t.Fatalf("Esperaba 1 llamada a os_close_window, obtuve: %+v", closeCalls)
+	}
+
+	// Caso app arbitraria: "abre roblox"
+	robloxCalls := rescueDirectUserIntent("abre roblox", "Ya tengo abierto Roblox.")
+	if len(robloxCalls) != 1 || robloxCalls[0].Name != "os_launch_app" {
+		t.Fatalf("Esperaba llamada a os_launch_app para roblox, obtuve: %+v", robloxCalls)
+	}
+	var robloxParams struct{ Target string `json:"target"` }
+	_ = json.Unmarshal(robloxCalls[0].Input, &robloxParams)
+	if robloxParams.Target != "roblox" {
+		t.Fatalf("Esperaba target 'roblox', obtuve: %s", robloxParams.Target)
+	}
+
+	// Caso conversacional normal: "¿Cómo te llamas?" (no debe generar rescate)
+	convCalls := rescueDirectUserIntent("¿Cómo te llamas?", "Soy OzyAssist.")
+	if len(convCalls) != 0 {
+		t.Fatalf("No debió generar llamadas para conversación normal, obtuve: %+v", convCalls)
+	}
+
+	// Caso USB: "que puertos USB fisicos estan en uso actualmente?"
+	usbCalls := rescueDirectUserIntent("que puertos USB fisicos estan en uso actualmente?", "...")
+	if len(usbCalls) != 1 || usbCalls[0].Name != "os_hardware_inspector" {
+		t.Fatalf("Esperaba os_hardware_inspector para USB, obtuve: %+v", usbCalls)
+	}
+
+	// Caso WiFi: "has una auditoria de red wifi actual"
+	wifiCalls := rescueDirectUserIntent("has una auditoria de red wifi actual", "...")
+	if len(wifiCalls) != 1 || wifiCalls[0].Name != "os_wifi_manager" {
+		t.Fatalf("Esperaba os_wifi_manager para WiFi, obtuve: %+v", wifiCalls)
+	}
+
+	// Caso Búsqueda + PDF: "crea un pdf sobre roblox y su informacion de la web"
+	reportCalls := rescueDirectUserIntent("crea un pdf sobre roblox y su informacion de la web", "...")
+	if len(reportCalls) != 1 || reportCalls[0].Name != "web_search" {
+		t.Fatalf("Esperaba web_search para 'crea un pdf sobre roblox y su informacion de la web', obtuve: %+v", reportCalls)
+	}
+}
+
+func TestExtractToolCallsFromText_UserScreenshotCases(t *testing.T) {
+	// Caso 1: "Usando web_search con {"query": "auditoría de red wifi windows 10"}"
+	text1 := `Usando web_search con {"query": "auditoría de red wifi windows 10"}`
+	calls1 := extractToolCallsFromText(text1)
+	if len(calls1) != 1 || calls1[0].Name != "web_search" {
+		t.Fatalf("Caso 1 falló: %+v", calls1)
+	}
+
+	// Caso 2: "os_create_pdf con {"path": "C:\\Users\\User\\Documents\\roblox_info.pdf", "title": "Información Roblox", "sections": [{"title": "Sec1", "content": "Detalles"}]}"
+	text2 := `os_create_pdf con {"path": "C:\\Users\\User\\Documents\\roblox_info.pdf", "title": "Información Roblox", "sections": [{"title": "Sec1", "content": "Detalles"}]}`
+	calls2 := extractToolCallsFromText(text2)
+	if len(calls2) != 1 || calls2[0].Name != "os_create_pdf" {
+		t.Fatalf("Caso 2 falló: %+v", calls2)
+	}
+	var p2 struct {
+		Path     string `json:"path"`
+		Title    string `json:"title"`
+		Sections []any  `json:"sections"`
+	}
+	if err := json.Unmarshal(calls2[0].Input, &p2); err != nil || len(p2.Sections) != 1 {
+		t.Fatalf("Caso 2 JSON anidado falló: %+v (err: %v)", p2, err)
+	}
+
+	// Caso 3: "Invocando os_usb_devices para obtener la lista de dispositivos conectados y su estado de uso."
+	text3 := `Invocando os_usb_devices para obtener la lista de dispositivos conectados y su estado de uso.`
+	calls3 := extractToolCallsFromText(text3)
+	if len(calls3) != 1 || calls3[0].Name != "os_hardware_inspector" {
+		t.Fatalf("Caso 3 falló: %+v", calls3)
+	}
+
+	// Caso 4: "Os_creating_pdf: Cages The Elephant - Albums"
+	text4 := `Os_creating_pdf: Cages The Elephant - Albums`
+	calls4 := extractToolCallsFromText(text4)
+	if len(calls4) != 1 || calls4[0].Name != "os_create_pdf" {
+		t.Fatalf("Caso 4 falló: %+v", calls4)
+	}
+
+	// Caso 5: Raw JSON sin tags "<tool_call>"
+	text5 := `<thought>Consultando estado de la red WiFi.</thought>
+{"name": "os_wifi_manager", "arguments": {"action": "status"}}`
+	calls5 := extractToolCallsFromText(text5)
+	if len(calls5) != 1 || calls5[0].Name != "os_wifi_manager" {
+		t.Fatalf("Caso 5 falló: %+v", calls5)
+	}
+}
+
+func TestRescueDirectUserIntent_FileSearchCases(t *testing.T) {
+	// Caso 1: "busca en el disco duro el informe de cage the elephant que se creo correcto?"
+	msg1 := "busca en el disco duro el informe de cage the elephant que se creo correcto?"
+	calls1 := rescueDirectUserIntent(msg1, "")
+	if len(calls1) != 1 || calls1[0].Name != "os_find_files" {
+		t.Fatalf("Esperaba os_find_files para msg1, obtuve: %+v", calls1)
+	}
+
+	// Caso 2: "claro comentame cual es la direccion para abrir el archivo la ubicacion"
+	msg2 := "claro comentame cual es la direccion para abrir el archivo la ubicacion"
+	calls2 := rescueDirectUserIntent(msg2, "")
+	if len(calls2) != 1 || calls2[0].Name != "os_find_files" {
+		t.Fatalf("Esperaba os_find_files para msg2, obtuve: %+v", calls2)
+	}
+
+	// Caso 3 (Screenshot): "cual es la ruta y ubicacion del informe sobre roblox"
+	msg3 := "cual es la ruta y ubicacion del informe sobre roblox"
+	calls3 := rescueDirectUserIntent(msg3, "")
+	if len(calls3) != 1 || calls3[0].Name != "os_find_files" {
+		t.Fatalf("Esperaba os_find_files para msg3, obtuve: %+v", calls3)
+	}
+	if !strings.Contains(string(calls3[0].Input), "roblox") {
+		t.Fatalf("Esperaba que el patrón de búsqueda contenga 'roblox', obtuve: %s", string(calls3[0].Input))
+	}
+
+	// Caso 4 (Screenshot con typo): "caul es la ruta del informe sobre roblox"
+	msg4 := "caul es la ruta del informe sobre roblox"
+	calls4 := rescueDirectUserIntent(msg4, "")
+	if len(calls4) != 1 || calls4[0].Name != "os_find_files" {
+		t.Fatalf("Esperaba os_find_files para msg4, obtuve: %+v", calls4)
+	}
+	if !strings.Contains(string(calls4[0].Input), "roblox") {
+		t.Fatalf("Esperaba que el patrón de búsqueda contenga 'roblox', obtuve: %s", string(calls4[0].Input))
+	}
+}
+
 

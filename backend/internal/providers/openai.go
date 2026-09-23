@@ -86,19 +86,32 @@ func (p *OpenAIProvider) StreamCompletion(ctx context.Context, messages []Messag
 	if strings.Contains(p.cfg.baseURL, "api.openai.com") {
 		body["stream_options"] = map[string]bool{"include_usage": false}
 	}
+	isLocalServer := strings.Contains(p.cfg.baseURL, "localhost") || strings.Contains(p.cfg.baseURL, "127.0.0.1")
+	if isLocalServer {
+		body["stop"] = []string{"<|im_end|>", "<|im_start|>", "<|endoftext|>", "</s>"}
+	}
+
 	if opts.Temperature != 0 {
 		body["temperature"] = opts.Temperature
+	} else if isLocalServer {
+		body["temperature"] = 0.2
 	}
+
 	if opts.MaxTokens > 0 {
 		body["max_tokens"] = opts.MaxTokens
 	} else if strings.Contains(p.cfg.baseURL, "openrouter.ai") {
 		body["max_tokens"] = 1024
+	} else if isLocalServer {
+		body["max_tokens"] = 512
 	} else {
 		body["max_tokens"] = 2048
 	}
 
 	// Tool calling — OpenAI usa "tools" con "function.parameters" (JSON Schema)
-	if len(opts.Tools) > 0 {
+	// Para servidores locales (llama-server/Ollama con modelos OzyAssist fine-tuned),
+	// las herramientas ya están optimizadas en el System Prompt Few-Shot para evitar
+	// que el servidor local inyecte gramáticas o plantillas incompatibles.
+	if len(opts.Tools) > 0 && !isLocalServer {
 		body["tools"] = toOpenAITools(opts.Tools)
 		body["tool_choice"] = "auto"
 	}

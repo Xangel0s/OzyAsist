@@ -80,7 +80,14 @@ func SearchContent(params SearchContentParams) ([]ContentMatch, error) {
 				name == "dist" || name == "build" || name == ".next" ||
 				name == "target" || name == "AppData" || name == "venv" ||
 				name == "__pycache__" || name == ".idea" || name == ".vscode" ||
-				name == ".tauri" {
+				name == ".tauri" || name == ".gemini" || name == "training" ||
+				name == "exports" || name == "dataset" || name == "models" ||
+				name == ".cache" || name == ".npm" || name == ".cargo" || name == "obj" {
+				return filepath.SkipDir
+			}
+			// Limitar profundidad máxima a 2 subcarpetas
+			rel, _ := filepath.Rel(rootDir, path)
+			if strings.Count(rel, string(filepath.Separator)) > 2 {
 				return filepath.SkipDir
 			}
 			return nil
@@ -92,14 +99,22 @@ func SearchContent(params SearchContentParams) ([]ContentMatch, error) {
 			return nil
 		}
 
-		// Descartar extensiones claramente binarias
+		// Descartar extensiones claramente binarias o modelos masivos
 		binaryExts := map[string]bool{
 			".exe": true, ".dll": true, ".so": true, ".bin": true, ".zip": true,
 			".tar": true, ".gz": true, ".7z": true, ".png": true, ".jpg": true,
 			".jpeg": true, ".gif": true, ".mp3": true, ".mp4": true, ".pdf": true,
 			".docx": true, ".xlsx": true, ".pptx": true, ".db": true, ".sqlite": true,
+			".gguf": true, ".iso": true, ".img": true, ".weights": true, ".safetensors": true,
+			".pth": true, ".parquet": true, ".arrow": true, ".pkl": true, ".dat": true,
+			".msi": true, ".dmg": true, ".rar": true,
 		}
 		if binaryExts[fileExt] {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil || info.Size() > 1<<20 { // > 1MB skip
 			return nil
 		}
 
