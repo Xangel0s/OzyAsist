@@ -204,6 +204,22 @@ func GetLlamaCppURL() string {
 	return "http://localhost:8080"
 }
 
+// GetLMStudioURL returns the active LM Studio server endpoint (defaulting to env or http://localhost:1234/v1)
+func GetLMStudioURL() string {
+	if url := strings.TrimSpace(os.Getenv("LMSTUDIO_URL")); url != "" {
+		return url
+	}
+	return "http://localhost:1234/v1"
+}
+
+// GetOllamaURL returns the active Ollama server endpoint (defaulting to env or http://localhost:11434/v1)
+func GetOllamaURL() string {
+	if url := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); url != "" {
+		return url
+	}
+	return "http://localhost:11434/v1"
+}
+
 // GetLocalHostURL returns the active local host endpoint (defaulting to env or http://localhost:11434)
 func GetLocalHostURL() string {
 	localHostURLMu.RLock()
@@ -252,7 +268,8 @@ func InitProviders() {
 	}
 
 	// Registrar host local (LM Studio / Ollama / Llama.cpp)
-	RegisterLocalHostURL(GetLocalHostURL())
+	Register("lmstudio", NewLMStudio(GetLMStudioURL()))
+	Register("ollama", NewOllama(GetOllamaURL()))
 	Register("llamacpp", NewLlamaCpp(GetLlamaCppURL()))
 
 	log.Printf("Providers disponibles iniciales: %v", Available())
@@ -315,8 +332,8 @@ func GetSupportedCatalog() []ProviderCatalogItem {
 		{
 			ID:           "lmstudio",
 			DisplayName:  "LM Studio (Local)",
-			DefaultModel: "local-model",
-			Description:  "Servidor local http://localhost:1234/v1 (Sin API Key)",
+			DefaultModel: "qwen2.5-coder-7b-instruct",
+			Description:  "Servidor local http://localhost:1234/v1 (Qwen 2.5 Coder 7B)",
 			IsLocal:      true,
 		},
 		{
@@ -360,13 +377,13 @@ func CreateProvider(name, key string) Provider {
 	case "anthropic":
 		return NewAnthropic(key)
 	case "lmstudio":
-		url := GetLocalHostURL()
+		url := GetLMStudioURL()
 		if !strings.HasSuffix(url, "/v1") {
 			url = strings.TrimRight(url, "/") + "/v1"
 		}
 		return NewLMStudio(url)
 	case "ollama":
-		url := GetLocalHostURL()
+		url := GetOllamaURL()
 		if !strings.HasSuffix(url, "/v1") {
 			url = strings.TrimRight(url, "/") + "/v1"
 		}
