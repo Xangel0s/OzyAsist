@@ -802,7 +802,7 @@ func (m Model) renderRetroWelcomeHero(convWidth int) string {
 	subHeader := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorPrimary).
-		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v2.6")
+		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v7.0")
 
 	headerBlock := lipgloss.JoinVertical(lipgloss.Center, renderedLogo, "", subHeader)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(headerBlock))
@@ -901,7 +901,7 @@ func (m Model) renderStartMenuView() string {
 	subHeader := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(ColorPrimary).
-		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v2.6")
+		Render("OZYASIST >> OS CONTROL & COWORK AGENT // ZERO-DOCKER KERNEL v7.0")
 
 	headerBlock := lipgloss.JoinVertical(lipgloss.Center, renderedLogo, "", subHeader)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(headerBlock))
@@ -1004,7 +1004,7 @@ func (m Model) renderSettingsMenuView() string {
 	// Título superior
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
-		titleStyle.Render("OZYASIST >> PANEL DE CONFIGURACIONES // ZERO-DOCKER KERNEL v2.6"),
+		titleStyle.Render("OZYASIST >> PANEL DE CONFIGURACIONES // ZERO-DOCKER KERNEL v7.0"),
 	))
 	sb.WriteString("\n\n")
 
@@ -1541,7 +1541,7 @@ func (m Model) renderChatHistoryView() string {
 	// Título superior minimalista
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(ColorPrimary)
 	sb.WriteString(lipgloss.NewStyle().Width(convWidth).Align(lipgloss.Center).Render(
-		titleStyle.Render("OZYASIST >> HISTORIAL DE CONVERSACIONES // ZERO-DOCKER KERNEL v2.6"),
+		titleStyle.Render("OZYASIST >> HISTORIAL DE CONVERSACIONES // ZERO-DOCKER KERNEL v7.0"),
 	))
 	sb.WriteString("\n\n")
 
