@@ -288,18 +288,12 @@ func execOSCloseWindow(ctx context.Context, tc providers.ToolCall) (string, bool
 
 	// 2. Si se especificó un título o nombre de ventana
 	searchTitle := strings.TrimSpace(params.Title)
-	if searchTitle == "" {
-		searchTitle = strings.TrimSpace(params.Target)
-	}
-	if searchTitle == "" {
-		searchTitle = strings.TrimSpace(params.Name)
-	}
+	if searchTitle == "" { searchTitle = strings.TrimSpace(params.Target) }
+	if searchTitle == "" { searchTitle = strings.TrimSpace(params.Name) }
 	if searchTitle != "" {
 		cleanLower := strings.ToLower(searchTitle)
 		for _, prefix := range []string{"cerrar ", "cierra ", "el ", "la ", "los ", "las "} {
-			if strings.HasPrefix(cleanLower, prefix) {
-				cleanLower = strings.TrimSpace(cleanLower[len(prefix):])
-			}
+			if strings.HasPrefix(cleanLower, prefix) { cleanLower = strings.TrimSpace(cleanLower[len(prefix):]) }
 		}
 
 		wins, err := nav.GetActiveWindows(ctx)
@@ -334,9 +328,7 @@ func execOSCloseWindow(ctx context.Context, tc providers.ToolCall) (string, bool
 			}
 		}
 		_ = nav.KillProcess(ctx, params.PID, true)
-		if closedAny {
-			return fmt.Sprintf("Ventana asociada al proceso PID %d cerrada exitosamente.", params.PID), true
-		}
+		if closedAny { return fmt.Sprintf("Ventana asociada al proceso PID %d cerrada exitosamente.", params.PID), true }
 		return fmt.Sprintf("Proceso PID %d terminado exitosamente.", params.PID), true
 	}
 
@@ -352,9 +344,7 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 		Force   bool   `json:"force"`
 	}
 	_ = json.Unmarshal(tc.Input, &params)
-	if !params.Force {
-		params.Force = true
-	}
+	if !params.Force { params.Force = true }
 
 	nav := system.NewWindowsNavigator()
 
@@ -366,57 +356,34 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 	}
 
 	target := strings.TrimSpace(params.Name)
-	if target == "" {
-		target = strings.TrimSpace(params.AppName)
-	}
-	if target == "" {
-		target = strings.TrimSpace(params.Title)
-	}
+	if target == "" { target = strings.TrimSpace(params.AppName) }
+	if target == "" { target = strings.TrimSpace(params.Title) }
 
 	cleanLower := strings.ToLower(target)
 	for _, prefix := range []string{"cerrar ", "cierra ", "matar ", "mata ", "el ", "la ", "los ", "las "} {
-		if strings.HasPrefix(cleanLower, prefix) {
-			cleanLower = strings.TrimSpace(cleanLower[len(prefix):])
-			target = cleanLower
-		}
+		if strings.HasPrefix(cleanLower, prefix) { cleanLower = strings.TrimSpace(cleanLower[len(prefix):]); target = cleanLower }
 	}
 
 	targetsToKill := []string{}
 	switch cleanLower {
-	case "administrador de tareas", "administrador de tarea", "task manager", "taskmgr", "taskmgr.exe":
-		targetsToKill = []string{"Taskmgr.exe", "taskmgr.exe"}
-	case "configuración", "configuracion", "settings", "systemsettings":
-		targetsToKill = []string{"SystemSettings.exe"}
-	case "bloc de notas", "bloc", "notas", "notepad", "notepad.exe":
-		targetsToKill = []string{"notepad.exe", "Notepad.exe"}
-	case "calculadora", "calc", "calc.exe", "calculator", "calculatorapp":
-		targetsToKill = []string{"CalculatorApp.exe", "calc.exe", "Calculator.exe"}
-	case "explorador", "explorador de archivos", "explorer", "explorer.exe":
-		targetsToKill = []string{"explorer.exe"}
-	case "consola", "cmd", "símbolo del sistema", "simbolo del sistema":
-		targetsToKill = []string{"cmd.exe"}
-	case "terminal", "powershell", "windows terminal":
-		targetsToKill = []string{"powershell.exe", "pwsh.exe", "WindowsTerminal.exe"}
-	case "chrome", "google chrome":
-		targetsToKill = []string{"chrome.exe"}
-	case "edge", "microsoft edge":
-		targetsToKill = []string{"msedge.exe"}
-	case "brave":
-		targetsToKill = []string{"brave.exe"}
-	case "spotify":
-		targetsToKill = []string{"spotify.exe"}
-	case "paint", "mspaint":
-		targetsToKill = []string{"mspaint.exe"}
-	case "word":
-		targetsToKill = []string{"WINWORD.EXE", "winword.exe"}
-	case "excel":
-		targetsToKill = []string{"EXCEL.EXE", "excel.exe"}
-	case "powerpoint":
-		targetsToKill = []string{"POWERPNT.EXE", "powerpnt.exe"}
-	case "discord":
-		targetsToKill = []string{"Discord.exe"}
-	case "steam":
-		targetsToKill = []string{"steam.exe"}
+	case "administrador de tareas", "administrador de tarea", "task manager", "taskmgr", "taskmgr.exe": targetsToKill = []string{"Taskmgr.exe", "taskmgr.exe"}
+	case "configuración", "configuracion", "settings", "systemsettings": targetsToKill = []string{"SystemSettings.exe"}
+	case "bloc de notas", "bloc", "notas", "notepad", "notepad.exe": targetsToKill = []string{"notepad.exe", "Notepad.exe"}
+	case "calculadora", "calc", "calc.exe", "calculator", "calculatorapp": targetsToKill = []string{"CalculatorApp.exe", "calc.exe", "Calculator.exe"}
+	case "explorador", "explorador de archivos", "explorer", "explorer.exe": targetsToKill = []string{"explorer.exe"}
+	case "consola", "cmd", "símbolo del sistema", "simbolo del sistema": targetsToKill = []string{"cmd.exe"}
+	case "terminal", "powershell", "windows terminal": targetsToKill = []string{"powershell.exe", "pwsh.exe", "WindowsTerminal.exe"}
+	case "chrome", "google chrome": targetsToKill = []string{"chrome.exe"}
+	case "edge", "microsoft edge": targetsToKill = []string{"msedge.exe"}
+	case "brave": targetsToKill = []string{"brave.exe"}
+	case "spotify": targetsToKill = []string{"spotify.exe"}
+	case "paint", "mspaint": targetsToKill = []string{"mspaint.exe"}
+	case "word": targetsToKill = []string{"WINWORD.EXE", "winword.exe"}
+	case "excel": targetsToKill = []string{"EXCEL.EXE", "excel.exe"}
+	case "powerpoint": targetsToKill = []string{"POWERPNT.EXE", "powerpnt.exe"}
+	case "discord": targetsToKill = []string{"Discord.exe"}
+	case "steam": targetsToKill = []string{"steam.exe"}
+	case "roblox", "roblox player", "robloxplayer": targetsToKill = []string{"RobloxPlayerBeta.exe", "RobloxPlayerLauncher.exe", "RobloxCrashHandler.exe"}
 	default:
 		if cleanLower != "" {
 			if !strings.HasSuffix(cleanLower, ".exe") {
@@ -439,12 +406,20 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 		}
 	}
 
-	// Fallback 1: PowerShell Stop-Process
+	// Fallback 1: PowerShell Stop-Process con coincidencia exacta y por comodín
 	if !killedAny {
 		for _, img := range targetsToKill {
 			procBase := strings.TrimSuffix(img, ".exe")
 			psCmd := fmt.Sprintf("Stop-Process -Name '%s' -Force -ErrorAction SilentlyContinue", procBase)
 			if err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).Run(); err == nil {
+				killedAny = true
+			}
+		}
+		if !killedAny && cleanLower != "" && len(cleanLower) >= 3 {
+			psWildcard := fmt.Sprintf("Get-Process '*%s*' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue", cleanLower)
+			_ = exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psWildcard).Run()
+			checkCmd := fmt.Sprintf("Get-Process '*%s*' -ErrorAction SilentlyContinue", cleanLower)
+			if out, _ := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", checkCmd).Output(); len(strings.TrimSpace(string(out))) == 0 {
 				killedAny = true
 			}
 		}

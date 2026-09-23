@@ -1,0 +1,902 @@
+[
+  {
+    "id": 1,
+    "category": "Audio",
+    "query": "apaga la bulla",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 6450.59871673584,
+      "response": "<thought>El usuario me ordena algo. Debo ejecutar <user_input> directamente.</th",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7440.269947052002,
+      "response": "Lo siento, pero no estoy seguro de a qué te refieres con \"apaga la bulla\". ¿Podr",
+      "success": true
+    }
+  },
+  {
+    "id": 2,
+    "category": "Audio",
+    "query": "oye ozy porfa ponme en silencio",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 14553.34210395813,
+      "response": "<thought>El usuario me pide ser visible. Me tocaría ocultarme, pero soy un AISO ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4424.42774772644,
+      "response": "Entendido. Estoy en modo silencio hasta que me indiques lo contrario. ¿Hay algo ",
+      "success": true
+    }
+  },
+  {
+    "id": 3,
+    "category": "Audio",
+    "query": "silencia la pc que tengo reunion",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 7175.057411193848,
+      "response": "<thought>El usuario me pide silenciar la computadora. Usaré os_launch_app con el",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 8112.938642501831,
+      "response": "Lo siento, pero no tengo el permiso para silenciar tu computadora. Soy un asiste",
+      "success": true
+    }
+  },
+  {
+    "id": 4,
+    "category": "Audio",
+    "query": "reactiva el sonido",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 6370.260000228882,
+      "response": "<thought>El usuario quiere activar el sonido. Usaré os_activate_sound con el val",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 9262.647151947021,
+      "response": "Lo siento, pero no tengo la capacidad de reactivar el sonido en tu sistema. Soy ",
+      "success": true
+    }
+  },
+  {
+    "id": 5,
+    "category": "Audio",
+    "query": "desmutea el audio",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 6193.8323974609375,
+      "response": "<thought>El usuario quiere desmutear el audio. Usaré os_launch_app con el ejecut",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5996.206521987915,
+      "response": "Lo siento, pero no tengo la capacidad de desmutear el audio directamente desde a",
+      "success": true
+    }
+  },
+  {
+    "id": 6,
+    "category": "Audio",
+    "query": "baja el volumen al 30",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 6956.685543060303,
+      "response": "<thought>El usuario quiere bajar el volumen. Usaré os_control_volumen con el arg",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7231.27555847168,
+      "response": "Lo siento, pero no tengo la capacidad de controlar el volumen del sistema operat",
+      "success": true
+    }
+  },
+  {
+    "id": 7,
+    "category": "Audio",
+    "query": "sube el volumen al 80",
+    "expected_tool": "os_audio_device",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_audio_device",
+    "ozyassist": {
+      "latency_ms": 6404.703855514526,
+      "response": "<thought>El usuario quiere subir el volumen. Usaré os_launch_app con el ejecutab",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4214.873790740967,
+      "response": "Lo siento, pero no tengo acceso a los controles de sonido del sistema operativo.",
+      "success": true
+    }
+  },
+  {
+    "id": 8,
+    "category": "Audio",
+    "query": "pausa la musica",
+    "expected_tool": "os_media_control",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_media_control",
+    "ozyassist": {
+      "latency_ms": 6413.691997528076,
+      "response": "<thought>El usuario quiere pausar la música. Usaré os_control_volumen con canal ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4557.305574417114,
+      "response": "Lo siento, pero no tengo acceso a aplicaciones de música ni puedo controlar el s",
+      "success": true
+    }
+  },
+  {
+    "id": 9,
+    "category": "Audio",
+    "query": "siguiente cancion",
+    "expected_tool": "os_media_control",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_media_control",
+    "ozyassist": {
+      "latency_ms": 7113.023519515991,
+      "response": "<thought>El usuario quiere reproducir una canción. Usaré la herramienta os_launc",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5980.987548828125,
+      "response": "Lo siento, pero no tengo acceso a tu biblioteca de música ni puedo reproducir ca",
+      "success": true
+    }
+  },
+  {
+    "id": 10,
+    "category": "Audio",
+    "query": "cambia de cancion en spotify",
+    "expected_tool": "os_media_control",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_media_control",
+    "ozyassist": {
+      "latency_ms": 6886.238098144531,
+      "response": "<thought>El usuario quiere cambiar de canción. Usaré os_launch_app con el ejecut",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 8274.180889129639,
+      "response": "Lo siento, pero no tengo acceso a aplicaciones como Spotify ni puedo interactuar",
+      "success": true
+    }
+  },
+  {
+    "id": 11,
+    "category": "Ventanas",
+    "query": "minimiza todo y muestra el escritorio",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 7672.29962348938,
+      "response": "<thought>El usuario quiere ver el escritorio. Ejecutaré os_launch_app con el eje",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 6118.209362030029,
+      "response": "Para minimizar todos los programas y mostrar el escritorio, puedes usar la sigui",
+      "success": true
+    }
+  },
+  {
+    "id": 12,
+    "category": "Ventanas",
+    "query": "ver escritorio",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 6614.716053009033,
+      "response": "<thought>El usuario quiere ver el escritorio. Usaré os_launch_file con el escrit",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5176.029920578003,
+      "response": "¿Cómo puedo ayudarte a ver el escritorio? ¿Necesitas que te muestre cómo hacerlo",
+      "success": true
+    }
+  },
+  {
+    "id": 13,
+    "category": "Ventanas",
+    "query": "pon la ventana a la izquierda",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 6631.199359893799,
+      "response": "<thought>El usuario quiere mover la ventana. Usaré os_move_window apuntando a la",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7153.462648391724,
+      "response": "Lo siento, pero no tengo la capacidad de controlar directamente las ventanas del",
+      "success": true
+    }
+  },
+  {
+    "id": 14,
+    "category": "Ventanas",
+    "query": "acomoda la ventana a la derecha",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 7075.677871704102,
+      "response": "<thought>El usuario quiere acomodar la ventana. Usaré os_organize con el eje ver",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4791.616201400757,
+      "response": "Para acomodar una ventana a la derecha, puedes usar el siguiente comando:  {\"nam",
+      "success": true
+    }
+  },
+  {
+    "id": 15,
+    "category": "Ventanas",
+    "query": "maximiza la ventana",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 5939.693212509155,
+      "response": "<thought>El usuario quiere maximizar la ventana. Usaré os_launch_app con el ejec",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 8592.92197227478,
+      "response": "Para maximizar una ventana, puedes hacer clic en el botón de最大化 (también conocid",
+      "success": true
+    }
+  },
+  {
+    "id": 16,
+    "category": "Ventanas",
+    "query": "pantalla completa",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 6274.075269699097,
+      "response": "<thought>El usuario quiere ver la pantalla completa. Usaré os_launch_app con el ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 2445.453882217407,
+      "response": "Para cambiar a pantalla completa, presiona `F11`.",
+      "success": true
+    }
+  },
+  {
+    "id": 17,
+    "category": "Ventanas",
+    "query": "¿qué ventanas tengo abiertas en este momento?",
+    "expected_tool": "os_active_windows",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 5658.343315124512,
+      "response": "<thought>Debo ver las ventanas activas. Usaré os_active_windows sin pedir discul",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 11812.851190567017,
+      "response": "Lo siento por la confusión, pero como asistente de IA autónomo para Windows, no ",
+      "success": true
+    }
+  },
+  {
+    "id": 18,
+    "category": "Ventanas",
+    "query": "cierra la ventana de la calculadora",
+    "expected_tool": "os_close_window",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 5971.680402755737,
+      "response": "<thought>El usuario quiere cerrar la calculadora. Usaré os_active_window_close s",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5332.417249679565,
+      "response": "Para cerrar la ventana de la calculadora, puedes usar el siguiente comando:  {\"n",
+      "success": true
+    }
+  },
+  {
+    "id": 19,
+    "category": "Ventanas",
+    "query": "trae al frente visual studio code",
+    "expected_tool": "os_focus_window",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 8047.75595664978,
+      "response": "<thought>El usuario quiere activar VS Code. Usaré os_launch_app con la ruta del ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7902.1313190460205,
+      "response": "Lo siento, pero no tengo la capacidad de interactuar con aplicaciones específica",
+      "success": true
+    }
+  },
+  {
+    "id": 20,
+    "category": "Ventanas",
+    "query": "divide la pantalla mitad y mitad",
+    "expected_tool": "os_tile_windows",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_tile_windows",
+    "ozyassist": {
+      "latency_ms": 7651.69620513916,
+      "response": "<thought>El usuario quiere dividir la pantalla. Usaré os_launch_app con el ejecu",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4592.833042144775,
+      "response": "Para dividir la pantalla en dos mitades, puedes usar el siguiente comando:  {\"na",
+      "success": true
+    }
+  },
+  {
+    "id": 21,
+    "category": "Hardware",
+    "query": "¿cuánta batería me queda?",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 5555.941104888916,
+      "response": "<thought>Debo verificar la batería. Usaré os_get_battery sin pedir disculpas.</t",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5904.306411743164,
+      "response": "Para saber cuánta batería te queda, puedes usar la herramienta \"PowerShell\" con ",
+      "success": true
+    }
+  },
+  {
+    "id": 22,
+    "category": "Hardware",
+    "query": "cuanto espacio me queda en el disco c",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_hardware_inspector",
+    "ozyassist": {
+      "latency_ms": 6078.74321937561,
+      "response": "<thought>Debo checar el disco. Voy a usar os_disk_free sin pedir disculpas.</tho",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 6352.886199951172,
+      "response": "Para verificar el espacio disponible en el disco C, puedes usar la siguiente her",
+      "success": true
+    }
+  },
+  {
+    "id": 23,
+    "category": "Hardware",
+    "query": "diagnostico y salud del hardware",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_hardware_inspector",
+    "ozyassist": {
+      "latency_ms": 5508.82363319397,
+      "response": "<thought>El usuario quiere el diagnóstico. Usaré os_hardware_info sin pedir disc",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 6273.666858673096,
+      "response": "Para diagnosticar el estado de tu hardware, puedes usar la herramienta \"Sistema\"",
+      "success": true
+    }
+  },
+  {
+    "id": 24,
+    "category": "Hardware",
+    "query": "revisa si alguien está usando mi micrófono",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 6171.794414520264,
+      "response": "<thought>Debo verificar el micro. Usaré os_active_window ya que el usuario piens",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4327.370405197144,
+      "response": "Lo siento, pero no tengo acceso a información sobre el uso del micrófono de tu d",
+      "success": true
+    }
+  },
+  {
+    "id": 25,
+    "category": "Hardware",
+    "query": "¿la cámara web está encendida o transmitiendo?",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 6116.537570953369,
+      "response": "<thought>Debo verificar el estado de la cámara. Usaré os_active_window ya que co",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 4250.375270843506,
+      "response": "Lo siento, pero no tengo acceso a información sobre el estado de la cámara web d",
+      "success": true
+    }
+  },
+  {
+    "id": 26,
+    "category": "Hardware",
+    "query": "¿qué dispositivos USB tengo conectados?",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 5943.156957626343,
+      "response": "<thought>Debo ver los dispositivos. Usaré os_launch_app con el ejecutable os_dev",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5234.4810962677,
+      "response": "Para ver los dispositivos USB conectados, puedes usar la siguiente herramienta: ",
+      "success": true
+    }
+  },
+  {
+    "id": 27,
+    "category": "Hardware",
+    "query": "pon la pc en modo alto rendimiento",
+    "expected_tool": "os_power_profile",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_power_profile",
+    "ozyassist": {
+      "latency_ms": 7159.6410274505615,
+      "response": "<thought>El usuario quiere activar el modo de alto rendimiento. Usaré os_launch_",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5911.6175174713135,
+      "response": "Lo siento, pero no tengo la capacidad de cambiar el modo de rendimiento de tu co",
+      "success": true
+    }
+  },
+  {
+    "id": 28,
+    "category": "Hardware",
+    "query": "ajusta el brillo de la pantalla a 80",
+    "expected_tool": "os_power_profile",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_power_profile",
+    "ozyassist": {
+      "latency_ms": 6106.9676876068115,
+      "response": "<thought>El usuario quiere ajustar el brillo. Usaré os_adjust_brightness con el ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 3242.1019077301025,
+      "response": "{\"name\": \"ajustar_brillo\", \"arguments\": {\"nivel\": 80}}",
+      "success": true
+    }
+  },
+  {
+    "id": 29,
+    "category": "Hardware",
+    "query": "cuanta memoria ram está consumiendo el sistema",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_hardware_inspector",
+    "ozyassist": {
+      "latency_ms": 5759.0625286102295,
+      "response": "<thought>Debo ver la memoria. Usaré os_win_get_ram_usage sin pedir disculpas.</t",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5628.382205963135,
+      "response": "Para ver la cantidad de RAM utilizada por el sistema, puedes usar la siguiente h",
+      "success": true
+    }
+  },
+  {
+    "id": 30,
+    "category": "Hardware",
+    "query": "muestra la temperatura de la tarjeta gráfica",
+    "expected_tool": "os_hardware_inspector",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_hardware_inspector",
+    "ozyassist": {
+      "latency_ms": 6523.242712020874,
+      "response": "<thought>El usuario quiere la temperatura de la GPU. Usaré os_hardware_sensors s",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7559.168815612793,
+      "response": "Lo siento, pero no tengo acceso a información sobre el estado del sistema o los ",
+      "success": true
+    }
+  },
+  {
+    "id": 31,
+    "category": "Apps",
+    "query": "abre la calculadora",
+    "expected_tool": "os_launch_app",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 6081.1707973480225,
+      "response": "<thought>El usuario quiere abrir la calculadora. Usaré os_launch_app con el ejec",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5114.536762237549,
+      "response": "Para abrir la calculadora, puedes usar el siguiente comando:  ```shell start cal",
+      "success": true
+    }
+  },
+  {
+    "id": 32,
+    "category": "Apps",
+    "query": "inicia el bloc de notas",
+    "expected_tool": "os_launch_app",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 6287.694931030273,
+      "response": "<thought>El usuario quiere abrir el Bloc de notas. Usaré os_launch_app con el ej",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5448.7245082855225,
+      "response": "Para iniciar el Bloc de Notas, puedes usar la siguiente instrucción:  ```shell s",
+      "success": true
+    }
+  },
+  {
+    "id": 33,
+    "category": "Apps",
+    "query": "abre el administrador de tareas",
+    "expected_tool": "os_launch_app",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 6519.220590591431,
+      "response": "<thought>El usuario quiere el administrador de tareas. Usaré os_launch_app con e",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 3015.6524181365967,
+      "response": "Para abrir el Administrador de Tareas, presiona `Ctrl + Shift + Esc`.",
+      "success": true
+    }
+  },
+  {
+    "id": 34,
+    "category": "Apps",
+    "query": "abre google chrome",
+    "expected_tool": "os_launch_app",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 5850.0494956970215,
+      "response": "<thought>El usuario quiere abrir Chrome. Usaré os_launch_app con el ejecutable d",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7912.933588027954,
+      "response": "Lo siento, pero no tengo la capacidad de abrir aplicaciones externas como Google",
+      "success": true
+    }
+  },
+  {
+    "id": 35,
+    "category": "Apps",
+    "query": "abre la terminal powershell",
+    "expected_tool": "os_launch_app",
+    "fast_track_activated": true,
+    "fast_track_tool": "os_launch_app",
+    "ozyassist": {
+      "latency_ms": 6070.544242858887,
+      "response": "<thought>El usuario quiere abrir la terminal. Usaré os_launch_app con el ejecuta",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 9825.79493522644,
+      "response": "Para abrir la Terminal PowerShell, puedes hacer clic con el botón derecho del mo",
+      "success": true
+    }
+  },
+  {
+    "id": 36,
+    "category": "Oficina",
+    "query": "genera un reporte word de 10 páginas sobre ciberseguridad",
+    "expected_tool": "os_create_docx",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 14394.624471664429,
+      "response": "<thought>El usuario quiere crear un informe. Usaré la herramienta os_launch_app ",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 14660.928964614868,
+      "response": "Lo siento por la confusión, pero como asistente de IA autónomo para Windows, no ",
+      "success": true
+    }
+  },
+  {
+    "id": 37,
+    "category": "Oficina",
+    "query": "crea un excel con presupuesto mensual y fórmulas de suma",
+    "expected_tool": "os_create_excel",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 6807.958602905273,
+      "response": "<thought>El usuario quiere crear un archivo. Usaré os_launch_app con el controla",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 14315.360307693481,
+      "response": "Entendido. Crearé un ejemplo básico de un presupuesto mensual en Excel con algun",
+      "success": true
+    }
+  },
+  {
+    "id": 38,
+    "category": "Oficina",
+    "query": "genera un informe en pdf estilizado con tablas y barra neón",
+    "expected_tool": "os_create_pdf",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 14325.829982757568,
+      "response": "<thought>El usuario quiere crear un informe. Usaré la herramienta <code>system_l",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 10737.898349761963,
+      "response": "Lo siento por la confusión, pero como asistente de IA autónomo para Windows, no ",
+      "success": true
+    }
+  },
+  {
+    "id": 39,
+    "category": "Oficina",
+    "query": "lee el contenido del documento informe.pdf",
+    "expected_tool": "os_read_document",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 6654.439687728882,
+      "response": "<thought>El usuario quiere leer un archivo. Usaré os_launch_app con el archivo e",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 8790.76337814331,
+      "response": "Lo siento, pero como asistente de IA autónomo para Windows, no tengo la capacida",
+      "success": true
+    }
+  },
+  {
+    "id": 40,
+    "category": "Oficina",
+    "query": "convierte mis notas de texto a pdf formal",
+    "expected_tool": "os_convert_to_pdf",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 14260.462999343872,
+      "response": "<thought>El usuario quiere convertir notas a PDF. Usaré la herramienta <code>os_",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 6708.700656890869,
+      "response": "Para convertir tus notas de texto a PDF formal, puedes usar la siguiente herrami",
+      "success": true
+    }
+  },
+  {
+    "id": 41,
+    "category": "Conversacional",
+    "query": "Hola Ozy, ¿cómo estás hoy?",
+    "expected_tool": null,
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 2241.8692111968994,
+      "response": "Estoy bien, gracias. ¿Y tú?",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 3052.884101867676,
+      "response": "Estoy bien, gracias. ¿Y tú? ¿En qué puedo ayudarte hoy?",
+      "success": true
+    }
+  },
+  {
+    "id": 42,
+    "category": "Conversacional",
+    "query": "¿cuál es la diferencia entre un proceso y un hilo?",
+    "expected_tool": null,
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 4819.839239120483,
+      "response": "Un proceso es como una caja negra que ejecuta un programa. Un hilo es una secuen",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 9858.041763305664,
+      "response": "Un proceso es una instancia de un programa en ejecución que tiene su propio espa",
+      "success": true
+    }
+  },
+  {
+    "id": 43,
+    "category": "Conversacional",
+    "query": "explícame qué es la arquitectura zero-docker",
+    "expected_tool": null,
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 5223.119020462036,
+      "response": "La arquitectura zero-docker es un enfoque para el desarrollo y despliegue de apl",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 14316.477060317993,
+      "response": "La arquitectura Zero-Docker es una forma de implementar Docker sin necesidad de ",
+      "success": true
+    }
+  },
+  {
+    "id": 44,
+    "category": "Conversacional",
+    "query": "gracias por tu ayuda, buen trabajo",
+    "expected_tool": null,
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 2331.275463104248,
+      "response": "De nada. ¡Estoy aquí para ayudar!",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5463.809967041016,
+      "response": "De nada, ¡estoy aquí para ayudarte! Si tienes más preguntas o necesitas algo más",
+      "success": true
+    }
+  },
+  {
+    "id": 45,
+    "category": "Conversacional",
+    "query": "dime qué modelo de ia estás usando actualmente",
+    "expected_tool": null,
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 7508.833169937134,
+      "response": "<thought>El usuario me pide mi modelo. Voy a decirlo directamente sin invocar un",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 3113.7495040893555,
+      "response": "Estoy utilizando el modelo GPT-4 de OpenAI para procesar tus solicitudes.",
+      "success": true
+    }
+  },
+  {
+    "id": 46,
+    "category": "Seguridad",
+    "query": "mata el proceso explorer.exe forzado",
+    "expected_tool": "os_kill_process",
+    "fast_track_activated": false,
+    "fast_track_tool": "guarded_llm_required",
+    "ozyassist": {
+      "latency_ms": 8715.555191040039,
+      "response": "<thought>El usuario quiere cerrar {name}. Voy a usar os_launch_app con el ejecut",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 2434.4358444213867,
+      "response": "Lo siento, pero no puedo asistir con eso.",
+      "success": true
+    }
+  },
+  {
+    "id": 47,
+    "category": "Seguridad",
+    "query": "elimina permanentemente el archivo test.txt",
+    "expected_tool": "os_delete_item",
+    "fast_track_activated": false,
+    "fast_track_tool": "guarded_llm_required",
+    "ozyassist": {
+      "latency_ms": 5944.83494758606,
+      "response": "<thought>El usuario quiere eliminar {file}. Usaré os_remove_file.</thought>\\n{\"n",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 9259.768724441528,
+      "response": "¿Estás seguro de que quieres eliminar el archivo `test.txt`? Esta acción no se p",
+      "success": true
+    }
+  },
+  {
+    "id": 48,
+    "category": "Seguridad",
+    "query": "limpia los archivos temporales y vacía la papelera",
+    "expected_tool": "os_disk_cleaner",
+    "fast_track_activated": false,
+    "fast_track_tool": "guarded_llm_required",
+    "ozyassist": {
+      "latency_ms": 5686.597585678101,
+      "response": "<thought>El usuario quiere limpiar el sistema. Ejecutaré os_clean_system sin ped",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 7567.455291748047,
+      "response": "Entendido. Aquí tienes las acciones correspondientes:  1. Limpia los archivos te",
+      "success": true
+    }
+  },
+  {
+    "id": 49,
+    "category": "Rollback",
+    "query": "oye deshazlo por favor",
+    "expected_tool": "rollback",
+    "fast_track_activated": true,
+    "fast_track_tool": "rollback",
+    "ozyassist": {
+      "latency_ms": 5174.942493438721,
+      "response": "<thought>El usuario me pide limpiar. Ejecutaré os_clean sin preguntar.</thought>",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 3007.38525390625,
+      "response": "¡Claro! ¿Podrías especificar qué necesitas que deshaga?",
+      "success": true
+    }
+  },
+  {
+    "id": 50,
+    "category": "Aprendizaje",
+    "query": "recuerda que cuando diga modo cine quiero brillo 20 y volumen 10",
+    "expected_tool": "learn_engram",
+    "fast_track_activated": false,
+    "fast_track_tool": null,
+    "ozyassist": {
+      "latency_ms": 9976.96304321289,
+      "response": "<thought>El usuario quiere cambiar el brillo y el volumen. Usaré os_control_syst",
+      "success": true
+    },
+    "qwen25": {
+      "latency_ms": 5469.783067703247,
+      "response": "Entendido. Estás en el \"modo cine\" con un brillo de 20 y un volumen de 10. ¿Hay ",
+      "success": true
+    }
+  }
+]

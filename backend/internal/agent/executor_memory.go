@@ -109,3 +109,38 @@ func execUpdateUserProfile(ctx context.Context, tc providers.ToolCall) (string, 
 
 	return "[PERFIL] Perfil de usuario actualizado y persistido con éxito.", true
 }
+
+// execLearnEngram registra un nuevo atajo/engrama en el SystemGraph en RAM y en SQLite
+func execLearnEngram(ctx context.Context, tc providers.ToolCall) (string, bool) {
+	var args struct {
+		TriggerPhrase string         `json:"trigger_phrase"`
+		ToolName      string         `json:"tool_name"`
+		Args          map[string]any `json:"args"`
+		UseCase       string         `json:"use_case"`
+	}
+	if err := json.Unmarshal(tc.Input, &args); err != nil {
+		return fmt.Sprintf("[ENGRAMAS] Error en argumentos: %v", err), false
+	}
+	trigger := strings.TrimSpace(args.TriggerPhrase)
+	tool := strings.TrimSpace(args.ToolName)
+	if trigger == "" || tool == "" {
+		return "[ENGRAMAS] La frase disparadora y el nombre de herramienta son requeridos.", false
+	}
+
+	graph := memory.GetSystemGraph()
+	if graph == nil {
+		return "[ENGRAMAS] Grafo de sistema no disponible en este momento.", false
+	}
+
+	useCase := args.UseCase
+	if useCase == "" {
+		useCase = "custom_user_shortcut"
+	}
+
+	engram, err := graph.LearnEngram(trigger, tool, args.Args, useCase)
+	if err != nil {
+		return fmt.Sprintf("[ENGRAMAS] Error registrando engrama: %v", err), false
+	}
+
+	return fmt.Sprintf("[ENGRAMAS] Neurona aprendida con éxito: ID '%s', disparador: '%s' -> %s", engram.ID, trigger, tool), true
+}

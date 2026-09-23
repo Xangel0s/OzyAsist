@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/ozyassist/backend/internal/mcp"
+	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 )
 
@@ -222,6 +223,32 @@ var VoiceAgentTools = []providers.ToolDef{
 		}`),
 	},
 	{
+		Name:        "learn_engram",
+		Description: "Enseña o registra un nuevo atajo/engrama en el cerebro secundario en RAM del sistema para asociar una frase o modismo coloquial con una herramienta y parámetros específicos.",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {
+				"trigger_phrase": {
+					"type": "string",
+					"description": "Frase o modismo coloquial que disparará la acción (ej: 'modo cine', 'prepara el reporte')"
+				},
+				"tool_name": {
+					"type": "string",
+					"description": "Herramienta de Windows a ejecutar (ej: 'os_power_profile', 'os_tile_windows', 'os_audio_device')"
+				},
+				"args": {
+					"type": "object",
+					"description": "Parámetros que recibirá la herramienta"
+				},
+				"use_case": {
+					"type": "string",
+					"description": "Descripción corta del caso de uso funcional"
+				}
+			},
+			"required": ["trigger_phrase", "tool_name"]
+		}`),
+	},
+	{
 		Name:        "os_detect_dialogs",
 		Description: "Inspecciona cuadros de diálogo modales y errores activos en pantalla (#32770).",
 		InputSchema: mustJSON(`{"type":"object","properties":{"app_filter":{"type":"string","description":"Filtro por app o título"}}}`),
@@ -277,6 +304,53 @@ func GetActiveTools(voiceMode bool) []providers.ToolDef {
 	}
 
 	return tools
+}
+
+// GetActiveToolsForQuery aplica poda dinámica de herramientas (Dynamic Tool Pruning)
+// utilizando el SystemGraph para que modelos pequeños locales y modo voz reciban únicamente
+// las 1 a 3 herramientas candidatas más sus complementos de co-ocurrencia.
+func GetActiveToolsForQuery(query string, voiceMode bool, isLocal bool) []providers.ToolDef {
+	baseTools := GetActiveTools(voiceMode)
+	if !isLocal && !voiceMode {
+		return baseTools
+	}
+
+	graph := memory.GetSystemGraph()
+	if graph == nil {
+		return baseTools
+	}
+
+	match, ok := graph.ResolveIntent(query)
+	if !ok || match == nil || match.Engram == nil {
+		return baseTools
+	}
+
+	targetTool := match.Engram.ToolName
+	allowedNames := map[string]bool{
+		targetTool: true,
+	}
+
+	// Incluir herramientas co-ocurrentes del grafo
+	for _, co := range graph.GetCoOccurringTools([]string{targetTool}) {
+		allowedNames[co] = true
+	}
+	for _, co := range match.Engram.CoOccurringTools {
+		allowedNames[co] = true
+	}
+
+	var pruned []providers.ToolDef
+	for _, t := range baseTools {
+		if allowedNames[t.Name] {
+			pruned = append(pruned, t)
+		}
+	}
+
+	// Si por alguna razón la poda quedó vacía, devolver la lista base
+	if len(pruned) == 0 {
+		return baseTools
+	}
+
+	return pruned
 }
 
 func mustJSON(s string) json.RawMessage {

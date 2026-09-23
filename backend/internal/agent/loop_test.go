@@ -795,4 +795,18 @@ func TestRescueDirectUserIntent_FileSearchCases(t *testing.T) {
 	}
 }
 
+func TestRescueDirectUserIntent_DeleteCases(t *testing.T) {
+	// "elimina los 3 pdf en documentos"
+	msg := "elimina los 3 pdf en documentos"
+	calls := rescueDirectUserIntent(msg, "")
+	if len(calls) == 0 {
+		t.Fatalf("Esperaba llamadas a os_delete_item para '%s', obtuve 0", msg)
+	}
+	for _, c := range calls {
+		if c.Name != "os_delete_item" {
+			t.Fatalf("Esperaba os_delete_item, obtuve %s", c.Name)
+		}
+	}
+}
+
 

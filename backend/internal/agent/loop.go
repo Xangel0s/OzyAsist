@@ -171,6 +171,112 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 		defer speakerQueue.Close()
 	}
 
+	graph := memory.GetSystemGraph()
+
+	// --- 1. REFLEJO DE ROLLBACK (Deshacer instantáneo en 1ms, 0 tokens) ---
+	if graph != nil && graph.IsRollbackQuery(params.UserMessage) {
+		if revertState, ok := graph.PopRollback(); ok {
+			emit(AgentEvent{Type: "state:sync", State: "executing"})
+
+			revInput, _ := json.Marshal(revertState.RevertArgs)
+			revTC := providers.ToolCall{
+				ID:    "rollback_" + uuid.NewString()[:8],
+				Name:  revertState.RevertToolName,
+				Input: json.RawMessage(revInput),
+			}
+			emit(AgentEvent{
+				Type:      "tool:call",
+				ToolID:    revTC.ID,
+				ToolName:  revTC.Name,
+				ToolInput: string(revInput),
+			})
+
+			step := toolCallToPlanStep(revTC)
+			auth := &AuthorizedAction{Step: step}
+			res, success := executeToolCall(ctx, revTC, auth, sandbox)
+			emit(AgentEvent{
+				Type:        "tool:result",
+				ToolID:      revTC.ID,
+				ToolName:    revTC.Name,
+				ToolInput:   string(revInput),
+				ToolOutput:  res,
+				ToolSuccess: success,
+			})
+
+			rollbackReply := fmt.Sprintf("Listo, deshecho: %s.", revertState.Description)
+			emit(AgentEvent{Type: "message:delta", Content: rollbackReply})
+			emit(AgentEvent{Type: "state:sync", State: "idle"})
+			msgID := persistAgentMessage(params, taskID, rollbackReply, []providers.ToolCall{revTC})
+			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: 1, Content: rollbackReply})
+			return
+		}
+	}
+
+	// --- 2. REFLEJO FAST-TRACK (Bypass de LLM para órdenes deterministas en ~1ms, 0 tokens) ---
+	if graph != nil {
+		if match, ok := graph.ResolveIntent(params.UserMessage); ok && match != nil && match.IsFastTrack && match.Score >= 0.95 {
+			emit(AgentEvent{Type: "state:sync", State: "executing"})
+
+			// Registrar estado previo para rollback si aplica a audio o ventanas
+			if match.Engram.ToolName == "os_audio_device" {
+				if act, ok := match.ExtractedArgs["action"].(string); ok && act == "mute" {
+					isMute, _ := match.ExtractedArgs["mute"].(bool)
+					graph.RecordRollback(memory.RollbackState{
+						EngramID:       match.Engram.ID,
+						ToolName:       "os_audio_device",
+						ActionTaken:    "mute",
+						RevertToolName: "os_audio_device",
+						RevertArgs:     map[string]any{"action": "mute", "mute": !isMute},
+						Description:    "Restaurar silencio de audio",
+					})
+				}
+			}
+
+			ftInput, _ := json.Marshal(match.ExtractedArgs)
+			ftTC := providers.ToolCall{
+				ID:    "fasttrack_" + uuid.NewString()[:8],
+				Name:  match.Engram.ToolName,
+				Input: json.RawMessage(ftInput),
+			}
+
+			emit(AgentEvent{
+				Type:      "tool:call",
+				ToolID:    ftTC.ID,
+				ToolName:  ftTC.Name,
+				ToolInput: string(ftInput),
+			})
+
+			step := toolCallToPlanStep(ftTC)
+			auth := &AuthorizedAction{Step: step}
+			res, success := executeToolCall(ctx, ftTC, auth, sandbox)
+			emit(AgentEvent{
+				Type:        "tool:result",
+				ToolID:      ftTC.ID,
+				ToolName:    ftTC.Name,
+				ToolInput:   string(ftInput),
+				ToolOutput:  res,
+				ToolSuccess: success,
+			})
+
+			if success {
+				graph.PromoteEngram(match.Engram.ID)
+			}
+
+			reply := match.Feedback
+			if reply == "" {
+				reply = "Listo, he ejecutado la acción."
+			}
+			emit(AgentEvent{Type: "message:delta", Content: reply})
+			if params.VoiceMode && speakerQueue != nil {
+				speakerQueue.Enqueue(reply)
+			}
+			emit(AgentEvent{Type: "state:sync", State: "idle"})
+			msgID := persistAgentMessage(params, taskID, reply, []providers.ToolCall{ftTC})
+			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: 1, Content: reply})
+			return
+		}
+	}
+
 	for turn := 0; turn < maxAgentTurns; turn++ {
 		if ctx.Err() != nil {
 			emit(AgentEvent{Type: "error", Error: "loop cancelado por el usuario"})
@@ -179,10 +285,9 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 		emit(AgentEvent{Type: "state:sync", State: "thinking"})
 
-		// --- Llamada al LLM con tool definitions ---
-		// GetActiveTools incluye dinámicamente las herramientas MCP registradas en modo texto/consola
-		// y las aísla en VoiceMode para mantener latencia ultra-baja.
-		tools := GetActiveTools(params.VoiceMode)
+		// --- Llamada al LLM con tool definitions (Poda Dinámica para modelos locales / voz) ---
+		isLocal := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio")
+		tools := GetActiveToolsForQuery(params.UserMessage, params.VoiceMode, isLocal)
 		chunkCh, err := params.Provider.StreamCompletion(ctx, history, providers.CompletionOptions{
 			Stream: true,
 			Model:  params.Chat.Model,
