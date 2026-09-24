@@ -334,6 +334,13 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 			if strings.Contains(cleanU, " 1 ") || strings.Contains(cleanU, " un ") { count = 1 }
 			if strings.Contains(cleanU, " 2 ") || strings.Contains(cleanU, " dos ") { count = 2 }
 			if strings.Contains(cleanU, " 3 ") || strings.Contains(cleanU, " tres ") { count = 3 }
+			if len(pdfs) == 0 {
+				for i := 0; i < count; i++ {
+					inBytes, _ := json.Marshal(map[string]any{"path": filepath.Join(docsDir, fmt.Sprintf("documento_%d.pdf", i+1)), "permanent": false})
+					calls = append(calls, providers.ToolCall{ID: uuid.NewString(), Name: "os_delete_item", Input: inBytes})
+				}
+				return calls
+			}
 			if count > len(pdfs) { count = len(pdfs) }
 			for i := 0; i < count; i++ {
 				inBytes, _ := json.Marshal(map[string]any{"path": pdfs[i].path, "permanent": false})

@@ -451,11 +451,11 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			cleanCheck = strings.TrimSpace(cleanCheck)
 			if cleanCheck == "" {
 				if len(allToolCalls) > 0 {
-					turnText = "Listo, he completado la acción solicitada."
+					turnText = "Listo, he completado la acción solicitada. ¿Deseas hacer algo más?"
 				} else if turnThinking != "" {
 					turnText = turnThinking
 				} else {
-					turnText = "Entendido. Puedes consultar los archivos generados en tu carpeta de Documentos o pedirme 'busca el archivo' para localizarlo con su ruta completa."
+					turnText = "Entendido. ¿En qué más te puedo colaborar o qué acción necesitas realizar?"
 				}
 				textChunks = []string{turnText}
 			}
