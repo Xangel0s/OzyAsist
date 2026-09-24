@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"strings"
 
 	"github.com/ozyassist/backend/internal/mcp"
 	"github.com/ozyassist/backend/internal/memory"
@@ -315,13 +316,26 @@ func GetActiveToolsForQuery(query string, voiceMode bool, isLocal bool) []provid
 		return baseTools
 	}
 
+	clean := memory.NormalizeColloquialText(query)
+	tokens := strings.Fields(clean)
+	if isLocal && memory.IsMetaConversationalQuery(query, clean, tokens) {
+		// En consultas conversacionales, de depuración o reflexivas, no saturar al modelo local con 50 herramientas
+		return nil
+	}
+
 	graph := memory.GetSystemGraph()
 	if graph == nil {
+		if isLocal && !voiceMode {
+			return VoiceAgentTools
+		}
 		return baseTools
 	}
 
 	match, ok := graph.ResolveIntent(query)
 	if !ok || match == nil || match.Engram == nil {
+		if isLocal && !voiceMode {
+			return VoiceAgentTools
+		}
 		return baseTools
 	}
 
@@ -347,6 +361,9 @@ func GetActiveToolsForQuery(query string, voiceMode bool, isLocal bool) []provid
 
 	// Si por alguna razón la poda quedó vacía, devolver la lista base
 	if len(pruned) == 0 {
+		if isLocal && !voiceMode {
+			return VoiceAgentTools
+		}
 		return baseTools
 	}
 

@@ -159,3 +159,57 @@ func TestSystemGraph_LearnAndPromote(t *testing.T) {
 		t.Errorf("Esperaba IsFastTrack = true tras promoción")
 	}
 }
+
+func TestSystemGraph_AntonymPolarityAndMetaGuard(t *testing.T) {
+	g := GetSystemGraph()
+
+	// 1. "cierra la calculadora" DEBE resolver a close_calc (os_close_window) y NUNCA a launch_calc
+	matchClose, okClose := g.ResolveIntent("cierra la calculadora")
+	if !okClose || matchClose == nil {
+		t.Fatalf("Esperaba resolución para 'cierra la calculadora'")
+	}
+	if matchClose.Engram.ToolName != "os_close_window" {
+		t.Errorf("Herramienta errónea para cerrar: esperaba os_close_window, obtuvo %s", matchClose.Engram.ToolName)
+	}
+	if matchClose.Engram.ID != "close_calc" {
+		t.Errorf("Engrama erróneo: esperaba close_calc, obtuvo %s", matchClose.Engram.ID)
+	}
+	if !matchClose.IsFastTrack {
+		t.Errorf("Esperaba FastTrack=true para 'cierra la calculadora'")
+	}
+
+	// 2. "abre la calculadora" DEBE resolver a launch_calc (os_launch_app) y NUNCA a close_calc
+	matchOpen, okOpen := g.ResolveIntent("abre la calculadora")
+	if !okOpen || matchOpen == nil {
+		t.Fatalf("Esperaba resolución para 'abre la calculadora'")
+	}
+	if matchOpen.Engram.ToolName != "os_launch_app" {
+		t.Errorf("Herramienta errónea para abrir: esperaba os_launch_app, obtuvo %s", matchOpen.Engram.ToolName)
+	}
+	if matchOpen.Engram.ID != "launch_calc" {
+		t.Errorf("Engrama erróneo: esperaba launch_calc, obtuvo %s", matchOpen.Engram.ID)
+	}
+
+	// 3. Consulta meta-conversacional con la palabra "calculadora" NO DEBE activar Fast-Track
+	metaQuery := "okay revisa el grafo al poner 'cerrar calculadora' el sistema automanda abrir pero ya esta abierta la app de calculadora puedes verificar ello y actualizarlo para evitar ese fast track erroneo?"
+	_, okMeta := g.ResolveIntent(metaQuery)
+	if okMeta {
+		t.Errorf("Una consulta meta-conversacional de depuración NO debe activar Fast-Track!")
+	}
+
+	// 4. "revisa bien mi ultimo mensaje" NO DEBE activar Fast-Track
+	_, okMeta2 := g.ResolveIntent("revisa bien mi ultimo mensaje")
+	if okMeta2 {
+		t.Errorf("'revisa bien mi ultimo mensaje' NO debe activar Fast-Track!")
+	}
+
+	// 5. "cerrar" debe resolver a close_window_active (os_close_window)
+	matchCerrar, okCerrar := g.ResolveIntent("cerrar")
+	if !okCerrar || matchCerrar == nil {
+		t.Fatalf("Esperaba resolución para 'cerrar'")
+	}
+	if matchCerrar.Engram.ToolName != "os_close_window" {
+		t.Errorf("Herramienta errónea para 'cerrar': esperaba os_close_window, obtuvo %s", matchCerrar.Engram.ToolName)
+	}
+}
+

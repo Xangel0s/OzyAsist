@@ -138,6 +138,78 @@ func NormalizeColloquialText(s string) string {
 	return strings.TrimSpace(s)
 }
 
+var closeVerbs = []string{
+	"cierra", "cerrar", "cierrame", "apaga", "apagar", "termina", "terminar",
+	"mata", "matar", "kill", "quita", "quitar", "finaliza", "finalizar",
+}
+
+var openVerbs = []string{
+	"abre", "abrir", "abreme", "inicia", "iniciar", "ejecuta", "ejecutar",
+	"lanza", "lanzar", "start", "run",
+}
+
+func hasAnyVerb(text string, verbs []string) bool {
+	words := strings.Fields(text)
+	for _, w := range words {
+		for _, v := range verbs {
+			if w == v {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsMetaConversationalQuery determina si una consulta es reflexiva, conversacional,
+// de depuración o una pregunta que debe ser atendida por el modelo cognitivo (LLM)
+// y jamás ser interceptada por un reflejo Fast-Track.
+func IsMetaConversationalQuery(rawQuery, cleanQuery string, tokens []string) bool {
+	// 1. Signos de interrogación directos
+	if strings.Contains(rawQuery, "?") || strings.Contains(rawQuery, "¿") {
+		return true
+	}
+
+	// 2. Marcadores y temas meta-conversacionales / depuración / feedback / análisis
+	metaMarkers := []string{
+		"por que", "porque", "por que razon", "explica", "explicame", "explicar",
+		"que opinas", "revisa", "revisar", "revisa bien", "analiza", "analizar",
+		"corrige", "corregir", "actualiza", "actualizar", "grafo", "grafos",
+		"error", "fallo", "falla", "bug", "problema", "automanda", "evitar",
+		"fast track", "fasttrack", "como podemos", "puedes verificar", "puedes revisar",
+		"verifica ello", "ultimo mensaje", "mensaje anterior", "no detecta",
+		"trate de", "conversarlo", "en este caso", "pero ya esta", "pero es muy",
+		"quien eres", "como funcionas", "que puedes hacer", "que sabes hacer",
+		"ayudame a entender", "dime", "cuentame",
+	}
+	for _, m := range metaMarkers {
+		if strings.Contains(cleanQuery, m) {
+			return true
+		}
+	}
+
+	// 3. Consultas compuestas o largas (> 7 palabras) que no comienzan con un comando imperativo directo
+	if len(tokens) > 7 {
+		first := tokens[0]
+		directImperatives := []string{
+			"abre", "abrir", "cierra", "cerrar", "sube", "subir", "baja", "bajar",
+			"pon", "silencia", "pausa", "pausar", "muestra", "mostrar", "maximiza",
+			"minimiza", "bloquea", "apaga", "silencio",
+		}
+		isDirect := false
+		for _, imp := range directImperatives {
+			if first == imp {
+				isDirect = true
+				break
+			}
+		}
+		if !isDirect {
+			return true
+		}
+	}
+
+	return false
+}
+
 // seedDefaultEngrams inicializa el catálogo de engramas reflejos en memoria.
 func (g *SystemGraph) seedDefaultEngrams() {
 	defaults := []SystemEngram{
@@ -155,9 +227,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Audio silenciado.",
-				"Listo, sonido silenciado.",
-				"Hecho, ya le bajé para que no moleste.",
+				"Listo, audio silenciado. ¿Deseas que reactive el sonido más adelante?",
+				"He silenciado el sonido de la PC. ¿En qué más te colaboro?",
 			},
 		},
 		{
@@ -173,8 +244,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Sonido reactivado.",
-				"Listo, audio restablecido.",
+				"Listo, sonido reactivado. ¿El volumen está bien o necesitas ajustarlo?",
+				"Audio restablecido con éxito. ¿Puedo ayudarte con algo más?",
 			},
 		},
 		{
@@ -190,8 +261,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Volumen reducido.",
-				"Listo, volumen bajado.",
+				"Listo, volumen reducido. ¿El nivel es adecuado o necesitas que lo baje más?",
+				"Volumen bajado exitosamente. ¿En qué más te puedo asistir?",
 			},
 		},
 		{
@@ -207,8 +278,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Volumen aumentado.",
-				"Listo, volumen subido.",
+				"Listo, volumen aumentado. ¿Está bien a este nivel o lo subo un poco más?",
+				"Volumen ajustado hacia arriba. ¿Deseas reproducir algo más?",
 			},
 		},
 		{
@@ -224,8 +295,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Reproducción alternada.",
-				"Listo, música pausada/reanudada.",
+				"Listo, reproducción alternada. ¿Deseas cambiar de pista o necesitas algo más?",
+				"Música pausada/reanudada. ¿En qué más te puedo colaborar?",
 			},
 		},
 		{
@@ -240,8 +311,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Siguiente pista.",
-				"Listo, canción cambiada.",
+				"Listo, pasando a la siguiente canción. ¿En qué más te puedo colaborar?",
+				"Pista cambiada. ¿Deseas hacer algo más?",
 			},
 		},
 
@@ -259,8 +330,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Mostrando escritorio.",
-				"Listo, ventanas minimizadas.",
+				"Listo, he minimizado las ventanas para mostrarte el escritorio. ¿Necesitas abrir alguna aplicación o archivo?",
+				"Escritorio visible. ¿En qué más te puedo asistir?",
 			},
 		},
 		{
@@ -276,8 +347,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Ventana acomodada a la izquierda.",
-				"Listo, dividida a la izquierda.",
+				"Listo, ventana acomodada a la izquierda de la pantalla. ¿Deseas abrir otra aplicación a la derecha?",
 			},
 		},
 		{
@@ -293,8 +363,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Ventana acomodada a la derecha.",
-				"Listo, dividida a la derecha.",
+				"Listo, ventana acomodada a la derecha de la pantalla. ¿En qué más te puedo colaborar?",
 			},
 		},
 		{
@@ -310,8 +379,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Ventana maximizada.",
-				"Listo, en pantalla completa.",
+				"Listo, ventana maximizada en pantalla completa. ¿Necesitas realizar alguna otra acción?",
 			},
 		},
 
@@ -329,7 +397,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Consultando telemetría de hardware...",
+				"Consultando telemetría de hardware en tiempo real...",
 			},
 		},
 		{
@@ -345,7 +413,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Consultando almacenamiento en discos...",
+				"Consultando almacenamiento y espacio libre en discos...",
 			},
 		},
 		{
@@ -360,7 +428,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Auditando salud SMART y componentes...",
+				"Auditando salud SMART e integridad de componentes...",
 			},
 		},
 		{
@@ -375,15 +443,15 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Auditando periféricos activos (cámara/micrófono)...",
+				"Auditando periféricos activos (cámara y micrófono)...",
 			},
 		},
 
-		// --- APLICACIONES RÁPIDAS ---
+		// --- APLICACIONES RÁPIDAS Y CONTROL DE VENTANAS ---
 		{
 			ID:           "launch_calc",
 			UseCase:      "app_launch_calculator",
-			TriggerWords: []string{"abre la calculadora", "abrir calculadora", "calculadora", "inicia la calculadora"},
+			TriggerWords: []string{"abre la calculadora", "abrir calculadora", "inicia la calculadora", "abre calc", "abrir calc", "lanzar calculadora", "ejecuta la calculadora"},
 			ToolName:     "os_launch_app",
 			DefaultArgs:  map[string]any{"appName": "calc"},
 			FastTrack:    true,
@@ -392,13 +460,30 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Abriendo Calculadora...",
+				"Listo, he abierto la Calculadora. ¿Deseas realizar alguna operación o necesitas algo más?",
+				"Calculadora abierta y lista en pantalla. ¿Qué cálculo deseas realizar?",
+			},
+		},
+		{
+			ID:           "close_calc",
+			UseCase:      "app_close_calculator",
+			TriggerWords: []string{"cierra la calculadora", "cerrar calculadora", "cierrame la calculadora", "cierra calculadora", "apaga la calculadora", "quita la calculadora", "cierra calc", "cerrar calc"},
+			ToolName:     "os_close_window",
+			DefaultArgs:  map[string]any{"title": "calculadora"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.98,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he cerrado la Calculadora. ¿En qué más te puedo colaborar?",
+				"Calculadora cerrada con éxito. ¿Deseas realizar alguna otra acción?",
 			},
 		},
 		{
 			ID:           "launch_notepad",
 			UseCase:      "app_launch_notepad",
-			TriggerWords: []string{"abre el bloc de notas", "abrir bloc de notas", "bloc de notas", "notepad", "inicia el bloc de notas"},
+			TriggerWords: []string{"abre el bloc de notas", "abrir bloc de notas", "inicia el bloc de notas", "abre bloc de notas", "abre notepad", "abrir notepad"},
 			ToolName:     "os_launch_app",
 			DefaultArgs:  map[string]any{"appName": "notepad"},
 			FastTrack:    true,
@@ -407,13 +492,30 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Abriendo Bloc de notas...",
+				"Listo, he abierto el Bloc de notas. ¿Deseas que redacte alguna nota o necesitas algo más?",
+				"Bloc de notas listo en pantalla. ¿Qué te gustaría redactar?",
+			},
+		},
+		{
+			ID:           "close_notepad",
+			UseCase:      "app_close_notepad",
+			TriggerWords: []string{"cierra el bloc de notas", "cerrar bloc de notas", "cierra bloc de notas", "cierra notepad", "cerrar notepad", "cierrame el bloc de notas"},
+			ToolName:     "os_close_window",
+			DefaultArgs:  map[string]any{"title": "bloc de notas"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.98,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he cerrado el Bloc de notas. ¿Necesitas realizar alguna otra tarea?",
+				"Bloc de notas cerrado. ¿En qué más te puedo asistir?",
 			},
 		},
 		{
 			ID:           "launch_taskmgr",
 			UseCase:      "app_launch_taskmgr",
-			TriggerWords: []string{"abre el administrador de tareas", "abrir administrador de tareas", "administrador de tareas", "taskmgr"},
+			TriggerWords: []string{"abre el administrador de tareas", "abrir administrador de tareas", "inicia el administrador de tareas", "abre taskmgr", "abrir taskmgr"},
 			ToolName:     "os_launch_app",
 			DefaultArgs:  map[string]any{"appName": "taskmgr"},
 			FastTrack:    true,
@@ -422,7 +524,38 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Abriendo Administrador de tareas...",
+				"Listo, he abierto el Administrador de tareas. ¿Deseas monitorear algún proceso o consumo de recursos?",
+			},
+		},
+		{
+			ID:           "close_taskmgr",
+			UseCase:      "app_close_taskmgr",
+			TriggerWords: []string{"cierra el administrador de tareas", "cerrar administrador de tareas", "cierra administrador de tareas", "cierra taskmgr", "cerrar taskmgr"},
+			ToolName:     "os_close_window",
+			DefaultArgs:  map[string]any{"title": "administrador de tareas"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.98,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he cerrado el Administrador de tareas. ¿En qué más te puedo colaborar?",
+			},
+		},
+		{
+			ID:           "close_window_active",
+			UseCase:      "window_close_active",
+			TriggerWords: []string{"cierra la ventana", "cerrar ventana", "cierra esta ventana", "cerrar esta ventana", "cierra ventana actual", "cerrar", "cierra la app", "cerrar app"},
+			ToolName:     "os_close_window",
+			DefaultArgs:  map[string]any{"title": "activa"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.97,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he cerrado la ventana en pantalla. ¿Deseas realizar alguna otra acción?",
+				"Ventana cerrada exitosamente. ¿En qué más te puedo asistir?",
 			},
 		},
 
@@ -539,10 +672,30 @@ func (g *SystemGraph) ResolveIntent(query string) (*EngramMatch, bool) {
 	}
 
 	queryTokens := strings.Fields(cleanQuery)
+
+	// Guardián Meta-Conversacional / Feedback: si la consulta es una pregunta, reflexión,
+	// reporte de fallo, explicación o diálogo, jamás debe disparar un reflejo FastTrack determinista.
+	// Se deriva inmediatamente al modelo cognitivo (LLM) retornando false.
+	if IsMetaConversationalQuery(query, cleanQuery, queryTokens) {
+		return nil, false
+	}
+
+	hasCloseVerb := hasAnyVerb(cleanQuery, closeVerbs)
+	hasOpenVerb := hasAnyVerb(cleanQuery, openVerbs)
+
 	candidateScores := make(map[string]float64)
 
-	// 1. Verificación exacta de frases clave
+	// 1. Verificación exacta de frases clave con filtro de polaridad de verbos
 	for id, engram := range g.engrams {
+		// Antonym Polarity Guard: si el usuario pide cerrar, jamás activar os_launch_app
+		if hasCloseVerb && engram.ToolName == "os_launch_app" {
+			continue
+		}
+		// Antonym Polarity Guard: si el usuario pide abrir, jamás activar os_close_window
+		if hasOpenVerb && engram.ToolName == "os_close_window" {
+			continue
+		}
+
 		for _, trigger := range engram.TriggerWords {
 			cleanTrigger := NormalizeColloquialText(trigger)
 			if cleanQuery == cleanTrigger {
@@ -553,13 +706,23 @@ func (g *SystemGraph) ResolveIntent(query string) (*EngramMatch, bool) {
 		}
 	}
 
-	// 2. Coincidencia por tokens en índice invertido
+	// 2. Coincidencia por tokens en índice invertido con filtro de polaridad
 	for _, token := range queryTokens {
 		if len(token) < 3 {
 			continue
 		}
 		if ids, ok := g.invertedIndex[token]; ok {
 			for _, id := range ids {
+				engram := g.engrams[id]
+				if engram == nil {
+					continue
+				}
+				if hasCloseVerb && engram.ToolName == "os_launch_app" {
+					continue
+				}
+				if hasOpenVerb && engram.ToolName == "os_close_window" {
+					continue
+				}
 				candidateScores[id] += 0.25
 			}
 		}
@@ -725,6 +888,17 @@ func (g *SystemGraph) loadFromSQLite() {
 			&e.SuccessCount, &feedbacksJSON,
 		)
 		if err != nil {
+			continue
+		}
+
+		// Si ya existe un engrama predeterminado en el grafo, no sobrescribir sus
+		// disparadores ni plantillas de feedback actualizadas con datos históricos obsoletos de SQLite.
+		if existing, ok := g.engrams[e.ID]; ok {
+			existing.SuccessCount = e.SuccessCount
+			if e.Maturity != "" {
+				existing.Maturity = e.Maturity
+			}
+			go g.saveToSQLite(existing)
 			continue
 		}
 

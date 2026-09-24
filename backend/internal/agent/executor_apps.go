@@ -296,6 +296,16 @@ func execOSCloseWindow(ctx context.Context, tc providers.ToolCall) (string, bool
 			if strings.HasPrefix(cleanLower, prefix) { cleanLower = strings.TrimSpace(cleanLower[len(prefix):]) }
 		}
 
+		if cleanLower == "activa" || cleanLower == "actual" || cleanLower == "ventana" || cleanLower == "esta ventana" || cleanLower == "primer plano" || cleanLower == "foreground" {
+			wins, err := nav.GetActiveWindows(ctx)
+			if err == nil && len(wins) > 0 {
+				top := wins[0]
+				_ = nav.CloseWindow(ctx, top.Handle)
+				return fmt.Sprintf("Ventana activa '%s' (HWND %d, PID %d) cerrada exitosamente.", top.Title, top.Handle, top.ProcessID), true
+			}
+			return "No se detectaron ventanas activas visibles para cerrar.", false
+		}
+
 		wins, err := nav.GetActiveWindows(ctx)
 		if err == nil {
 			for _, w := range wins {
