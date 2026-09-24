@@ -515,7 +515,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 		{
 			ID:           "launch_taskmgr",
 			UseCase:      "app_launch_taskmgr",
-			TriggerWords: []string{"abre el administrador de tareas", "abrir administrador de tareas", "inicia el administrador de tareas", "abre taskmgr", "abrir taskmgr"},
+			TriggerWords: []string{"abre el administrador de tareas", "abrir administrador de tareas", "inicia el administrador de tareas", "abre taskmgr", "abrir taskmgr", "abre el admin tareas", "abrir admin tareas", "abre admin tareas", "inicia el admin tareas", "abre el admin de tareas", "abrir admin de tareas", "abre admin de tareas"},
 			ToolName:     "os_launch_app",
 			DefaultArgs:  map[string]any{"appName": "taskmgr"},
 			FastTrack:    true,
@@ -530,7 +530,7 @@ func (g *SystemGraph) seedDefaultEngrams() {
 		{
 			ID:           "close_taskmgr",
 			UseCase:      "app_close_taskmgr",
-			TriggerWords: []string{"cierra el administrador de tareas", "cerrar administrador de tareas", "cierra administrador de tareas", "cierra taskmgr", "cerrar taskmgr"},
+			TriggerWords: []string{"cierra el administrador de tareas", "cerrar administrador de tareas", "cierra administrador de tareas", "cierra taskmgr", "cerrar taskmgr", "cierra el admin tareas", "cerrar admin tareas", "cierra admin tareas", "cierra el admin de tareas", "cerrar admin de tareas"},
 			ToolName:     "os_close_window",
 			DefaultArgs:  map[string]any{"title": "administrador de tareas"},
 			FastTrack:    true,
@@ -782,6 +782,189 @@ func (g *SystemGraph) ResolveIntent(query string) (*EngramMatch, bool) {
 		IsFastTrack:   isFastTrack,
 		Feedback:      feedback,
 	}, true
+}
+
+var compoundConnectors = []string{" y ", ", y ", " e ", " ademas ", " además ", " tambien ", " también ", " luego ", " despues ", " después "}
+
+// SplitCompoundClauses descompone una consulta compuesta en cláusulas atómicas
+// y propaga verbos elididos entre ellas (ej: "abre la calculadora y el admin tareas" -> "abre el admin tareas").
+func SplitCompoundClauses(query string) []string {
+	clean := NormalizeColloquialText(query)
+	if clean == "" {
+		return nil
+	}
+
+	temp := " " + clean + " "
+	for _, conn := range compoundConnectors {
+		temp = strings.ReplaceAll(temp, conn, " | ")
+	}
+
+	rawParts := strings.Split(temp, "|")
+	var clauses []string
+	for _, p := range rawParts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed != "" {
+			clauses = append(clauses, trimmed)
+		}
+	}
+
+	if len(clauses) <= 1 {
+		return []string{query}
+	}
+
+	var processed []string
+	var lastActionVerb string
+
+	for i, clause := range clauses {
+		words := strings.Fields(clause)
+		if len(words) == 0 {
+			continue
+		}
+		firstWord := words[0]
+		isAction := false
+		for _, v := range append(openVerbs, closeVerbs...) {
+			if firstWord == v {
+				isAction = true
+				lastActionVerb = v
+				break
+			}
+		}
+
+		if !isAction && lastActionVerb != "" && i > 0 {
+			clause = lastActionVerb + " " + clause
+		}
+		processed = append(processed, clause)
+	}
+
+	return processed
+}
+
+// ResolveMultiIntent analiza una consulta que puede contener 1 o múltiples intenciones
+// unidas por conectores (" y ", " además ", etc.).
+// Retorna la lista de engramas y true ÚNICAMENTE si todas las cláusulas resuelven a
+// reflejos deterministas en RAM (Fast-Track). Si alguna requiere razonamiento o LLM,
+// retorna false para que el Agent Loop completo atienda la petición sin fragmentarla.
+func (g *SystemGraph) ResolveMultiIntent(query string) ([]*EngramMatch, bool) {
+	clauses := SplitCompoundClauses(query)
+	if len(clauses) <= 1 {
+		match, ok := g.ResolveIntent(query)
+		if ok && match != nil && match.IsFastTrack && match.Score >= 0.95 {
+			return []*EngramMatch{match}, true
+		}
+		return nil, false
+	}
+
+	var matches []*EngramMatch
+	seenEngrams := make(map[string]bool)
+
+	for _, clause := range clauses {
+		match, ok := g.ResolveIntent(clause)
+		if !ok || match == nil || !match.IsFastTrack || match.Score < 0.95 || match.Engram.Destructive {
+			// Si al menos una cláusula no califica para Fast-Track, delegar al LLM completo
+			return nil, false
+		}
+		if !seenEngrams[match.Engram.ID] {
+			seenEngrams[match.Engram.ID] = true
+			matches = append(matches, match)
+		}
+	}
+
+	return matches, len(matches) > 0
+}
+
+// SynthesizeMultiFeedback construye una respuesta conversacional fluida y cordial
+// para múltiples acciones ejecutadas conjuntamente.
+func SynthesizeMultiFeedback(matches []*EngramMatch) string {
+	if len(matches) == 0 {
+		return "Listo, he ejecutado las acciones solicitadas."
+	}
+	if len(matches) == 1 {
+		return matches[0].Feedback
+	}
+
+	type actionDesc struct {
+		verb string
+		noun string
+	}
+	var descs []actionDesc
+
+	for _, m := range matches {
+		id := m.Engram.ID
+		switch {
+		case id == "launch_calc":
+			descs = append(descs, actionDesc{verb: "he abierto", noun: "la Calculadora"})
+		case id == "close_calc":
+			descs = append(descs, actionDesc{verb: "he cerrado", noun: "la Calculadora"})
+		case id == "launch_notepad":
+			descs = append(descs, actionDesc{verb: "he abierto", noun: "el Bloc de notas"})
+		case id == "close_notepad":
+			descs = append(descs, actionDesc{verb: "he cerrado", noun: "el Bloc de notas"})
+		case id == "launch_taskmgr":
+			descs = append(descs, actionDesc{verb: "he abierto", noun: "el Administrador de tareas"})
+		case id == "close_taskmgr":
+			descs = append(descs, actionDesc{verb: "he cerrado", noun: "el Administrador de tareas"})
+		case id == "close_window_active":
+			descs = append(descs, actionDesc{verb: "he cerrado", noun: "la ventana activa"})
+		case id == "audio_mute":
+			descs = append(descs, actionDesc{verb: "he silenciado", noun: "el sonido"})
+		case id == "audio_unmute":
+			descs = append(descs, actionDesc{verb: "he reactivado", noun: "el sonido"})
+		case id == "audio_vol_up":
+			descs = append(descs, actionDesc{verb: "he subido", noun: "el volumen"})
+		case id == "audio_vol_down":
+			descs = append(descs, actionDesc{verb: "he bajado", noun: "el volumen"})
+		case id == "window_show_desktop":
+			descs = append(descs, actionDesc{verb: "he minimizado", noun: "las ventanas"})
+		case id == "window_maximize":
+			descs = append(descs, actionDesc{verb: "he maximizado", noun: "la ventana"})
+		case id == "window_tile_left":
+			descs = append(descs, actionDesc{verb: "he acomodado a la izquierda", noun: "la ventana"})
+		case id == "window_tile_right":
+			descs = append(descs, actionDesc{verb: "he acomodado a la derecha", noun: "la ventana"})
+		case id == "media_play_pause":
+			descs = append(descs, actionDesc{verb: "he alternado", noun: "la reproducción multimedia"})
+		case id == "media_next_track":
+			descs = append(descs, actionDesc{verb: "he cambiado", noun: "a la siguiente canción"})
+		default:
+			descs = append(descs, actionDesc{verb: "he ejecutado", noun: m.Engram.UseCase})
+		}
+	}
+
+	allSameVerb := true
+	for i := 1; i < len(descs); i++ {
+		if descs[i].verb != descs[0].verb {
+			allSameVerb = false
+			break
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString("Listo, ")
+	if allSameVerb {
+		sb.WriteString(descs[0].verb)
+		sb.WriteString(" ")
+		for i, d := range descs {
+			if i > 0 && i == len(descs)-1 {
+				sb.WriteString(" y ")
+			} else if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(d.noun)
+		}
+	} else {
+		for i, d := range descs {
+			if i > 0 && i == len(descs)-1 {
+				sb.WriteString(" y ")
+			} else if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(d.verb)
+			sb.WriteString(" ")
+			sb.WriteString(d.noun)
+		}
+	}
+	sb.WriteString(". ¿En qué más te puedo colaborar?")
+	return sb.String()
 }
 
 // GetCoOccurringTools retorna las herramientas compañeras para armar el clúster podado.

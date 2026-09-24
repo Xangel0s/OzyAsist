@@ -376,7 +376,7 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 
 	targetsToKill := []string{}
 	switch cleanLower {
-	case "administrador de tareas", "administrador de tarea", "task manager", "taskmgr", "taskmgr.exe": targetsToKill = []string{"Taskmgr.exe", "taskmgr.exe"}
+	case "administrador de tareas", "administrador de tarea", "admin tareas", "admin de tareas", "admin tarea", "admin de tarea", "task manager", "taskmgr", "taskmgr.exe": targetsToKill = []string{"Taskmgr.exe", "taskmgr.exe"}
 	case "configuración", "configuracion", "settings", "systemsettings": targetsToKill = []string{"SystemSettings.exe"}
 	case "bloc de notas", "bloc", "notas", "notepad", "notepad.exe": targetsToKill = []string{"notepad.exe", "Notepad.exe"}
 	case "calculadora", "calc", "calc.exe", "calculator", "calculatorapp": targetsToKill = []string{"CalculatorApp.exe", "calc.exe", "Calculator.exe"}
