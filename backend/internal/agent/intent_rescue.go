@@ -155,8 +155,9 @@ func rescueDirectUserIntent(userMessage, turnText string) []providers.ToolCall {
 	// Diccionario de aplicaciones comunes de Windows
 	knownAppAliases := []struct{ Pattern, Target string }{
 		{"calculadora", "calc"}, {"calc", "calc"}, {"bloc de notas", "notepad"}, {"notepad", "notepad"},
-		{"antigravity ide", "antigravity"}, {"antigravity", "antigravity"}, {"administrador de tareas", "taskmgr"},
-		{"taskmgr", "taskmgr"}, {"explorador de archivos", "explorer"}, {"explorador", "explorer"},
+		{"antigravity ide", "antigravity"}, {"antigravity", "antigravity"},
+		{"administrador de tareas", "taskmgr"}, {"admin tareas", "taskmgr"}, {"admin de tareas", "taskmgr"}, {"taskmgr", "taskmgr"},
+		{"explorador de archivos", "explorer"}, {"explorador", "explorer"},
 		{"spotify", "spotify"}, {"paint", "mspaint"}, {"terminal", "wt"}, {"roblox", "roblox"},
 		{"documentos", "documents"}, {"descargas", "downloads"},
 	}

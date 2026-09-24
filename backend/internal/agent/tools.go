@@ -331,25 +331,27 @@ func GetActiveToolsForQuery(query string, voiceMode bool, isLocal bool) []provid
 		return baseTools
 	}
 
-	match, ok := graph.ResolveIntent(query)
-	if !ok || match == nil || match.Engram == nil {
+	clauses := memory.SplitCompoundClauses(query)
+	allowedNames := make(map[string]bool)
+
+	for _, clause := range clauses {
+		if match, ok := graph.ResolveIntent(clause); ok && match != nil && match.Engram != nil {
+			targetTool := match.Engram.ToolName
+			allowedNames[targetTool] = true
+			for _, co := range graph.GetCoOccurringTools([]string{targetTool}) {
+				allowedNames[co] = true
+			}
+			for _, co := range match.Engram.CoOccurringTools {
+				allowedNames[co] = true
+			}
+		}
+	}
+
+	if len(allowedNames) == 0 {
 		if isLocal && !voiceMode {
 			return VoiceAgentTools
 		}
 		return baseTools
-	}
-
-	targetTool := match.Engram.ToolName
-	allowedNames := map[string]bool{
-		targetTool: true,
-	}
-
-	// Incluir herramientas co-ocurrentes del grafo
-	for _, co := range graph.GetCoOccurringTools([]string{targetTool}) {
-		allowedNames[co] = true
-	}
-	for _, co := range match.Engram.CoOccurringTools {
-		allowedNames[co] = true
 	}
 
 	var pruned []providers.ToolDef

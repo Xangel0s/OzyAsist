@@ -213,3 +213,85 @@ func TestSystemGraph_AntonymPolarityAndMetaGuard(t *testing.T) {
 	}
 }
 
+func TestSystemGraph_SplitCompoundClauses(t *testing.T) {
+	// 1. Separación y propagación de verbo elidido
+	clauses := SplitCompoundClauses("abre la calculadora y el admin tareas")
+	if len(clauses) != 2 {
+		t.Fatalf("Esperaba 2 cláusulas, obtuvo %d: %v", len(clauses), clauses)
+	}
+	if clauses[0] != "abre la calculadora" {
+		t.Errorf("Cláusula 1 errónea: %s", clauses[0])
+	}
+	if clauses[1] != "abre el admin tareas" {
+		t.Errorf("Cláusula 2 con verbo elidido errónea: %s", clauses[1])
+	}
+
+	// 2. Cláusulas de cierre
+	closeClauses := SplitCompoundClauses("cierra la calculadora y el bloc de notas")
+	if len(closeClauses) != 2 {
+		t.Fatalf("Esperaba 2 cláusulas, obtuvo %d: %v", len(closeClauses), closeClauses)
+	}
+	if closeClauses[0] != "cierra la calculadora" {
+		t.Errorf("Cláusula 1 errónea: %s", closeClauses[0])
+	}
+	if closeClauses[1] != "cierra el bloc de notas" {
+		t.Errorf("Cláusula 2 con verbo elidido errónea: %s", closeClauses[1])
+	}
+
+	// 3. Cláusula mixta con razonamiento (no debe propagar verbo de acción si la segunda cláusula ya tiene verbo propio)
+	mixedClauses := SplitCompoundClauses("abre la calculadora y explicame la teoria de la relatividad")
+	if len(mixedClauses) != 2 {
+		t.Fatalf("Esperaba 2 cláusulas, obtuvo %d: %v", len(mixedClauses), mixedClauses)
+	}
+	if mixedClauses[0] != "abre la calculadora" {
+		t.Errorf("Cláusula 1 errónea: %s", mixedClauses[0])
+	}
+}
+
+func TestSystemGraph_MultiIntentResolution(t *testing.T) {
+	g := GetSystemGraph()
+
+	// 1. Doble apertura reflexiva (Fast-Track)
+	matches, ok := g.ResolveMultiIntent("abre la calculadora y el admin tareas")
+	if !ok || len(matches) != 2 {
+		t.Fatalf("Esperaba 2 matches para 'abre la calculadora y el admin tareas', ok=%v, count=%d", ok, len(matches))
+	}
+	if matches[0].Engram.ID != "launch_calc" {
+		t.Errorf("Match 0 erróneo: esperaba launch_calc, obtuvo %s", matches[0].Engram.ID)
+	}
+	if matches[1].Engram.ID != "launch_taskmgr" {
+		t.Errorf("Match 1 erróneo: esperaba launch_taskmgr, obtuvo %s", matches[1].Engram.ID)
+	}
+
+	feedback := SynthesizeMultiFeedback(matches)
+	expectedFeedback := "Listo, he abierto la Calculadora y el Administrador de tareas. ¿En qué más te puedo colaborar?"
+	if feedback != expectedFeedback {
+		t.Errorf("Feedback erróneo:\nEsperado: %s\nObtenido: %s", expectedFeedback, feedback)
+	}
+
+	// 2. Doble cierre reflexivo (Fast-Track)
+	closeMatches, closeOk := g.ResolveMultiIntent("cierra la calculadora y el admin tareas")
+	if !closeOk || len(closeMatches) != 2 {
+		t.Fatalf("Esperaba 2 matches para 'cierra la calculadora y el admin tareas', ok=%v, count=%d", closeOk, len(closeMatches))
+	}
+	if closeMatches[0].Engram.ID != "close_calc" {
+		t.Errorf("Match 0 erróneo: esperaba close_calc, obtuvo %s", closeMatches[0].Engram.ID)
+	}
+	if closeMatches[1].Engram.ID != "close_taskmgr" {
+		t.Errorf("Match 1 erróneo: esperaba close_taskmgr, obtuvo %s", closeMatches[1].Engram.ID)
+	}
+
+	closeFeedback := SynthesizeMultiFeedback(closeMatches)
+	expectedCloseFeedback := "Listo, he cerrado la Calculadora y el Administrador de tareas. ¿En qué más te puedo colaborar?"
+	if closeFeedback != expectedCloseFeedback {
+		t.Errorf("Feedback erróneo:\nEsperado: %s\nObtenido: %s", expectedCloseFeedback, closeFeedback)
+	}
+
+	// 3. Intención Mixta: Reflex + Razonamiento (NO debe hacer Fast-Track, debe delegar al LLM completo)
+	mixedMatches, mixedOk := g.ResolveMultiIntent("abre la calculadora y explicame la teoria de la relatividad")
+	if mixedOk || len(mixedMatches) > 0 {
+		t.Errorf("Una petición mixta (acción + razonamiento) NUNCA debe resolverse solo por Fast-Track, debe pasar al LLM!")
+	}
+}
+
+

@@ -22,3 +22,7 @@
 {"messages":[{"role":"user","content":"abre roblox"},{"role":"assistant","content":"Listo, he abierto roblox. ¿Deseas que realice alguna acción dentro de la aplicación o necesitas algo más?"}]}
 {"messages":[{"role":"user","content":"cierra edge"},{"role":"assistant","content":"Listo, he cerrado edge."}]}
 {"messages":[{"role":"user","content":"elimina los 3 pdf en documentos"},{"role":"assistant","content":"He investigado sobre Beck y su álbum \"Color\" y acabo de generar el informe completo en 'C:\\Users\\User\\Documents\\Informe_Ejecutivo_De_Architecura_OzyAssist.docx'. Contiene la información técnica recopilada. ¿Deseas que lo abra en pantalla para revisarlo?"}]}
+{"messages":[{"role":"user","content":"abre roblox"},{"role":"assistant","content":"Listo, he abierto roblox. ¿Deseas que realice alguna acción dentro de la aplicación o necesitas algo más?"}]}
+{"messages":[{"role":"user","content":"cierra roblox"},{"role":"assistant","content":"Listo, he cerrado roblox."}]}
+{"messages":[{"role":"user","content":"abre configuracion"},{"role":"assistant","content":"Listo, he abierto configuracion. ¿Deseas que realice alguna acción dentro de la aplicación o necesitas algo más?"}]}
+{"messages":[{"role":"user","content":"cierra configuracion"},{"role":"assistant","content":"Listo, he cerrado configuracion."}]}

@@ -214,64 +214,73 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 
 	// --- 2. REFLEJO FAST-TRACK (Bypass de LLM para órdenes deterministas en ~1ms, 0 tokens) ---
 	if graph != nil {
-		if match, ok := graph.ResolveIntent(params.UserMessage); ok && match != nil && match.IsFastTrack && match.Score >= 0.95 {
+		if matches, ok := graph.ResolveMultiIntent(params.UserMessage); ok && len(matches) > 0 {
 			emit(AgentEvent{Type: "state:sync", State: "executing"})
 
-			// Registrar estado previo para rollback si aplica a audio o ventanas
-			if match.Engram.ToolName == "os_audio_device" {
-				if act, ok := match.ExtractedArgs["action"].(string); ok && act == "mute" {
-					isMute, _ := match.ExtractedArgs["mute"].(bool)
-					graph.RecordRollback(memory.RollbackState{
-						EngramID:       match.Engram.ID,
-						ToolName:       "os_audio_device",
-						ActionTaken:    "mute",
-						RevertToolName: "os_audio_device",
-						RevertArgs:     map[string]any{"action": "mute", "mute": !isMute},
-						Description:    "Restaurar silencio de audio",
-					})
+			var executedToolCalls []providers.ToolCall
+			allSuccess := true
+
+			for _, match := range matches {
+				// Registrar estado previo para rollback si aplica a audio
+				if match.Engram.ToolName == "os_audio_device" {
+					if act, ok := match.ExtractedArgs["action"].(string); ok && act == "mute" {
+						isMute, _ := match.ExtractedArgs["mute"].(bool)
+						graph.RecordRollback(memory.RollbackState{
+							EngramID:       match.Engram.ID,
+							ToolName:       "os_audio_device",
+							ActionTaken:    "mute",
+							RevertToolName: "os_audio_device",
+							RevertArgs:     map[string]any{"action": "mute", "mute": !isMute},
+							Description:    "Restaurar silencio de audio",
+						})
+					}
 				}
+
+				ftInput, _ := json.Marshal(match.ExtractedArgs)
+				ftTC := providers.ToolCall{
+					ID:    "fasttrack_" + uuid.NewString()[:8],
+					Name:  match.Engram.ToolName,
+					Input: json.RawMessage(ftInput),
+				}
+
+				emit(AgentEvent{
+					Type:      "tool:call",
+					ToolID:    ftTC.ID,
+					ToolName:  ftTC.Name,
+					ToolInput: string(ftInput),
+				})
+
+				step := toolCallToPlanStep(ftTC)
+				auth := &AuthorizedAction{Step: step}
+				res, success := executeToolCall(ctx, ftTC, auth, sandbox)
+				emit(AgentEvent{
+					Type:        "tool:result",
+					ToolID:      ftTC.ID,
+					ToolName:    ftTC.Name,
+					ToolInput:   string(ftInput),
+					ToolOutput:  res,
+					ToolSuccess: success,
+				})
+
+				if success {
+					graph.PromoteEngram(match.Engram.ID)
+				} else {
+					allSuccess = false
+				}
+				executedToolCalls = append(executedToolCalls, ftTC)
 			}
 
-			ftInput, _ := json.Marshal(match.ExtractedArgs)
-			ftTC := providers.ToolCall{
-				ID:    "fasttrack_" + uuid.NewString()[:8],
-				Name:  match.Engram.ToolName,
-				Input: json.RawMessage(ftInput),
+			reply := memory.SynthesizeMultiFeedback(matches)
+			if !allSuccess && reply == "" {
+				reply = "Listo, he ejecutado las acciones solicitadas."
 			}
 
-			emit(AgentEvent{
-				Type:      "tool:call",
-				ToolID:    ftTC.ID,
-				ToolName:  ftTC.Name,
-				ToolInput: string(ftInput),
-			})
-
-			step := toolCallToPlanStep(ftTC)
-			auth := &AuthorizedAction{Step: step}
-			res, success := executeToolCall(ctx, ftTC, auth, sandbox)
-			emit(AgentEvent{
-				Type:        "tool:result",
-				ToolID:      ftTC.ID,
-				ToolName:    ftTC.Name,
-				ToolInput:   string(ftInput),
-				ToolOutput:  res,
-				ToolSuccess: success,
-			})
-
-			if success {
-				graph.PromoteEngram(match.Engram.ID)
-			}
-
-			reply := match.Feedback
-			if reply == "" {
-				reply = "Listo, he ejecutado la acción."
-			}
 			emit(AgentEvent{Type: "message:delta", Content: reply})
 			if params.VoiceMode && speakerQueue != nil {
 				speakerQueue.Enqueue(reply)
 			}
 			emit(AgentEvent{Type: "state:sync", State: "idle"})
-			msgID := persistAgentMessage(params, taskID, reply, []providers.ToolCall{ftTC})
+			msgID := persistAgentMessage(params, taskID, reply, executedToolCalls)
 			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: 1, Content: reply})
 			return
 		}
