@@ -2,10 +2,8 @@ package agent
 
 import (
 	"encoding/json"
-	"strings"
 
 	"github.com/ozyassist/backend/internal/mcp"
-	"github.com/ozyassist/backend/internal/memory"
 	"github.com/ozyassist/backend/internal/providers"
 )
 
@@ -307,69 +305,11 @@ func GetActiveTools(voiceMode bool) []providers.ToolDef {
 	return tools
 }
 
-// GetActiveToolsForQuery aplica poda dinámica de herramientas (Dynamic Tool Pruning)
-// utilizando el SystemGraph para que modelos pequeños locales y modo voz reciban únicamente
-// las 1 a 3 herramientas candidatas más sus complementos de co-ocurrencia.
+// GetActiveToolsForQuery delega en el RAMToolRouter de microsegundos (< 0.02 ms)
+// para aplicar poda semántica en memoria RAM, reduciendo el consumo de prefill
+// de más de 5,000 tokens a menos de 600 tokens en modelos locales y de voz.
 func GetActiveToolsForQuery(query string, voiceMode bool, isLocal bool) []providers.ToolDef {
-	baseTools := GetActiveTools(voiceMode)
-	if !isLocal && !voiceMode {
-		return baseTools
-	}
-
-	clean := memory.NormalizeColloquialText(query)
-	tokens := strings.Fields(clean)
-	if isLocal && memory.IsMetaConversationalQuery(query, clean, tokens) {
-		// En consultas conversacionales, de depuración o reflexivas, no saturar al modelo local con 50 herramientas
-		return nil
-	}
-
-	graph := memory.GetSystemGraph()
-	if graph == nil {
-		if isLocal && !voiceMode {
-			return VoiceAgentTools
-		}
-		return baseTools
-	}
-
-	clauses := memory.SplitCompoundClauses(query)
-	allowedNames := make(map[string]bool)
-
-	for _, clause := range clauses {
-		if match, ok := graph.ResolveIntent(clause); ok && match != nil && match.Engram != nil {
-			targetTool := match.Engram.ToolName
-			allowedNames[targetTool] = true
-			for _, co := range graph.GetCoOccurringTools([]string{targetTool}) {
-				allowedNames[co] = true
-			}
-			for _, co := range match.Engram.CoOccurringTools {
-				allowedNames[co] = true
-			}
-		}
-	}
-
-	if len(allowedNames) == 0 {
-		if isLocal && !voiceMode {
-			return VoiceAgentTools
-		}
-		return baseTools
-	}
-
-	var pruned []providers.ToolDef
-	for _, t := range baseTools {
-		if allowedNames[t.Name] {
-			pruned = append(pruned, t)
-		}
-	}
-
-	// Si por alguna razón la poda quedó vacía, devolver la lista base
-	if len(pruned) == 0 {
-		if isLocal && !voiceMode {
-			return VoiceAgentTools
-		}
-		return baseTools
-	}
-
-	return pruned
+	return DefaultRAMToolRouter().RouteTools(query, voiceMode, isLocal)
 }
 
 func mustJSON(s string) json.RawMessage {

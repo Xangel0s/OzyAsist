@@ -429,10 +429,8 @@ func toOpenAIMessages(msgs []Message) []any {
 				}
 				obj := map[string]any{
 					"role":       "assistant",
+					"content":    m.Content,
 					"tool_calls": tcs,
-				}
-				if strings.TrimSpace(m.Content) != "" {
-					obj["content"] = m.Content
 				}
 				out = append(out, obj)
 			}

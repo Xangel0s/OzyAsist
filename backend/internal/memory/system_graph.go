@@ -543,6 +543,53 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			},
 		},
 		{
+			ID:           "launch_camera",
+			UseCase:      "app_launch_camera",
+			TriggerWords: []string{"abre la camara", "abrir camara", "abre la cámara", "abrir cámara", "inicia la camara", "iniciar camara", "lanzar camara", "abre camara", "abrir cámara de fotos"},
+			ToolName:     "os_launch_app",
+			DefaultArgs:  map[string]any{"appName": "camara"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.98,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he abierto la Cámara.",
+				"Cámara abierta y lista en pantalla.",
+			},
+		},
+		{
+			ID:           "close_camera",
+			UseCase:      "app_close_camera",
+			TriggerWords: []string{"cierra la camara", "cerrar camara", "cierra la cámara", "cerrar cámara", "apaga la camara", "apagar camara", "quita la camara"},
+			ToolName:     "os_close_window",
+			DefaultArgs:  map[string]any{"title": "camara"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.98,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Listo, he cerrado la Cámara.",
+				"Cámara cerrada con éxito.",
+			},
+		},
+		{
+			ID:           "service_list",
+			UseCase:      "service_list_query",
+			TriggerWords: []string{"lista los servicios", "listar servicios", "ver servicios", "servicios de windows", "mostrar servicios", "servicios activos", "cuales servicios estan corriendo"},
+			ToolName:     "os_service_manager",
+			DefaultArgs:  map[string]any{"action": "list"},
+			FastTrack:    true,
+			Destructive:  false,
+			Confidence:   0.97,
+			Maturity:     "reflex",
+			SuccessCount: 10,
+			FeedbackTemplates: []string{
+				"Consultando servicios de Windows en tiempo real...",
+			},
+		},
+		{
 			ID:           "close_window_active",
 			UseCase:      "window_close_active",
 			TriggerWords: []string{"cierra la ventana", "cerrar ventana", "cierra esta ventana", "cerrar esta ventana", "cierra ventana actual", "cerrar", "cierra la app", "cerrar app"},
@@ -554,8 +601,8 @@ func (g *SystemGraph) seedDefaultEngrams() {
 			Maturity:     "reflex",
 			SuccessCount: 10,
 			FeedbackTemplates: []string{
-				"Listo, he cerrado la ventana en pantalla. ¿Deseas realizar alguna otra acción?",
-				"Ventana cerrada exitosamente. ¿En qué más te puedo asistir?",
+				"Listo, he cerrado la ventana en pantalla.",
+				"Ventana cerrada exitosamente.",
 			},
 		},
 
@@ -903,6 +950,12 @@ func SynthesizeMultiFeedback(matches []*EngramMatch) string {
 			descs = append(descs, actionDesc{verb: "he abierto", noun: "el Administrador de tareas"})
 		case id == "close_taskmgr":
 			descs = append(descs, actionDesc{verb: "he cerrado", noun: "el Administrador de tareas"})
+		case id == "launch_camera":
+			descs = append(descs, actionDesc{verb: "he abierto", noun: "la Cámara"})
+		case id == "close_camera":
+			descs = append(descs, actionDesc{verb: "he cerrado", noun: "la Cámara"})
+		case id == "service_list":
+			descs = append(descs, actionDesc{verb: "he consultado", noun: "los servicios de Windows"})
 		case id == "close_window_active":
 			descs = append(descs, actionDesc{verb: "he cerrado", noun: "la ventana activa"})
 		case id == "audio_mute":

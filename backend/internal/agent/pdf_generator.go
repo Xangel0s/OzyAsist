@@ -202,7 +202,13 @@ func GeneratePDFReport(destPath string, opts PDFReportOptions) error {
 		pdf.Ln(6)
 	}
 
-	return pdf.OutputFileAndClose(destPath)
+	if err := pdf.OutputFileAndClose(destPath); err != nil {
+		ext := filepath.Ext(destPath)
+		baseWithoutExt := strings.TrimSuffix(destPath, ext)
+		altPath := fmt.Sprintf("%s_%d%s", baseWithoutExt, time.Now().Unix(), ext)
+		return pdf.OutputFileAndClose(altPath)
+	}
+	return nil
 }
 
 // ConvertDocumentToPDF convierte un archivo existente (CSV, TXT, MD, JSON) a PDF estructurado
@@ -369,12 +375,12 @@ func execOSCreatePDF(_ context.Context, tc providers.ToolCall) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("Error generando archivo Excel redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📊 === ARCHIVO EXCEL GENERADO EXITOSAMENTE (Redirigido desde os_create_pdf) ===\n"+
-			"• Archivo:     %s\n"+
-			"• Hojas:       1 (%s)\n"+
-			"• Estilo:      Diseño OzyAssist con cabeceras en Verde Neón (#D1F107)\n"+
-			"El archivo está disponible y listo para abrir en Microsoft Excel, LibreOffice o Google Sheets.",
-			outPath, sheetTitle), true
+		cleanOut := system.CleanCanonicalPath(outPath)
+		var sizeInfo string
+		if fi, err := os.Stat(outPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ XLSX Creado EXITOSAMENTE: %s%s | Hojas: 1 (%s)", cleanOut, sizeInfo, sheetTitle), true
 	}
 
 	if strings.HasSuffix(lowInputPath, ".docx") || strings.HasSuffix(lowInputPath, ".doc") {
@@ -401,12 +407,13 @@ func execOSCreatePDF(_ context.Context, tc providers.ToolCall) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("Error generando documento Word redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📝 === ARCHIVO WORD (.docx) GENERADO EXITOSAMENTE (Redirigido desde os_create_pdf) ===\n"+
-			"• Archivo:    %s\n"+
-			"• Título:     %s\n"+
-			"• Secciones:  %d\n"+
-			"• Formato:    OpenXML estándar compatible con Microsoft Word, Office 365, LibreOffice y Google Docs",
-			targetPath, params.Title, len(docxSecs)), true
+		cleanTarget := system.CleanCanonicalPath(targetPath)
+		var sizeInfo string
+		if fi, err := os.Stat(targetPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ DOCX Creado EXITOSAMENTE: %s%s | Título: %s | Secciones: %d",
+			cleanTarget, sizeInfo, params.Title, len(docxSecs)), true
 	}
 
 	targetPath := system.ResolveUserPath(params.Path)
@@ -431,12 +438,13 @@ func execOSCreatePDF(_ context.Context, tc providers.ToolCall) (string, bool) {
 		return fmt.Sprintf("Error generando PDF: %v", err), false
 	}
 
-	return fmt.Sprintf("📄 === ARCHIVO PDF GENERADO EXITOSAMENTE ===\n"+
-		"• Archivo:    %s\n"+
-		"• Título:     %s\n"+
-		"• Secciones:  %d\n"+
-		"• Estado:     Válido (formato nativo PDF-1.3, compatible con Adobe Acrobat, navegadores y visores de Windows)",
-		targetPath, params.Title, len(params.Sections)), true
+	cleanTarget := system.CleanCanonicalPath(targetPath)
+	var sizeInfo string
+	if fi, err := os.Stat(targetPath); err == nil {
+		sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+	}
+	return fmt.Sprintf("✅ PDF Creado EXITOSAMENTE: %s%s | Título: %s | Secciones: %d",
+		cleanTarget, sizeInfo, params.Title, len(params.Sections)), true
 }
 
 func execOSConvertToPDF(_ context.Context, tc providers.ToolCall) (string, bool) {
@@ -464,9 +472,12 @@ func execOSConvertToPDF(_ context.Context, tc providers.ToolCall) (string, bool)
 		dstPath = strings.TrimSuffix(srcPath, ext) + ".pdf"
 	}
 
-	return fmt.Sprintf("📄 === ARCHIVO CONVERTIDO A PDF EXITOSAMENTE ===\n"+
-		"• Origen:  %s\n"+
-		"• Destino: %s\n"+
-		"• Estado:  Válido y estructurado nativamente", srcPath, dstPath), true
+	cleanDst := system.CleanCanonicalPath(dstPath)
+	cleanSrc := system.CleanCanonicalPath(srcPath)
+	var sizeInfo string
+	if fi, err := os.Stat(dstPath); err == nil {
+		sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+	}
+	return fmt.Sprintf("✅ Archivo convertido a PDF EXITOSAMENTE: %s%s | Origen: %s", cleanDst, sizeInfo, cleanSrc), true
 }
 

@@ -12,6 +12,7 @@ backend/dist/
 backend/internal/api/dist/assets/
 **/target/
 *.exe
+!backend/internal/agent/assets/ozy-core.exe
 *.exe~
 *.pdb
 *.dll

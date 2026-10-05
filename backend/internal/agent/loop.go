@@ -295,9 +295,13 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 		emit(AgentEvent{Type: "state:sync", State: "thinking"})
 
 		// --- Llamada al LLM con tool definitions (Poda Dinámica para modelos locales / voz) ---
-		isLocal := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio")
+		isLocal := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio" || params.Provider.Name() == "ozytalk" || params.Provider.Name() == "ozybitnet")
 		tools := GetActiveToolsForQuery(params.UserMessage, params.VoiceMode, isLocal)
-		chunkCh, err := params.Provider.StreamCompletion(ctx, history, providers.CompletionOptions{
+
+		// Micro-Compactor de historial para modelos locales: previene saturación de contexto en tareas multi-turno
+		llmHistory := CompactReActHistoryForLocalModel(history, isLocal)
+
+		chunkCh, err := params.Provider.StreamCompletion(ctx, llmHistory, providers.CompletionOptions{
 			Stream: true,
 			Model:  params.Chat.Model,
 			Tools:  tools,
@@ -469,13 +473,14 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				textChunks = []string{turnText}
 			}
 
-			assistantMsg.Content = turnText
+			cleanTurnText := StripReasoningTokens(turnText)
+			assistantMsg.Content = cleanTurnText
 			// Si NO hubo llamadas a herramientas, este turno contiene la respuesta final al usuario.
 			// Emitir los chunks de texto y acumular en finalContent.
 			for _, chunkStr := range textChunks {
 				emit(AgentEvent{Type: "message:delta", Content: chunkStr})
 			}
-			finalContent += turnText
+			finalContent += cleanTurnText
 			if sentenceStreamer != nil {
 				sentenceStreamer.Flush()
 			}
@@ -504,6 +509,7 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 				}
 			}
 
+			finalContent = StripReasoningTokens(finalContent)
 			emit(AgentEvent{Type: "state:sync", State: "idle"})
 			msgID := persistAgentMessage(params, taskID, finalContent, allToolCalls)
 			emit(AgentEvent{Type: "agent:completed", TaskID: taskID, MessageID: msgID, Turns: turn + 1, Content: finalContent, Thinking: turnThinking})
@@ -621,6 +627,13 @@ func runReActLoop(ctx context.Context, sessionID string, session *LoopSession, p
 			toolSuccessMap[tc.ID] = success
 			durationMs := time.Since(start).Milliseconds()
 
+			// --- Auditoría Post-Ejecución CHARC & Recuperación MCTS de NINE ---
+			if (!success || isToolFailureOutput(output)) && tc.Name != "nine_mcts_solve" {
+				if mctsRes, err := SolveWithMCTS(ctx, params.UserMessage, "", tc.Name, output, 50); err == nil && mctsRes != nil && mctsRes.RecoveryAdvice != "" {
+					output += fmt.Sprintf("\n\n🛡️ [AUDITORÍA CHARC & RECUPERACIÓN MCTS]:\n%s", mctsRes.RecoveryAdvice)
+				}
+			}
+
 			emit(AgentEvent{
 				Type:        "tool:result",
 				ToolID:      tc.ID,
@@ -662,7 +675,7 @@ func buildInitialHistory(params AgentLoopParams) []providers.Message {
 		}
 	}
 	maxPrev := 15
-	if params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio") {
+	if params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio" || params.Provider.Name() == "ozytalk" || params.Provider.Name() == "ozybitnet") {
 		maxPrev = 4 // Ventana concisa para evitar alucinaciones por contexto previo en modelos locales pequeños
 	}
 	if len(prevMessages) > maxPrev {
@@ -734,13 +747,90 @@ func sanitizeHistoryRoles(msgs []providers.Message) []providers.Message {
 	return out
 }
 
-// appendToolResult añade el resultado de una herramienta al historial.
+// StripReasoningTokens suprime etiquetas y bloques de pensamiento (<think>, <thought>)
+// de las respuestas del asistente antes de persistir o reinyectar al contexto multi-turno,
+// ahorrando entre 500 y 2,000 tokens por turno y evitando attention drift.
+func StripReasoningTokens(s string) string {
+	// 1. Eliminar bloques cerrados <think>...</think>
+	for {
+		start := strings.Index(s, "<think>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(s, "</think>")
+		if end != -1 && end > start {
+			s = s[:start] + s[end+8:]
+		} else {
+			// Tag sin cerrar, recortar desde la etiqueta
+			s = s[:start]
+			break
+		}
+	}
+
+	// 2. Eliminar bloques cerrados <thought>...</thought>
+	for {
+		start := strings.Index(s, "<thought>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(s, "</thought>")
+		if end != -1 && end > start {
+			s = s[:start] + s[end+10:]
+		} else {
+			s = s[:start]
+			break
+		}
+	}
+
+	// 3. Limpiar tags huérfanos residuales
+	s = strings.ReplaceAll(s, "<think>", "")
+	s = strings.ReplaceAll(s, "</think>", "")
+	s = strings.ReplaceAll(s, "<thought>", "")
+	s = strings.ReplaceAll(s, "</thought>", "")
+
+	return strings.TrimSpace(s)
+}
+
+// WindowToolOutputForContext trunca simétricamente resultados masivos de herramientas
+// (preservando cabecera y cola con conteo de líneas omitidas) para evitar que salidas
+// extensas de consola, logs o lectura de archivos saturen la ventana de contexto.
+func WindowToolOutputForContext(content string, maxHeadLines, maxTailLines int) string {
+	if len(content) <= 1200 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) <= maxHeadLines+maxTailLines+5 {
+		return content
+	}
+
+	var sb strings.Builder
+	for i := 0; i < maxHeadLines && i < len(lines); i++ {
+		sb.WriteString(lines[i])
+		sb.WriteString("\n")
+	}
+
+	omitted := len(lines) - (maxHeadLines + maxTailLines)
+	sb.WriteString(fmt.Sprintf("\n[... %d líneas intermedias omitidas para optimizar la ventana de contexto ...]\n\n", omitted))
+
+	for i := len(lines) - maxTailLines; i < len(lines); i++ {
+		sb.WriteString(lines[i])
+		if i < len(lines)-1 {
+			sb.WriteString("\n")
+		}
+	}
+
+	return sb.String()
+}
+
+// appendToolResult añade el resultado de una herramienta al historial aplicando ventana simétrica.
 func appendToolResult(history []providers.Message, toolCallID, content string) []providers.Message {
+	windowed := WindowToolOutputForContext(content, 25, 15)
 	return append(history, providers.Message{
 		Role: "tool",
 		ToolResult: &providers.ToolResult{
 			ToolCallID: toolCallID,
-			Content:    content,
+			Content:    windowed,
 		},
 	})
 }
@@ -765,11 +855,24 @@ func waitForApproval(ctx context.Context, session *LoopSession, toolID string) b
 // persistAgentMessage guarda el mensaje final del agente en SQLite y en memoria episódica.
 func persistAgentMessage(params AgentLoopParams, taskID, content string, toolCalls []providers.ToolCall) string {
 	msgID := taskID
+	if params.Chat != nil && params.Chat.ID != "" {
+		if _, err := db.GetChat(params.Chat.ID); err != nil {
+			if params.Chat.Mode == "" {
+				params.Chat.Mode = "chat"
+			}
+			if params.Chat.UserID == "" {
+				params.Chat.UserID = db.DefaultUserID()
+			}
+			_ = db.EnsureDefaultUser()
+			_ = db.CreateChat(params.Chat)
+		}
+	}
+	cleanContent := StripReasoningTokens(content)
 	msg := &models.Message{
 		ID:        msgID,
 		ChatID:    params.Chat.ID,
 		Role:      "assistant",
-		Content:   content,
+		Content:   cleanContent,
 		CreatedAt: time.Now(),
 	}
 	if len(toolCalls) > 0 {
@@ -781,9 +884,11 @@ func persistAgentMessage(params AgentLoopParams, taskID, content string, toolCal
 		msg.ToolCallsJSON = string(tcJSON)
 	}
 	if err := db.CreateMessage(msg); err != nil {
-		log.Printf("agent loop: error guardando mensaje: %v", err)
+		log.Printf("agent loop: aviso persistiendo mensaje en SQLite: %v", err)
 	}
-	memory.StoreChatMessage(params.Chat.UserID, params.Chat.ProjectID, params.Chat.ID, "assistant", content)
+	if params.Chat != nil {
+		memory.StoreChatMessage(params.Chat.UserID, params.Chat.ProjectID, params.Chat.ID, "assistant", content)
+	}
 	return msgID
 }
 
@@ -800,3 +905,57 @@ func buildSandbox(project *models.Project) *Sandbox {
 	}
 	return sb
 }
+
+func isToolFailureOutput(out string) bool {
+	lower := strings.ToLower(out)
+	return strings.HasPrefix(out, "❌") ||
+		strings.Contains(lower, "error:") ||
+		strings.Contains(lower, "falló") ||
+		strings.Contains(lower, "acceso denegado") ||
+		strings.Contains(lower, "permission denied") ||
+		strings.Contains(lower, "no se pudo") ||
+		strings.Contains(lower, "exit status 1")
+}
+
+// CompactReActHistoryForLocalModel compacta turnos intermedios cerrados cuando el modelo es local
+// y la cantidad de mensajes acumulados en el bucle ReAct excede el límite recomendado.
+func CompactReActHistoryForLocalModel(history []providers.Message, isLocal bool) []providers.Message {
+	if !isLocal || len(history) <= 6 {
+		return history
+	}
+
+	compacted := make([]providers.Message, 0, len(history))
+	compacted = append(compacted, history[0]) // System prompt
+	if len(history) > 1 {
+		compacted = append(compacted, history[1]) // Mensaje inicial del usuario
+	}
+
+	// Resumir pasos intermedios ya completados
+	var toolSummaries []string
+	for i := 2; i < len(history)-3; i++ {
+		msg := history[i]
+		if msg.Role == "tool" && msg.ToolResult != nil {
+			firstLine := strings.Split(strings.TrimSpace(msg.ToolResult.Content), "\n")[0]
+			if len(firstLine) > 90 {
+				firstLine = firstLine[:90] + "..."
+			}
+			toolSummaries = append(toolSummaries, fmt.Sprintf("- %s: %s", msg.ToolResult.ToolCallID, firstLine))
+		}
+	}
+
+	if len(toolSummaries) > 0 {
+		compacted = append(compacted, providers.Message{
+			Role:    "user",
+			Content: fmt.Sprintf("[Contexto previo consolidado]:\n%s", strings.Join(toolSummaries, "\n")),
+		})
+		compacted = append(compacted, providers.Message{
+			Role:    "assistant",
+			Content: "Comprendido. Continuando con la resolución del objetivo sobre el estado actual.",
+		})
+	}
+
+	// Mantener los últimos 3 mensajes intactos (el turno activo inmediato)
+	compacted = append(compacted, history[len(history)-3:]...)
+	return sanitizeHistoryRoles(compacted)
+}
+

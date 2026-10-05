@@ -70,6 +70,28 @@ func ExecuteProviderTest(ctx context.Context, req OzyProviderTestRequest) OzyPro
 	client := &http.Client{Timeout: 5 * time.Second}
 
 	switch strings.ToLower(req.Provider) {
+	case "ozybitnet", "ozytalk", "bitnet":
+		urlTalk := req.BaseURL
+		if urlTalk == "" {
+			urlTalk = "http://localhost:8766"
+		} else {
+			urlTalk = strings.TrimSuffix(urlTalk, "/v1")
+		}
+		httpReq, _ := http.NewRequestWithContext(testCtx, "GET", urlTalk+"/health", nil)
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			msg = fmt.Sprintf("OzyBitNet / OzyTalk no responde en %s: %v", urlTalk, err)
+		} else {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				success = true
+				availableModels = []string{"ozytalk-1.58b", "ozy-bitcoconut-1.58b"}
+				msg = "Conectado exitosamente con OzyBitNet (OzyTalk 8766 + Coconut 8765 activo)"
+			} else {
+				msg = fmt.Sprintf("OzyBitNet devolvió código HTTP %d", resp.StatusCode)
+			}
+		}
+
 	case "ollama":
 		url := req.BaseURL
 		if url == "" {

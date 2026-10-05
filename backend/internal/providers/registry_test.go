@@ -6,7 +6,7 @@ import (
 
 func TestGetSupportedCatalog(t *testing.T) {
 	cat := GetSupportedCatalog()
-	if len(cat) != 9 {
+	if len(cat) != 10 {
 		t.Fatalf("se esperaban 9 proveedores soportados en el catálogo, obtenido: %d", len(cat))
 	}
 
@@ -15,6 +15,7 @@ func TestGetSupportedCatalog(t *testing.T) {
 	foundMistral := false
 	foundLMStudio := false
 	foundLlamaCpp := false
+	foundOzyBitNet := false
 
 	for _, item := range cat {
 		if item.ID == "cohere" {
@@ -32,16 +33,19 @@ func TestGetSupportedCatalog(t *testing.T) {
 		if item.ID == "llamacpp" && item.IsLocal {
 			foundLlamaCpp = true
 		}
+		if item.ID == "ozybitnet" && item.IsLocal {
+			foundOzyBitNet = true
+		}
 	}
 
-	if !foundCohere || !foundGroq || !foundMistral || !foundLMStudio || !foundLlamaCpp {
+	if !foundCohere || !foundGroq || !foundMistral || !foundLMStudio || !foundLlamaCpp || !foundOzyBitNet {
 		t.Fatalf("catálogo incompleto: %+v", cat)
 	}
 }
 
 func TestCreateProviderAndEnsure(t *testing.T) {
 	// Probar instanciación de proveedores incluso con clave vacía
-	for _, id := range []string{"cohere", "groq", "mistral", "openai", "deepseek", "kilocode", "lmstudio", "ollama", "llamacpp"} {
+	for _, id := range []string{"cohere", "groq", "mistral", "openai", "deepseek", "kilocode", "lmstudio", "ollama", "llamacpp", "ozybitnet"} {
 		p := CreateProvider(id, "")
 		if p == nil {
 			t.Fatalf("CreateProvider(%s, \"\") retornó nil", id)

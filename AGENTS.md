@@ -118,6 +118,18 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Procesamiento concurrente de deltas de tokens LLM en tiempo real (`Feed`) con detección de límites de oraciones (`. `, `? `, `! `, `\n\n`, o `, ` > 100 caracteres) para emitir habla local en ~300-400 ms sin esperar a que el modelo concluya todo el texto.
   - Normalizador de texto para síntesis (`CleanForSpeech`) que suprime Markdown, bloques de código, URLs, viñetas y caracteres no hablables para una pronunciación natural en español.
   - Cola secuencial de reproducción en segundo plano (`LocalSpeakerQueue`) con fallback transparente entre Piper TTS y Windows SAPI (`Microsoft Helena Desktop (es-ES)`), emisión de eventos WebSocket `voice:sentence` e interrupción inmediata (*Barge-in*) al cancelar o hablar el usuario.
+- **RAM Blackboard & Intent-Gated Ephemeral OS-HUD (`system.OSBlackboard`, `os_peek_state`)**:
+  - Snapshot dinámico del estado de Windows en RAM pura (<0.001 ms) con delta rendering vía hashing FNV-64a y refresco en segundo plano cada 2s.
+  - Gating estricto de intención por límites de palabra (`IsOSRelevantQuery`): **0 tokens** de OS inyectados en preguntas teóricas, conceptuales o de código; **<65 tokens** efímeros solo cuando la tarea requiere interactuar con el sistema operativo.
+  - Cero contaminación acumulativa de contexto: el HUD efímero nunca se persiste en el historial de SQLite (`models.Message`), impidiendo el envenenamiento y saturación de la ventana de contexto a lo largo de turnos sucesivos.
+  - Herramienta nativa a demanda `os_peek_state`: permite al LLM inspeccionar el estado actual de la PC (ventanas activas, CPU, RAM y portapapeles) en **612 µs** desde RAM sin subprocesos ni lecturas lentas a disco.
+- **Native Rust Skeletonizer & UI Accessibility Engine (`os_skeletonize`, `os_inspect_active_ui`)**:
+  - Parser estructural de código fuente en Rust puro embebido (`backend/ozy-core`), reduciendo entre **-45% y -94%** los tokens de archivos fuente (.go, .rs, .ts, .py) en **32.6 ms** antes de pasarlos al LLM.
+  - Extracción jerárquica de controles Win32 activos (botones, cuadros de texto, títulos) mediante APIs de accesibilidad nativas de Windows para automatización sin coste de visión multimodal.
+- **Hardware Acceleration & P-Core CPU Affinity Pinning**:
+  - Asignación por afinidad de máscara de bits de subprocesos Go a núcleos de alto rendimiento P-Cores (`PinProcessToPerformanceCores(0)`) en procesadores Intel Core y AMD Ryzen para prevenir estrangulamiento en núcleos de eficiencia (E-Cores).
+  - Bloqueo del conjunto de trabajo en RAM física (`LockProcessWorkingSet`) para suprimir latencias de paginación en disco.
+  - Enrutador de herramientas en RAM (`DefaultRAMToolRouter`) con poda semántica y despacho en **22 µs** promedio.
 
 ## Development & Execution Commands
 - **TUI Interactiva**: `cd backend && go run cmd/ozy/main.go`
@@ -127,6 +139,7 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Proveedores: `cd backend && go test ./internal/providers/... -v`
   - Sistema & Paths: `cd backend && go test ./internal/system/... -v`
   - Agente & Tríada: `cd backend && go test ./internal/agent/... -v`
+  - Pruebas de Estrés LLM Local: `cd backend && go test ./internal/agent -run TestLocalModel_Stress -v -timeout 180s`
   - TUI & Colas: `cd backend && go test ./internal/tui/... -v`
   - Suite completa: `cd backend && go test ./internal/...`
 

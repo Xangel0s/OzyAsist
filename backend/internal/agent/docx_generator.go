@@ -58,7 +58,15 @@ func GenerateDocxReport(destPath string, opts DocxReportOptions) error {
 
 	outFile, err := os.Create(destPath)
 	if err != nil {
-		return fmt.Errorf("no se pudo crear archivo .docx: %w", err)
+		ext := filepath.Ext(destPath)
+		baseWithoutExt := strings.TrimSuffix(destPath, ext)
+		altPath := fmt.Sprintf("%s_%d%s", baseWithoutExt, time.Now().Unix(), ext)
+		if fAlt, errAlt := os.Create(altPath); errAlt == nil {
+			outFile = fAlt
+			destPath = altPath
+		} else {
+			return fmt.Errorf("no se pudo crear archivo .docx: %w", err)
+		}
 	}
 	defer outFile.Close()
 
@@ -364,10 +372,12 @@ func execOSCreateDocx(_ context.Context, tc providers.ToolCall) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("Error generando PDF redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📄 === ARCHIVO PDF GENERADO EXITOSAMENTE (Redirigido desde os_create_docx) ===\n"+
-			"• Archivo: %s\n"+
-			"• Título:  %s\n"+
-			"• Estado:  Válido (formato nativo PDF-1.3)", targetPath, params.Title), true
+		cleanTarget := system.CleanCanonicalPath(targetPath)
+		var sizeInfo string
+		if fi, err := os.Stat(targetPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ PDF Creado EXITOSAMENTE: %s%s | Título: %s | Estado: Válido", cleanTarget, sizeInfo, params.Title), true
 	}
 
 	if strings.HasSuffix(lowInputPath, ".xlsx") || strings.HasSuffix(lowInputPath, ".xls") {
@@ -401,10 +411,12 @@ func execOSCreateDocx(_ context.Context, tc providers.ToolCall) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("Error generando Excel redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📊 === ARCHIVO EXCEL GENERADO EXITOSAMENTE (Redirigido desde os_create_docx) ===\n"+
-			"• Archivo: %s\n"+
-			"• Hojas:   1 (%s)\n"+
-			"• Estilo:  Diseño OzyAssist con cabeceras en Verde Neón (#D1F107)", outPath, sheetTitle), true
+		cleanOut := system.CleanCanonicalPath(outPath)
+		var sizeInfo string
+		if fi, err := os.Stat(outPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ XLSX Creado EXITOSAMENTE: %s%s | Hojas: 1 (%s)", cleanOut, sizeInfo, sheetTitle), true
 	}
 
 	targetPath := system.ResolveUserPath(params.Path)
@@ -484,13 +496,14 @@ func execOSCreateDocx(_ context.Context, tc providers.ToolCall) (string, bool) {
 
 	pagesInfo := ""
 	if params.TargetPages > 1 {
-		pagesInfo = fmt.Sprintf("\n• Páginas:    %d (con saltos de página nativos OpenXML)", len(params.Sections))
+		pagesInfo = fmt.Sprintf(" | Páginas: %d", len(params.Sections))
 	}
 
-	return fmt.Sprintf("📝 === ARCHIVO WORD (.docx) GENERADO EXITOSAMENTE ===\n"+
-		"• Archivo:    %s\n"+
-		"• Título:     %s\n"+
-		"• Secciones:  %d%s\n"+
-		"• Formato:    OpenXML estándar compatible con Microsoft Word, Office 365, LibreOffice y Google Docs",
-		targetPath, params.Title, len(params.Sections), pagesInfo), true
+	cleanTarget := system.CleanCanonicalPath(targetPath)
+	var sizeInfo string
+	if fi, err := os.Stat(targetPath); err == nil {
+		sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+	}
+	return fmt.Sprintf("✅ DOCX Creado EXITOSAMENTE: %s%s | Título: %s | Secciones: %d%s",
+		cleanTarget, sizeInfo, params.Title, len(params.Sections), pagesInfo), true
 }

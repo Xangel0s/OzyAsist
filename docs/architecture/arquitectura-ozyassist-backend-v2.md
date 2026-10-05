@@ -297,4 +297,15 @@ func ValidatePath(requested, root string) error {
 
 ---
 
-*Documento actualizado — Julio 2026. Reemplaza la sección de persistencia y agent system del plan original.*
+## 8. Evolución a Versión 3.0 (Octubre 2026)
+La arquitectura evolucionó a la **Versión 3.0** consolidando el modelo Zero-Docker en Go puro (`modernc.org/sqlite`), complementado por:
+- **Rust Core (`ozy-core`)**: Captura nativa de cámara (`nokhwa`), Skeletonizer estructural (-45% a -94% tokens) e inspección Win32 UI.
+- **RAM Blackboard & Intent-Gated Ephemeral OS-HUD**: 0 tokens en preguntas teóricas, <65 tokens efímeros en acciones OS, herramienta `os_peek_state` (<1ms) y 0 fuga a historial SQLite.
+- **Python Workspace & MCTS Planner**: Simulación heurística UCB1 para recuperación autónoma ante fallos.
+- **Aceleración Hardware**: Afinidad a P-Cores de CPU (`PinProcessToPerformanceCores`) y RAM Tool Router (22 µs).
+
+*Para la especificación completa, consultar [arquitectura-hibrida-rust-python-nine.md](file:///c:/Users/User/Documents/ozyAsis/docs/architecture/arquitectura-hibrida-rust-python-nine.md).*
+
+---
+
+*Documento actualizado — Octubre 2026.*

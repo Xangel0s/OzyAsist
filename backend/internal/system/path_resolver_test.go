@@ -39,3 +39,26 @@ func TestResolveUserPath(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanCanonicalPath(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{`C:\Users\User\Documents\file.docx`, "C:/Users/User/Documents/file.docx"},
+		{`c:\users\user/../user\folder\.\file.pdf`, "C:/users/user/folder/file.pdf"},
+		{`./folder/file.txt`, "folder/file.txt"},
+		{`.\\test\\.\\doc.docx`, "test/doc.docx"},
+		{`C:\\Users\\\\User//file.xlsx`, "C:/Users/User/file.xlsx"},
+		{`"C:\Users\User\report.pdf"`, "C:/Users/User/report.pdf"},
+		{``, ""},
+	}
+
+	for _, tt := range tests {
+		got := CleanCanonicalPath(tt.input)
+		if got != tt.expected {
+			t.Errorf("CleanCanonicalPath(%q) = %q, expected %q", tt.input, got, tt.expected)
+		}
+	}
+}
+

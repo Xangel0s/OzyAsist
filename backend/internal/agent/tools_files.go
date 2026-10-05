@@ -125,7 +125,7 @@ var FileTools = []providers.ToolDef{
 			"properties": {
 				"path": {
 					"type": "string",
-					"description": "Ruta absoluta o relativa a explorar (ej: C:\\Users\\User\\Documents o .)"
+					"description": "Ruta absoluta o relativa a explorar (ej: C:/Users/User/Documents o Documents)"
 				},
 				"depth": {
 					"type": "integer",
@@ -142,7 +142,7 @@ var FileTools = []providers.ToolDef{
 			"properties": {
 				"root": {
 					"type": "string",
-					"description": "Directorio raíz donde buscar (ej: C:\\Users\\User o .)"
+					"description": "Directorio raíz donde buscar (ej: C:/Users/User o Documents)"
 				},
 				"pattern": {
 					"type": "string",
@@ -231,7 +231,7 @@ var FileTools = []providers.ToolDef{
 			"properties": {
 				"path": {
 					"type": "string",
-					"description": "Ruta de la carpeta a organizar (ej: C:\\Users\\User\\Desktop o C:\\Users\\User\\Downloads)"
+					"description": "Ruta de la carpeta a organizar (ej: C:/Users/User/Desktop o C:/Users/User/Downloads)"
 				}
 			},
 			"required": ["path"]

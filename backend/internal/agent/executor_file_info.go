@@ -81,13 +81,11 @@ func execOSFileInfo(_ context.Context, tc providers.ToolCall) (string, bool) {
 		sizeStr = "N/A"
 	}
 
+	cleanPath := system.CleanCanonicalPath(resolvedPath)
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== INFORMACIÓN DE METADATOS: %s ===\n", fi.Name()))
-	sb.WriteString(fmt.Sprintf("• Tipo: %s (%s)\n", itemType, filepath.Ext(resolvedPath)))
-	sb.WriteString(fmt.Sprintf("• Ruta completa: %s\n", resolvedPath))
-	sb.WriteString(fmt.Sprintf("• Tamaño: %s (%d bytes)\n", sizeStr, fi.Size()))
-	sb.WriteString(fmt.Sprintf("• Fecha de creación: %s\n", createTime))
-	sb.WriteString(fmt.Sprintf("• Última modificación: %s\n", modTime))
+	sb.WriteString(fmt.Sprintf("ℹ️ Metadatos: %s\n", cleanPath))
+	sb.WriteString(fmt.Sprintf("• Tipo: %s (%s) | Tamaño: %s (%d bytes)\n", itemType, filepath.Ext(resolvedPath), sizeStr, fi.Size()))
+	sb.WriteString(fmt.Sprintf("• Fecha de creación: %s | Última modificación: %s", createTime, modTime))
 
 	return sb.String(), true
 }

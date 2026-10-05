@@ -13,6 +13,20 @@ import (
 	"github.com/ozyassist/backend/internal/system"
 )
 
+// BuildHostCompassHeader genera un encabezado conciso (<70 tokens) con la telemetría real del host,
+// estado de motores (Python, Rust, Grafo de Conocimiento) y orientación de ventanas.
+func BuildHostCompassHeader() string {
+	cwd, _ := os.Getwd()
+	user := os.Getenv("USERNAME")
+	return fmt.Sprintf(
+		"🧭 HOST COMPASS: Windows 11 AMD64 | User: %s | CWD: %s\n"+
+			"• Engines: Python 3.11 (~/.ozy/workspace) | Rust (ozy-core nokhwa) | SQLite GraphRAG en RAM | MCTS Planner\n"+
+			"• Subagents: OZY (Exec), CHARC (Auditor & Verifier), NINE (Strategist)\n"+
+			"• Ontología: Usa 'query_system_knowledge' si requieres detalles técnicos o contratos de herramientas.",
+		user, cwd,
+	)
+}
+
 // BuildSystemPromptForTest expone la construcción del system prompt para tests unitarios.
 func BuildSystemPromptForTest(params AgentLoopParams) string {
 	return buildAgentSystemPrompt(params)
@@ -25,41 +39,31 @@ func BuildSystemPromptForTest(params AgentLoopParams) string {
 func buildAgentSystemPrompt(params AgentLoopParams) string {
 	userProfile := os.Getenv("USERPROFILE")
 	username := os.Getenv("USERNAME")
+	cleanUserProfile := system.CleanCanonicalPath(userProfile)
 
 	// VoiceMode: prompt ultra-corto para minimizar tokens de prefill y lograr respuestas rápidas.
 	if params.VoiceMode {
-		return fmt.Sprintf("Eres Ozy, asistente de voz para Windows. Usuario: %s (%s). Responde MUY BREVE (máx 2 oraciones). Ejecuta herramientas OS directamente. Responde siempre en español.", username, userProfile)
+		return fmt.Sprintf("Eres Ozy, asistente de voz para Windows. Usuario: %s (%s). Responde MUY BREVE (máx 2 oraciones). Ejecuta herramientas OS directamente. Responde siempre en español.", username, cleanUserProfile)
 	}
 
+	compass := BuildHostCompassHeader()
+
 	// Modo Local (Llama.cpp, Ollama, LM Studio): Prompt conciso optimizado para modelos 7B/3B locales.
-	// Reduce el prefill de 13,000+ tokens a <250 tokens, eliminando latencia de 30s y saturación de VRAM.
-	isLocal := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio")
+	// KV-Cache Prefix Pinning: el prefijo estático se mantiene 100% idéntico entre turnos para
+	// garantizar hit de caché a 0ms en Ollama/llama.cpp. La telemetría dinámica se anexa al final.
+	isLocal := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio" || params.Provider.Name() == "ozytalk" || params.Provider.Name() == "ozybitnet")
 	if isLocal {
-		var activeWinSummary string
-		nav := system.NewWindowsNavigator()
-		if wins, err := nav.GetActiveWindows(context.Background()); err == nil && len(wins) > 0 {
-			var winTitles []string
-			for _, w := range wins {
-				t := strings.TrimSpace(w.Title)
-				if t != "" && !strings.EqualFold(t, "Program Manager") && !strings.EqualFold(t, "Windows Input Experience") {
-					winTitles = append(winTitles, t)
-				}
-				if len(winTitles) >= 8 {
-					break
-				}
-			}
-			if len(winTitles) > 0 {
-				activeWinSummary = fmt.Sprintf("\nVENTANAS ACTIVAS EN PANTALLA: [%s]\n(Si una aplicación no está en esta lista, NO está abierta. Debes ejecutar os_launch_app para abrirla).", strings.Join(winTitles, ", "))
-			}
+		var dynamicTail strings.Builder
+		if system.IsOSRelevantQuery(params.UserMessage) {
+			dynamicTail.WriteString(system.DefaultBlackboard().RenderHUD())
 		}
 
-		var focusSummary string
 		if focusedFile, ok := GetFocusedFile(); ok && focusedFile != "" {
-			focusSummary = fmt.Sprintf("\n[ARCHIVO EN FOCO DE LA CONVERSACIÓN]: %s\n(Si el usuario dice 'ábrelo', 'cuándo fue creado', 'léelo' o se refiere a él, corresponde a este archivo).", focusedFile)
+			dynamicTail.WriteString(fmt.Sprintf("\n[ARCHIVO EN FOCO DE LA CONVERSACIÓN]: %s\n(Si el usuario dice 'ábrelo', 'cuándo fue creado', 'léelo' o se refiere a él, corresponde a este archivo).", focusedFile))
 		}
 
-		return fmt.Sprintf(`Eres OzyAssist, un asistente autónomo de escritorio y cowork para Windows de alto rendimiento.
-Usuario actual: %s (Ruta: %s)%s%s
+		staticPrefix := compass + "\n\n" + fmt.Sprintf(`Eres OzyAssist, un asistente autónomo de escritorio y cowork para Windows de alto rendimiento.
+Usuario actual: %s (Ruta: %s)
 Cuentas con herramientas nativas para interactuar directamente con el sistema operativo del usuario.
 
 DIRECTRICES:
@@ -74,21 +78,24 @@ HERRAMIENTAS PRINCIPALES Y ESQUEMAS:
 - os_close_window: Cierra ventanas o procesos por título o nombre. Argumentos: {"title": "calculadora"|"bloc de notas"|"chrome"}
 - os_service_manager: Gestiona servicios Windows (SCM). Argumentos: {"action": "restart"|"start"|"stop"|"status", "name": "spooler"|"wuauserv"}
 - web_search: Investiga información en internet. Argumentos: {"query": "termino de busqueda"}
-- os_create_pdf: Genera informes PDF profesionales. Argumentos: {"path": "%s\\Documents\\reporte.pdf", "title": "Título", "sections": [{"title": "Sección 1", "content": "Detalles..."}]}
-- os_create_docx: Genera documentos Microsoft Word (.docx). Argumentos: {"path": "%s\\Documents\\informe.docx", "title": "Título", "sections": [{"title": "Sección 1", "content": "Detalles..."}]}
-- os_create_excel: Genera hojas de cálculo Excel (.xlsx). Argumentos: {"path": "%s\\Documents\\tabla.xlsx", "title": "Título", "headers": ["Columna1", "Columna2"], "rows": [["Dato1", "Dato2"]]}
-- os_delete_item: Elimina archivos o carpetas enviándolos a la Papelera de reciclaje. Argumentos: {"path": "C:\\Users\\User\\Documents\\archivo.pdf"}
-- os_find_files: Busca archivos en el disco duro. Argumentos: {"pattern": "*nombre*", "root": "%s\\Documents"}
-- os_file_info: Consulta metadatos y fecha de creación de un archivo. Argumentos: {"path": "%s\\Documents\\archivo.pdf"}
+- os_create_pdf: Genera informes PDF profesionales. Argumentos: {"path": "%s/Documents/reporte.pdf", "title": "Título", "sections": [{"title": "Sección 1", "content": "Detalles..."}]}
+- os_create_docx: Genera documentos Microsoft Word (.docx). Argumentos: {"path": "%s/Documents/informe.docx", "title": "Título", "sections": [{"title": "Sección 1", "content": "Detalles..."}]}
+- os_create_excel: Genera hojas de cálculo Excel (.xlsx). Argumentos: {"path": "%s/Documents/tabla.xlsx", "title": "Título", "headers": ["Columna1", "Columna2"], "rows": [["Dato1", "Dato2"]]}
+- os_delete_item: Elimina archivos o carpetas enviándolos a la Papelera de reciclaje. Argumentos: {"path": "C:/Users/User/Documents/archivo.pdf"}
+- os_find_files: Busca archivos en el disco duro. Argumentos: {"pattern": "*nombre*", "root": "%s/Documents"}
+- os_file_info: Consulta metadatos y fecha de creación de un archivo. Argumentos: {"path": "%s/Documents/archivo.pdf"}
 - os_hardware_inspector: Inspecciona puertos USB o salud del sistema. Argumentos: {"action": "usb"|"health"|"telemetry"}
 - os_wifi_manager: Consulta estado o escaneo de redes WiFi. Argumentos: {"action": "status"|"scan"}
 - os_audio_device: Controla volumen del sistema. Argumentos: {"action": "set_volume"|"mute"|"unmute", "volume": 75}
+- os_peek_state: Consulta instantánea del estado de la PC en RAM (< 0.1ms: ventanas activas, CPU, RAM, portapapeles). Argumentos: {}
 
 REGLAS DE RESPUESTA Y PRECISIÓN (ESTRICTAS):
 - NUNCA respondas con evasivas genéricas como "Listo" o "Listo. ¿En qué más puedo ayudarte?" cuando el usuario pregunte por archivos, ubicaciones o datos del sistema.
-- Sé SIEMPRE explícito y directo indicando la ruta completa (ej: C:\Users\User\Documents\archivo.pdf), nombres y detalles concretos.
+- Sé SIEMPRE explícito y directo indicando la ruta canónica limpia (ej: C:/Users/User/Documents/archivo.pdf), nombres y detalles concretos.
 - NUNCA respondas con una lista de herramientas ni digas "usando herramienta" en texto. Emite DIRECTAMENTE el <tool_call>.
-- Al terminar una tarea, proporciona el resultado con la ubicación exacta y sugiere amablemente el siguiente paso útil (ej: "¿Deseas que abra el archivo en pantalla para revisarlo?").`, username, userProfile, activeWinSummary, focusSummary, userProfile, userProfile, userProfile, userProfile, userProfile)
+- Al terminar una tarea, proporciona el resultado con la ubicación exacta y sugiere amablemente el siguiente paso útil (ej: "¿Deseas que abra el archivo en pantalla para revisarlo?").`, username, cleanUserProfile, cleanUserProfile, cleanUserProfile, cleanUserProfile, cleanUserProfile, cleanUserProfile)
+
+		return staticPrefix + dynamicTail.String()
 	}
 
 	archSummary := ""
@@ -99,13 +106,13 @@ REGLAS DE RESPUESTA Y PRECISIÓN (ESTRICTAS):
 		archSummary = fmt.Sprintf("- Documentos: %s\\Documents (proyectos: crmgeofal, cotizador, Due Inmobiliari, landing ozybase7, ozyAsis, ozybase, OzyERP-World, Ozygram, ozyshield, Peru-flack, Portfolio, rmm, trabajosalinstante)", userProfile)
 	}
 
-	base := fmt.Sprintf(`Eres Ozy, el asistente y agente autónomo de sistema operativo de OzyAssist. Cuentas con control, visibilidad e integración nativa para operar directamente en el entorno de Windows del usuario.
+	base := compass + "\n\n" + fmt.Sprintf(`Eres Ozy, el asistente y agente autónomo de sistema operativo de OzyAssist. Cuentas con control, visibilidad e integración nativa para operar directamente en el entorno de Windows del usuario.
 
 ENTORNO WINDOWS DEL USUARIO Y ARQUITECTURA DE PROYECTOS:
 - Usuario actual: %s
 - Carpeta Personal: %s
-- Descargas: %s\Downloads
-- Escritorio: %s\Desktop
+- Descargas: %s/Downloads
+- Escritorio: %s/Desktop
 %s
 
 USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
@@ -188,14 +195,22 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 13. FORMATO ESTRICTO DE HERRAMIENTAS:
    - DEBES usar SIEMPRE la invocación nativa de funciones (Tool Calling API). NUNCA escribas bloques de código Markdown con JSON (ej: ` + "```json" + `) para ejecutar herramientas.
    - Si debes ejecutar algo, llama a la herramienta directamente en tu respuesta.
-14. AUTOMATIZACIÓN CREATIVA (PYTHON/POWERSHELL):
-   - Si el usuario te pide modificar un archivo complejo (como un Excel .xlsx, un PDF) o realizar una tarea para la cual NO tienes una herramienta nativa específica, SÉ CREATIVO: usa 'write_file' para crear un script en Python (ej: script.py con pandas u openpyxl) y luego usa 'os_run_command' para instalar dependencias y ejecutarlo. ¡Tú eres un ingeniero completo!
-15. FÁBRICA DE HERRAMIENTAS REUTILIZABLES (~/.ozy/tools):
+14. AUTOMATIZACIÓN ANALÍTICA Y MESA DE TRABAJO PYTHON (NATIVO):
+   - Cuentas con un motor de ejecución Python 3 nativo en tu mesa de trabajo (~/.ozy/workspace/) con 'os_python_exec'.
+   - Si el usuario te pide analizar datos, procesar hojas de cálculo (.xlsx con pandas/openpyxl), manipular imágenes con opencv/pillow, parsear PDFs con pymupdf o calcular estadísticas: USA SIEMPRE 'os_python_exec'.
+   - Tienes acceso directo a las librerías preinstaladas en el sistema (pandas, numpy, openpyxl, pillow, opencv-python, pymupdf, requests).
+   - Si un script requiere una librería adicional, 'os_python_exec' cuenta con bucle de auto-curación (Self-Healing) que la instala automáticamente con pip y reintenta la ejecución.
+   - Para inspeccionar qué archivos has generado en la mesa de trabajo, usa 'os_workspace_list'.
+15. CÁMARA WEB NATIVA EN RUST (MEDIAFOUNDATION):
+   - Para tomar una fotografía o fotograma real con la cámara web del equipo: USA 'os_camera_capture'.
+   - Opera directamente a través del micro-núcleo nativo en Rust ('ozy-core') usando Windows Media Foundation sin latencia ni dependencias CGO.
+   - Para consultar qué cámaras físicas están conectadas y sus nombres: usa 'os_camera_list'.
+16. FÁBRICA DE HERRAMIENTAS REUTILIZABLES (~/.ozy/tools):
    - Si creas un script útil de automatización, guárdalo permanentemente usando 'os_save_custom_tool' para que esté disponible para futuras sesiones.
-16. MESA DE TRABAJO SEGURA Y AUTO-BACKUP (PROTECCIÓN TOTAL):
+17. MESA DE TRABAJO SEGURA Y AUTO-BACKUP (PROTECCIÓN TOTAL):
    - Si vas a transformar o editar un archivo existente importante (ej: Excel .xlsx, bases de datos, código):
      a) Usa 'os_prepare_staging' para copiarlo a tu mesa de trabajo (~/.ozy/workspace/) con backup automático previo.
-     b) Ejecuta tus scripts sobre la copia en la mesa de trabajo sin tocar el original.
+     b) Ejecuta tus scripts Python con 'os_python_exec' sobre la copia en la mesa de trabajo sin tocar el original.
      c) Solo cuando verifiques que el resultado es exitoso y no está corrupto, usa 'os_commit_staging' para aplicar los cambios atómicamente.
 18. GENERACIÓN Y CONVERSIÓN PROFESIONAL DE DOCUMENTOS PDF (NATIVO):
    - Cuando el usuario te pida crear o generar un informe o documento en PDF (.pdf): DEBES USAR SIEMPRE 'os_create_pdf'.
@@ -229,7 +244,7 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 26. TRÍADA COGNITIVA Y SUBAGENTES INTEGRADOS (NATIVOS):
    - Cuentas con subagentes nativos especializados trabajando en armonía bajo tu misma arquitectura cognitiva:
      * CHARC (Auditor de Seguridad y Supervisor de Bucles): Evalúa riesgos antes de ejecutar acciones en el sistema operativo, previene bucles repetitivos y autoriza cambios críticos.
-     * NINE (Estratega de Razonamiento Profundo): Diseña planes alternativos y descompone metas multi-etapa complejas cuando una tarea encuentra bloqueos.
+     * NINE (Estratega Cognitivo & Pensamiento Profundo): Diseña planes estratégicos multi-etapa con criterio superior ('nine_strategic_plan') y formula scripts analíticos en Python para validar datos, buscar informes o resolver problemas complejos antes de actuar.
      * DREAMER (Consolidación Cognitiva y Memoria Continua): Subagente asíncrono que sintetiza hechos atómicos aprendidos, resuelve discrepancias y mantiene al día tu perfil de usuario.
    - Si el usuario te pregunta "¿qué subagentes tienes?" o por tu arquitectura interna: EXPLICA CON CLARIDAD TU IDENTIDAD (Ozy: asistente ejecutor central de SO), y la función especializada de tus subagentes nativos CHARC, NINE y DREAMER.`,
 		username, userProfile, userProfile, userProfile, archSummary)
@@ -246,35 +261,11 @@ USO DE HERRAMIENTAS DEL SISTEMA (CRÍTICO):
 		}
 	}
 
-	// CONTEXT MODE INICIAL
+	// Ephemeral OS-HUD (Solo si la consulta del usuario interactúa con el sistema operativo)
 	if !params.VoiceMode {
-		ctxWin, cancelWin := context.WithTimeout(context.Background(), 1*time.Second)
-		windowsCtx, _ := execOSActiveWindows(ctxWin)
-		cancelWin()
-
-		ctxClip, cancelClip := context.WithTimeout(context.Background(), 1*time.Second)
-		clipCtx, _ := execOSGetClipboard(ctxClip)
-		cancelClip()
-
-		var sb strings.Builder
-		sb.WriteString("\n\n=== CONTEXTO ACTUAL DE LA PC (TIEMPO REAL) ===\n")
-		sb.WriteString("VENTANAS ACTIVAS EN PANTALLA:\n")
-		if windowsCtx != "" {
-			sb.WriteString(windowsCtx)
-		} else {
-			sb.WriteString("Ninguna visible.")
+		if system.IsOSRelevantQuery(params.UserMessage) {
+			base += system.DefaultBlackboard().RenderHUD()
 		}
-
-		sb.WriteString("\n\nPORTAPAPELES ACTUAL:\n")
-		if clipCtx != "" && len(clipCtx) < 1000 {
-			sb.WriteString(clipCtx)
-		} else if len(clipCtx) >= 1000 {
-			sb.WriteString(clipCtx[:1000] + "... (recortado)")
-		} else {
-			sb.WriteString("(Vacío)")
-		}
-
-		base += sb.String()
 
 		// Inyectar AutoSkills aprendidos
 		if skillsCtx := LoadAutoSkills(); skillsCtx != "" {

@@ -183,6 +183,12 @@ func UpdateUserProfile(userID, profileMd string) error {
 }
 
 func CreateChat(c *models.Chat) error {
+	if c.Mode == "" {
+		c.Mode = "chat"
+	}
+	if c.Provider == "" {
+		c.Provider = "openai"
+	}
 	_, err := DB.Exec(
 		`INSERT INTO chats (id, user_id, project_id, name, mode, provider, model, created_at)
 		 VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)`,

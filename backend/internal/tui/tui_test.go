@@ -679,8 +679,15 @@ func TestProviderSelectMenu_FullFlow(t *testing.T) {
 		t.Fatalf("KeyUp debió mover cursor a índice 0, obtenido: %d", m.providerIndex)
 	}
 
-	// Seleccionar segundo proveedor (Groq) con índice 1
-	m.providerIndex = 1 // Groq
+	// Seleccionar proveedor Groq dinámicamente según el catálogo
+	groqIdx := 1
+	for idx, c := range providers.GetSupportedCatalog() {
+		if c.ID == "groq" {
+			groqIdx = idx
+			break
+		}
+	}
+	m.providerIndex = groqIdx
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = res.(Model)
 	if m.chat == nil || m.chat.Provider != "groq" {
@@ -771,8 +778,15 @@ func TestAPIKeyManager_InteractiveFlow(t *testing.T) {
 		}
 	}
 
-	// 3. Seleccionar proveedor para configurar (índice 0)
-	m.apiKeyIndex = 0
+	// 3. Seleccionar proveedor para configurar (Cohere dinámicamente)
+	cohereKeyIdx := 0
+	for idx, c := range providers.GetSupportedCatalog() {
+		if c.ID == "cohere" {
+			cohereKeyIdx = idx
+			break
+		}
+	}
+	m.apiKeyIndex = cohereKeyIdx
 	res, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = res.(Model)
 	if m.state != StateAPIKeyInput {
@@ -906,9 +920,16 @@ func TestProviderMenu_EditKeyShortcut(t *testing.T) {
 	m.width = 90
 	m.ready = true
 
-	// Ir a selector de proveedores
+	// Ir a selector de proveedores y apuntar a Cohere
 	m.state = StateProviderMenu
-	m.providerIndex = 0 // Cohere
+	cohereIdx := 0
+	for idx, c := range providers.GetSupportedCatalog() {
+		if c.ID == "cohere" {
+			cohereIdx = idx
+			break
+		}
+	}
+	m.providerIndex = cohereIdx
 
 	// Presionar 'e' para editar/reemplazar clave
 	res, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("e")})

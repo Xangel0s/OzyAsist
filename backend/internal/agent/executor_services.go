@@ -29,7 +29,7 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 		action = "list"
 	}
 
-	target := strings.TrimSpace(params.Name)
+	target := resolveWindowsServiceName(strings.TrimSpace(params.Name))
 
 	switch action {
 	case "list":
@@ -95,7 +95,7 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 			return "Debes indicar el nombre del servicio (parámetro 'name').", false
 		}
 		escTarget := strings.ReplaceAll(target, "'", "''")
-		psCmd := fmt.Sprintf(`Get-Service -Name '%s' -ErrorAction Stop | Select-Object -Property Name, DisplayName, Status, StartType, ServiceType | ConvertTo-Json`, escTarget)
+		psCmd := fmt.Sprintf(`$s = Get-Service -Name '%s' -ErrorAction SilentlyContinue; if (-not $s) { $s = Get-Service | Where-Object { $_.Name -like '*%s*' -or $_.DisplayName -like '*%s*' } | Select-Object -First 1 }; if ($s) { $s | Select-Object -Property Name, DisplayName, Status, StartType, ServiceType | ConvertTo-Json } else { throw "No se encontró el servicio '%s'" }`, escTarget, escTarget, escTarget, escTarget)
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
 			return fmt.Sprintf("No se encontró el servicio '%s' o ocurrió un error: %s", target, strings.TrimSpace(string(out))), false
@@ -107,7 +107,7 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 			return "Debes indicar el nombre del servicio a iniciar.", false
 		}
 		escTarget := strings.ReplaceAll(target, "'", "''")
-		psCmd := fmt.Sprintf(`Start-Service -Name '%s' -ErrorAction Stop; (Get-Service -Name '%s').Status`, escTarget, escTarget)
+		psCmd := fmt.Sprintf(`$s = Get-Service -Name '%s' -ErrorAction SilentlyContinue; if (-not $s) { $s = Get-Service | Where-Object { $_.Name -like '*%s*' -or $_.DisplayName -like '*%s*' } | Select-Object -First 1 }; if ($s) { Start-Service -InputObject $s -ErrorAction Stop; (Get-Service -Name $s.Name).Status } else { throw "No se encontró el servicio '%s'" }`, escTarget, escTarget, escTarget, escTarget)
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
 			return fmt.Sprintf("Error iniciando el servicio '%s' (puede requerir elevación de administrador): %s", target, strings.TrimSpace(string(out))), false
@@ -119,7 +119,7 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 			return "Debes indicar el nombre del servicio a detener.", false
 		}
 		escTarget := strings.ReplaceAll(target, "'", "''")
-		psCmd := fmt.Sprintf(`Stop-Service -Name '%s' -Force -ErrorAction Stop; (Get-Service -Name '%s').Status`, escTarget, escTarget)
+		psCmd := fmt.Sprintf(`$s = Get-Service -Name '%s' -ErrorAction SilentlyContinue; if (-not $s) { $s = Get-Service | Where-Object { $_.Name -like '*%s*' -or $_.DisplayName -like '*%s*' } | Select-Object -First 1 }; if ($s) { Stop-Service -InputObject $s -Force -ErrorAction Stop; (Get-Service -Name $s.Name).Status } else { throw "No se encontró el servicio '%s'" }`, escTarget, escTarget, escTarget, escTarget)
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
 			return fmt.Sprintf("Error deteniendo el servicio '%s' (puede requerir elevación de administrador): %s", target, strings.TrimSpace(string(out))), false
@@ -131,7 +131,7 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 			return "Debes indicar el nombre del servicio a reiniciar.", false
 		}
 		escTarget := strings.ReplaceAll(target, "'", "''")
-		psCmd := fmt.Sprintf(`Restart-Service -Name '%s' -Force -ErrorAction Stop; (Get-Service -Name '%s').Status`, escTarget, escTarget)
+		psCmd := fmt.Sprintf(`$s = Get-Service -Name '%s' -ErrorAction SilentlyContinue; if (-not $s) { $s = Get-Service | Where-Object { $_.Name -like '*%s*' -or $_.DisplayName -like '*%s*' } | Select-Object -First 1 }; if ($s) { Restart-Service -InputObject $s -Force -ErrorAction Stop; (Get-Service -Name $s.Name).Status } else { throw "No se encontró el servicio '%s'" }`, escTarget, escTarget, escTarget, escTarget)
 		out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd).CombinedOutput()
 		if err != nil {
 			return fmt.Sprintf("Error reiniciando el servicio '%s': %s", target, strings.TrimSpace(string(out))), false
@@ -141,6 +141,68 @@ func execOSServiceManager(ctx context.Context, tc providers.ToolCall) (string, b
 	default:
 		return fmt.Sprintf("Acción de servicio desconocida: '%s'. Usa 'list', 'status', 'start', 'stop' o 'restart'.", action), false
 	}
+}
+
+var commonServiceAliases = map[string]string{
+	"spooler":             "Spooler",
+	"cola de impresion":  "Spooler",
+	"cola de impresión":  "Spooler",
+	"impresora":           "Spooler",
+	"impresoras":          "Spooler",
+	"print spooler":       "Spooler",
+	"wuauserv":            "wuauserv",
+	"windows update":      "wuauserv",
+	"actualizaciones":     "wuauserv",
+	"actualizacion":       "wuauserv",
+	"audio":               "Audiosrv",
+	"audiosrv":            "Audiosrv",
+	"audio de windows":    "Audiosrv",
+	"sonido":              "Audiosrv",
+	"bluetooth":           "bthserv",
+	"bthserv":             "bthserv",
+	"firewall":            "mpssvc",
+	"mpssvc":              "mpssvc",
+	"cortafuegos":         "mpssvc",
+	"wifi":                "WlanSvc",
+	"wlan":                "WlanSvc",
+	"wlansvc":             "WlanSvc",
+	"dns":                 "Dnscache",
+	"dnscache":            "Dnscache",
+	"cliente dns":         "Dnscache",
+	"eventlog":            "EventLog",
+	"visor de eventos":    "EventLog",
+	"registro de eventos": "EventLog",
+	"docker":              "com.docker.service",
+	"docker desktop":      "com.docker.service",
+	"sshd":                "sshd",
+	"ssh":                 "sshd",
+	"openssh":             "sshd",
+	"mysql":               "MySQL",
+	"postgres":            "postgresql",
+	"postgresql":          "postgresql",
+	"redis":               "Redis",
+	"defender":            "WinDefend",
+	"antivirus":           "WinDefend",
+	"windows defender":    "WinDefend",
+	"tema":                "Themes",
+	"temas":               "Themes",
+	"dhcp":                "Dhcp",
+	"cliente dhcp":        "Dhcp",
+	"red":                 "Netman",
+	"conexiones de red":   "Netman",
+}
+
+func resolveWindowsServiceName(target string) string {
+	clean := strings.ToLower(strings.TrimSpace(target))
+	clean = strings.TrimPrefix(clean, "servicio de ")
+	clean = strings.TrimPrefix(clean, "servicio ")
+	clean = strings.TrimPrefix(clean, "el servicio de ")
+	clean = strings.TrimPrefix(clean, "el servicio ")
+	clean = strings.TrimSpace(clean)
+	if svc, ok := commonServiceAliases[clean]; ok {
+		return svc
+	}
+	return target
 }
 
 // execOSDockerManager gestiona contenedores Docker presentes en el host de Windows

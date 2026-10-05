@@ -51,7 +51,7 @@ func GetDefaultOrFirstProvider() Provider {
 			return p
 		}
 	}
-	priorityOrder := []string{"cohere", "groq", "openai", "openrouter", "anthropic", "deepseek", "opencode", "llamacpp", "lmstudio", "ollama"}
+	priorityOrder := []string{"ozybitnet", "ozytalk", "cohere", "groq", "openai", "openrouter", "anthropic", "deepseek", "opencode", "llamacpp", "lmstudio", "ollama"}
 	for _, name := range priorityOrder {
 		if p, err := Get(name); err == nil && GetProviderKey(name) != "" {
 			return p
@@ -194,6 +194,8 @@ func RegisterLocalHostURL(url string) {
 	Register("lmstudio", NewLMStudio(normalizedURL))
 	Register("ollama", NewOllama(normalizedURL))
 	Register("llamacpp", NewLlamaCpp(GetLlamaCppURL()))
+	Register("ozybitnet", NewOzyBitNetWithName("ozybitnet", GetOzyBitNetURL()))
+	Register("ozytalk", NewOzyBitNetWithName("ozytalk", GetOzyBitNetURL()))
 }
 
 // GetLlamaCppURL returns the active llama.cpp server endpoint (defaulting to env or http://localhost:8080)
@@ -212,15 +214,15 @@ func GetLMStudioURL() string {
 	return "http://localhost:1234/v1"
 }
 
-// GetOllamaURL returns the active Ollama server endpoint (defaulting to env or http://localhost:11434/v1)
+// GetOllamaURL returns the active Ollama server endpoint (defaulting to env or http://127.0.0.1:11434/v1)
 func GetOllamaURL() string {
 	if url := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); url != "" {
 		return url
 	}
-	return "http://localhost:11434/v1"
+	return "http://127.0.0.1:11434/v1"
 }
 
-// GetLocalHostURL returns the active local host endpoint (defaulting to env or http://localhost:11434)
+// GetLocalHostURL returns the active local host endpoint (defaulting to env or http://127.0.0.1:11434)
 func GetLocalHostURL() string {
 	localHostURLMu.RLock()
 	defer localHostURLMu.RUnlock()
@@ -233,7 +235,7 @@ func GetLocalHostURL() string {
 	if url := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); url != "" {
 		return url
 	}
-	return "http://localhost:11434"
+	return "http://127.0.0.1:11434"
 }
 
 func InitProviders() {
@@ -271,6 +273,8 @@ func InitProviders() {
 	Register("lmstudio", NewLMStudio(GetLMStudioURL()))
 	Register("ollama", NewOllama(GetOllamaURL()))
 	Register("llamacpp", NewLlamaCpp(GetLlamaCppURL()))
+	Register("ozybitnet", NewOzyBitNetWithName("ozybitnet", GetOzyBitNetURL()))
+	Register("ozytalk", NewOzyBitNetWithName("ozytalk", GetOzyBitNetURL()))
 
 	log.Printf("Providers disponibles iniciales: %v", Available())
 }
@@ -287,6 +291,13 @@ type ProviderCatalogItem struct {
 // GetSupportedCatalog devuelve la lista oficial de proveedores soportados en OzyAssist
 func GetSupportedCatalog() []ProviderCatalogItem {
 	return []ProviderCatalogItem{
+		{
+			ID:           "ozybitnet",
+			DisplayName:  "OzyTalk (1.58b BitNet & Coconut)",
+			DefaultModel: "ozytalk-1.58b",
+			Description:  "Motor neuro-simbólico 1.58b (<500MB RAM): OzyTalk (8766) y Coconut Latente (8765)",
+			IsLocal:      true,
+		},
 		{
 			ID:           "cohere",
 			DisplayName:  "Cohere",
@@ -357,6 +368,10 @@ func GetSupportedCatalog() []ProviderCatalogItem {
 func CreateProvider(name, key string) Provider {
 	name = strings.ToLower(strings.TrimSpace(name))
 	switch name {
+	case "ozytalk":
+		return NewOzyBitNetWithName("ozytalk", GetOzyBitNetURL())
+	case "ozybitnet", "bitnet":
+		return NewOzyBitNetWithName("ozybitnet", GetOzyBitNetURL())
 	case "cohere":
 		return NewCohere(key)
 	case "groq":

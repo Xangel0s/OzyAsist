@@ -229,3 +229,43 @@ func isWindowsDrivePath(p string) bool {
 	}
 	return false
 }
+
+// CleanCanonicalPath normaliza una ruta a formato canónico ultra-limpio para el LLM:
+// 1. Quita comillas accidentales, espacios en blanco y resuelve redundancias (.) y (..).
+// 2. Convierte todas las barras invertidas (\) a barras directas (/) estándar POSIX,
+//    lo que evita problemas de escape en JSON (\\) y confusión en modelos locales pequeños.
+// 3. Elimina prefijos './' o '.\' y secuencias de barras dobles '//' accidentales.
+// 4. Asegura letra de unidad Windows mayúscula consistente (ej: C:/...).
+func CleanCanonicalPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	p = strings.Trim(p, `"'`+"`")
+	if strings.HasPrefix(strings.ToLower(p), "http://") || strings.HasPrefix(strings.ToLower(p), "https://") {
+		return p
+	}
+
+	clean := filepath.Clean(p)
+	clean = strings.ReplaceAll(clean, `\`, `/`)
+
+	for strings.HasPrefix(clean, "./") {
+		clean = strings.TrimPrefix(clean, "./")
+	}
+
+	for strings.Contains(clean, "//") {
+		clean = strings.ReplaceAll(clean, "//", "/")
+	}
+
+	for strings.HasPrefix(clean, "./") {
+		clean = strings.TrimPrefix(clean, "./")
+	}
+
+	// Normalizar letra de unidad Windows (ej: c:/ -> C:/)
+	if len(clean) >= 2 && clean[1] == ':' {
+		clean = strings.ToUpper(string(clean[0])) + clean[1:]
+	}
+
+	return clean
+}
+

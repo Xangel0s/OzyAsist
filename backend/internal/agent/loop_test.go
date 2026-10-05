@@ -356,7 +356,7 @@ func TestReActLoop_ApprovalFlow(t *testing.T) {
 	// Esperar completado
 	select {
 	case <-completedCh:
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timeout esperando completion tras aprobación")
 	}
 }

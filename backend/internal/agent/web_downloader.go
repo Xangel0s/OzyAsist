@@ -145,10 +145,6 @@ func execOSDownloadFile(ctx context.Context, tc providers.ToolCall) (string, boo
 	}
 
 	sizeMB := float64(res.SizeBytes) / (1024 * 1024)
-	return fmt.Sprintf("📥 === ARCHIVO DESCARGADO EXITOSAMENTE ===\n"+
-		"• Origen:   %s\n"+
-		"• Destino:  %s\n"+
-		"• Tamaño:   %.2f MB (%d bytes)\n"+
-		"• Tipo:     %s",
-		res.URL, res.Destination, sizeMB, res.SizeBytes, res.ContentType), true
+	return fmt.Sprintf("✅ Descarga completada EXITOSAMENTE: %s (%.2f MB) | Origen: %s",
+		system.CleanCanonicalPath(res.Destination), sizeMB, res.URL), true
 }

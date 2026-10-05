@@ -52,6 +52,13 @@ func main() {
 
 	providers.InitProviders()
 	memory.BuildSystemIndex()
+
+	// Optimizaciones nativas de Windows para IA y hardware
+	_ = system.OptimizeProcessPriority(false)
+	_ = system.LockProcessWorkingSet(64, 512)
+	_ = system.PinProcessToPerformanceCores(0)
+	agent.DefaultRAMToolRouter()
+
 	// Inicializar Verificador y Auto-Reparación (Self-Healing)
 	verifier := agent.NewVerifier()
 	var defaultProv providers.Provider

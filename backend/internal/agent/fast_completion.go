@@ -24,7 +24,7 @@ func handleLocalModelFastCompletion(
 	emit func(AgentEvent),
 	speakerQueue *voice.LocalSpeakerQueue,
 ) bool {
-	isLocalModel := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio")
+	isLocalModel := params.Provider != nil && (params.Provider.Name() == "llamacpp" || params.Provider.Name() == "ollama" || params.Provider.Name() == "lmstudio" || params.Provider.Name() == "ozytalk" || params.Provider.Name() == "ozybitnet")
 	if !isLocalModel || len(turnToolCalls) == 0 {
 		return false
 	}
@@ -204,8 +204,8 @@ func handleLocalModelFastCompletion(
 				}
 			}
 			cleanOut := strings.TrimSpace(outputStr)
-			if strings.Contains(cleanOut, "=== ARCHIVOS ENCONTRADOS") {
-				finalContent = fmt.Sprintf("%s\n¿Deseas que abra el archivo en pantalla para revisarlo, o necesitas que realice alguna búsqueda interna de contenido?", cleanOut)
+			if strings.Contains(cleanOut, "Archivos encontrados") || strings.Contains(cleanOut, "ARCHIVOS ENCONTRADOS") {
+				finalContent = fmt.Sprintf("%s\n\n¿Deseas que abra el archivo en pantalla para revisarlo, o necesitas que realice alguna búsqueda interna de contenido?", cleanOut)
 			} else {
 				finalContent = cleanOut
 			}

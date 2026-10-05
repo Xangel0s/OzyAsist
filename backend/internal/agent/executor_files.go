@@ -124,7 +124,7 @@ func execListFiles(_ context.Context, tc providers.ToolCall, sandbox *Sandbox) (
 			}
 		}
 		if matched && !d.IsDir() {
-			matches = append(matches, rel)
+			matches = append(matches, system.CleanCanonicalPath(rel))
 		}
 		if len(matches) >= maxResults {
 			return fmt.Errorf("max")
@@ -224,7 +224,7 @@ func execSearchText(_ context.Context, tc providers.ToolCall, sandbox *Sandbox) 
 
 	var sb strings.Builder
 	for _, m := range matches {
-		sb.WriteString(fmt.Sprintf("%s:%d: %s\n", m.File, m.Line, m.Text))
+		sb.WriteString(fmt.Sprintf("%s:%d: %s\n", system.CleanCanonicalPath(m.File), m.Line, m.Text))
 	}
 	sb.WriteString(fmt.Sprintf("\n[%d coincidencias]", len(matches)))
 	return sb.String(), true
@@ -349,15 +349,17 @@ func execOSExplore(ctx context.Context, tc providers.ToolCall) (string, bool) {
 		return fmt.Sprintf("Error explorando ruta: %v", err), false
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== EXPLORACIÓN DE: %s (%d elementos) ===\n", node.Path, len(node.Children)))
+	cleanRoot := system.CleanCanonicalPath(node.Path)
+	sb.WriteString(fmt.Sprintf("📂 %s (%d elementos):\n", cleanRoot, len(node.Children)))
 	for _, c := range node.Children {
-		kind := "archivo"
+		cleanChildPath := system.CleanCanonicalPath(c.Path)
 		if c.IsDir {
-			kind = "carpeta"
+			sb.WriteString(fmt.Sprintf("• [carpeta] %s/\n", cleanChildPath))
+		} else {
+			sb.WriteString(fmt.Sprintf("• [archivo] %s (%s | %s)\n", cleanChildPath, formatFileSize(c.Size), c.ModifiedAt.Format("2006-01-02")))
 		}
-		sb.WriteString(fmt.Sprintf("- [%s] %s (%d bytes, mod: %s)\n", kind, c.Name, c.Size, c.ModifiedAt.Format("2006-01-02 15:04")))
 	}
-	return sb.String(), true
+	return strings.TrimSpace(sb.String()), true
 }
 
 func execOSFindFiles(ctx context.Context, tc providers.ToolCall) (string, bool) {
@@ -433,8 +435,9 @@ func execOSFindFiles(ctx context.Context, tc providers.ToolCall) (string, bool) 
 	if err != nil && len(matches) == 0 {
 		return fmt.Sprintf("Error buscando archivos (%d ms): %v", elapsed, err), false
 	}
+	cleanRoot := system.CleanCanonicalPath(root)
 	if len(matches) == 0 {
-		return fmt.Sprintf("No se encontraron archivos que coincidan con \"%s\" en \"%s\" (búsqueda completada en %d ms).", searchPattern, root, elapsed), true
+		return fmt.Sprintf("No se encontraron archivos en %s", cleanRoot), true
 	}
 
 	// Ordenar coincidencias por fecha de modificación descendente (los más recientes primero)
@@ -446,16 +449,15 @@ func execOSFindFiles(ctx context.Context, tc providers.ToolCall) (string, bool) 
 		SetFocusedFile(matches[0].Path, rawPattern)
 	}
 
-	sub100Badge := ""
-	if elapsed < 100 {
-		sub100Badge = " [< 100 ms ultra-fast]"
-	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== ARCHIVOS ENCONTRADOS (%d coincidencias para \"%s\" · ⏱️ %d ms%s) ===\n", len(matches), searchPattern, elapsed, sub100Badge))
-	for i, m := range matches {
-		sb.WriteString(fmt.Sprintf("%d. 📄 %s\n   Ubicación: %s\n", i+1, m.Name, m.Path))
+	sb.WriteString(fmt.Sprintf("📁 Archivos encontrados (%d):\n", len(matches)))
+	for _, m := range matches {
+		cleanP := system.CleanCanonicalPath(m.Path)
+		sizeStr := formatFileSize(m.Size)
+		modStr := m.ModifiedAt.Format("2006-01-02")
+		sb.WriteString(fmt.Sprintf("• %s (%s | %s)\n", cleanP, sizeStr, modStr))
 	}
-	return sb.String(), true
+	return strings.TrimSpace(sb.String()), true
 }
 
 
@@ -491,10 +493,12 @@ func execOSCompressZip(_ context.Context, tc providers.ToolCall) (string, bool) 
 		return fmt.Sprintf("Error comprimiendo archivo ZIP: %v", err), false
 	}
 
-	return fmt.Sprintf("📦 === ARCHIVO ZIP CREADO EXITOSAMENTE ===\n"+
-		"• Destino:          %s\n"+
-		"• Elementos origen: %d (%s)",
-		system.ResolveUserPath(dest), len(sources), strings.Join(sources, ", ")), true
+	cleanDest := system.CleanCanonicalPath(dest)
+	var sizeInfo string
+	if fi, err := os.Stat(system.ResolveUserPath(dest)); err == nil {
+		sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+	}
+	return fmt.Sprintf("✅ ZIP Creado: %s%s | Elementos: %d", cleanDest, sizeInfo, len(sources)), true
 }
 
 func execOSExtractZip(_ context.Context, tc providers.ToolCall) (string, bool) {
@@ -520,11 +524,9 @@ func execOSExtractZip(_ context.Context, tc providers.ToolCall) (string, bool) {
 		return fmt.Sprintf("Error descomprimiendo archivo ZIP: %v", err), false
 	}
 
-	return fmt.Sprintf("📂 === ARCHIVO ZIP DESCOMPRIMIDO EXITOSAMENTE ===\n"+
-		"• Archivo origen:     %s\n"+
-		"• Archivos extraídos: %d\n"+
-		"• Destino:            %s",
-		zipPath, len(files), system.ResolveUserPath(params.DestDir)), true
+	cleanZip := system.CleanCanonicalPath(zipPath)
+	cleanDest := system.CleanCanonicalPath(params.DestDir)
+	return fmt.Sprintf("✅ ZIP Extraído: %s | Archivos: %d | Destino: %s", cleanZip, len(files), cleanDest), true
 }
 
 func execOSSearchContent(_ context.Context, tc providers.ToolCall) (string, bool) {
@@ -561,11 +563,12 @@ func execOSSearchContent(_ context.Context, tc providers.ToolCall) (string, bool
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🔍 === COINCIDENCIAS DE TEXTO ENCONTRADAS (%d) ===\n", len(matches)))
-	for i, m := range matches {
-		sb.WriteString(fmt.Sprintf("%d. %s:%d\n   %s\n", i+1, m.Path, m.LineNumber, m.LineContent))
+	sb.WriteString(fmt.Sprintf("🔍 Coincidencias encontradas (%d):\n", len(matches)))
+	for _, m := range matches {
+		cleanP := system.CleanCanonicalPath(m.Path)
+		sb.WriteString(fmt.Sprintf("• %s:%d: %s\n", cleanP, m.LineNumber, strings.TrimSpace(m.LineContent)))
 	}
-	return sb.String(), true
+	return strings.TrimSpace(sb.String()), true
 }
 
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -187,6 +188,8 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 	initStatus := "Listo para actuar"
 	if voiceActive {
 		initStatus = "Escuchando Wake Word ('Hey Ozy')..."
+	} else if prov != nil {
+		initStatus = fmt.Sprintf("Listo para actuar (%s)", prov.Name())
 	}
 
 	welcomeContent := "¡Hola! Soy OzyAssist, tu asistente autónomo de escritorio, código y cowork para Windows.\n\nEstoy conectado y listo con arquitectura Zero-Docker, memoria continua y herramientas de sistema.\nEscribe libremente tu instrucción o consulta para comenzar."
@@ -236,8 +239,8 @@ func InitialModel(prov providers.Provider, chat *models.Chat, voiceActive bool) 
 }
 
 // InitialModelWithVoice crea el modelo TUI con opción de iniciar directamente en Modo Voz
-func InitialModelWithVoice(prov providers.Provider, chat *models.Chat, voiceActive bool, startInVoice bool) Model {
-	m := InitialModel(prov, chat, voiceActive)
+func InitialModelWithVoice(prov providers.Provider, chat *models.Chat, voiceReady bool, startInVoice bool) Model {
+	m := InitialModel(prov, chat, startInVoice)
 	if startInVoice {
 		m.state = StateIdle
 		m.voiceEnabled = true
@@ -248,6 +251,16 @@ func InitialModelWithVoice(prov providers.Provider, chat *models.Chat, voiceActi
 			Role:    "system",
 			Content: "[MODO VOZ ACTIVADO] Micrófono en escucha continua ('Hey Ozy') y respuestas por voz en tiempo real.",
 		})
+	} else {
+		// Inicio directo en modo texto conversacional interactivo
+		m.state = StateIdle
+		m.voiceEnabled = false
+		m.voiceState = VoiceStateIdle
+		provName := "ozytalk"
+		if prov != nil {
+			provName = prov.Name()
+		}
+		m.systemStatus = fmt.Sprintf("Listo para actuar (%s)", provName)
 	}
 	return m
 }

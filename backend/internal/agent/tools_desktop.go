@@ -6,6 +6,14 @@ import (
 
 var DesktopTools = []providers.ToolDef{
 	{
+		Name:        "os_peek_state",
+		Description: "Inspecciona bajo demanda el estado de la PC en tiempo real (ventana activa, ventanas visibles, portapapeles, CPU y RAM) desde la memoria RAM física en microsegundos (<0.01 ms).",
+		InputSchema: mustJSON(`{
+			"type": "object",
+			"properties": {}
+		}`),
+	},
+	{
 		Name:        "os_get_desktop",
 		Description: "Obtiene la lista exacta y completa de todos los archivos, accesos directos e iconos del escritorio de Windows de forma nativa (<1ms). Úsalo SIEMPRE para saber qué hay en el escritorio.",
 		InputSchema: mustJSON(`{

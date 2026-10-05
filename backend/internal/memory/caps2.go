@@ -140,21 +140,28 @@ func (c *Caps2Store) Search(query string, limit int, projectID, userID string) (
 	return results, nil
 }
 
-// StoreChatMessage guarda automáticamente un mensaje de chat en memoria episódica.
+// StoreChatMessage guarda automáticamente un mensaje de chat en memoria episódica en segundo plano.
 func StoreChatMessage(userID, projectID, chatID, role, content string) {
 	if content == "" {
 		return
 	}
-	entry := Caps2Entry{
-		ID:        fmt.Sprintf("msg-%s-%d", chatID, time.Now().UnixNano()),
-		Content:   fmt.Sprintf("[%s] %s", role, content),
-		Source:    "chat",
-		SourceID:  chatID,
-		UserID:    userID,
-		ProjectID: projectID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := GetCaps2().Store(entry); err != nil {
-		log.Printf("StoreChatMessage: %v", err)
-	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[StoreChatMessage panic recuperado]: %v", r)
+			}
+		}()
+		entry := Caps2Entry{
+			ID:        fmt.Sprintf("msg-%s-%d", chatID, time.Now().UnixNano()),
+			Content:   fmt.Sprintf("[%s] %s", role, content),
+			Source:    "chat",
+			SourceID:  chatID,
+			UserID:    userID,
+			ProjectID: projectID,
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+		}
+		if err := GetCaps2().Store(entry); err != nil {
+			log.Printf("StoreChatMessage: %v", err)
+		}
+	}()
 }

@@ -393,6 +393,11 @@ func execOSKillProcess(ctx context.Context, tc providers.ToolCall) (string, bool
 	case "powerpoint": targetsToKill = []string{"POWERPNT.EXE", "powerpnt.exe"}
 	case "discord": targetsToKill = []string{"Discord.exe"}
 	case "steam": targetsToKill = []string{"steam.exe"}
+	case "camara", "cámara", "camera": targetsToKill = []string{"WindowsCamera.exe"}
+	case "fotos", "photos", "visor de fotos": targetsToKill = []string{"Microsoft.Photos.exe"}
+	case "recortes", "snippingtool", "captura": targetsToKill = []string{"SnippingTool.exe", "ScreenClippingHost.exe"}
+	case "whatsapp": targetsToKill = []string{"WhatsApp.exe"}
+	case "telegram": targetsToKill = []string{"Telegram.exe"}
 	case "roblox", "roblox player", "robloxplayer": targetsToKill = []string{"RobloxPlayerBeta.exe", "RobloxPlayerLauncher.exe", "RobloxCrashHandler.exe"}
 	default:
 		if cleanLower != "" {

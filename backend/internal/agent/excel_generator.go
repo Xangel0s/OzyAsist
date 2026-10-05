@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ozyassist/backend/internal/providers"
 	"github.com/ozyassist/backend/internal/system"
@@ -44,7 +45,15 @@ func CreateExcelFile(targetPath string, sheets []ExcelSheetSpec) (string, error)
 
 	f, err := os.Create(resolvedPath)
 	if err != nil {
-		return "", fmt.Errorf("error creando archivo excel: %v", err)
+		ext := filepath.Ext(resolvedPath)
+		baseWithoutExt := strings.TrimSuffix(resolvedPath, ext)
+		altPath := fmt.Sprintf("%s_%d%s", baseWithoutExt, time.Now().Unix(), ext)
+		fAlt, errAlt := os.Create(altPath)
+		if errAlt != nil {
+			return "", fmt.Errorf("error creando archivo excel: %v", err)
+		}
+		f = fAlt
+		resolvedPath = altPath
 	}
 	defer f.Close()
 
@@ -198,9 +207,46 @@ func CreateExcelFile(targetPath string, sheets []ExcelSheetSpec) (string, error)
 }
 
 func execOSCreateExcel(_ context.Context, tc providers.ToolCall) (string, bool) {
-	var params CreateExcelParams
-	if err := json.Unmarshal(tc.Input, &params); err != nil {
+	var raw struct {
+		Path    string   `json:"path"`
+		Title   string   `json:"title,omitempty"`
+		Headers []string `json:"headers,omitempty"`
+		Rows    [][]any  `json:"rows,omitempty"`
+		Sheets  []struct {
+			Name    string   `json:"name"`
+			Headers []string `json:"headers"`
+			Rows    [][]any  `json:"rows"`
+		} `json:"sheets,omitempty"`
+	}
+	if err := json.Unmarshal(tc.Input, &raw); err != nil {
 		return fmt.Sprintf("parámetros inválidos para os_create_excel: %v", err), false
+	}
+
+	var params CreateExcelParams
+	params.Path = raw.Path
+	params.Title = raw.Title
+	params.Headers = raw.Headers
+
+	for _, r := range raw.Rows {
+		var rowStr []string
+		for _, cell := range r {
+			rowStr = append(rowStr, fmt.Sprint(cell))
+		}
+		params.Rows = append(params.Rows, rowStr)
+	}
+
+	for _, sh := range raw.Sheets {
+		var sSpec ExcelSheetSpec
+		sSpec.Name = sh.Name
+		sSpec.Headers = sh.Headers
+		for _, r := range sh.Rows {
+			var rowStr []string
+			for _, cell := range r {
+				rowStr = append(rowStr, fmt.Sprint(cell))
+			}
+			sSpec.Rows = append(sSpec.Rows, rowStr)
+		}
+		params.Sheets = append(params.Sheets, sSpec)
 	}
 
 	lowInputPath := strings.ToLower(params.Path)
@@ -228,10 +274,12 @@ func execOSCreateExcel(_ context.Context, tc providers.ToolCall) (string, bool) 
 		if err != nil {
 			return fmt.Sprintf("Error generando PDF redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📄 === ARCHIVO PDF GENERADO EXITOSAMENTE (Redirigido desde os_create_excel) ===\n"+
-			"• Archivo: %s\n"+
-			"• Título:  %s\n"+
-			"• Estado:  Válido (formato nativo PDF-1.3)", targetPath, title), true
+		cleanTarget := system.CleanCanonicalPath(targetPath)
+		var sizeInfo string
+		if fi, err := os.Stat(targetPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ PDF Creado EXITOSAMENTE: %s%s | Título: %s", cleanTarget, sizeInfo, title), true
 	}
 
 	if strings.HasSuffix(lowInputPath, ".docx") || strings.HasSuffix(lowInputPath, ".doc") {
@@ -255,10 +303,12 @@ func execOSCreateExcel(_ context.Context, tc providers.ToolCall) (string, bool) 
 		if err != nil {
 			return fmt.Sprintf("Error generando Word redirigido: %v", err), false
 		}
-		return fmt.Sprintf("📝 === ARCHIVO WORD (.docx) GENERADO EXITOSAMENTE (Redirigido desde os_create_excel) ===\n"+
-			"• Archivo: %s\n"+
-			"• Título:  %s\n"+
-			"• Formato: OpenXML estándar compatible con Microsoft Word", targetPath, title), true
+		cleanTarget := system.CleanCanonicalPath(targetPath)
+		var sizeInfo string
+		if fi, err := os.Stat(targetPath); err == nil {
+			sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+		}
+		return fmt.Sprintf("✅ DOCX Creado EXITOSAMENTE: %s%s | Título: %s", cleanTarget, sizeInfo, title), true
 	}
 
 	sheets := params.Sheets
@@ -286,13 +336,13 @@ func execOSCreateExcel(_ context.Context, tc providers.ToolCall) (string, bool) 
 		totalRows += len(sh.Rows)
 	}
 
-	return fmt.Sprintf("📊 === ARCHIVO EXCEL GENERADO EXITOSAMENTE ===\n"+
-		"• Archivo:     %s\n"+
-		"• Hojas:       %d (%s)\n"+
-		"• Filas:       %d\n"+
-		"• Estilo:      Diseño OzyAssist con cabeceras en Verde Neón (#D1F107)\n"+
-		"El archivo está disponible y listo para abrir en Microsoft Excel, LibreOffice o Google Sheets.",
-		outPath, len(sheets), sheets[0].Name, totalRows), true
+	cleanOut := system.CleanCanonicalPath(outPath)
+	var sizeInfo string
+	if fi, err := os.Stat(outPath); err == nil {
+		sizeInfo = fmt.Sprintf(" (%s)", formatFileSize(fi.Size()))
+	}
+	return fmt.Sprintf("✅ XLSX Creado EXITOSAMENTE: %s%s | Hojas: %d (%s) | Filas: %d",
+		cleanOut, sizeInfo, len(sheets), sheets[0].Name, totalRows), true
 }
 
 func writeZipEntry(zw *zip.Writer, name, content string) error {

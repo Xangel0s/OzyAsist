@@ -50,16 +50,57 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 	programFiles := os.Getenv("ProgramFiles")
 	programFilesX86 := os.Getenv("ProgramFiles(x86)")
 
-	// 1. Mapeo a ejecutables estándar de Windows y AUMID
+	// 1. Mapeo a ejecutables estándar de Windows, herramientas y protocolos UWP
 	standardMap := map[string]string{
-		"notepad":       "notepad.exe",
-		"bloc de notas": "notepad.exe",
-		"bloc":          "notepad.exe",
-		"calc":          "calc.exe",
-		"calculadora":   "calc.exe",
-		"calculator":    "calc.exe",
-		"paint":         "mspaint.exe",
-		"mspaint":       "mspaint.exe",
+		"notepad":                      "notepad.exe",
+		"bloc de notas":                "notepad.exe",
+		"bloc":                         "notepad.exe",
+		"calc":                         "calc.exe",
+		"calculadora":                  "calc.exe",
+		"calculator":                   "calc.exe",
+		"paint":                        "mspaint.exe",
+		"mspaint":                      "mspaint.exe",
+		"camara":                       "microsoft.windows.camera:",
+		"cámara":                       "microsoft.windows.camera:",
+		"camera":                       "microsoft.windows.camera:",
+		"fotos":                        "ms-photos:",
+		"photos":                       "ms-photos:",
+		"visor de fotos":               "ms-photos:",
+		"reloj":                        "ms-clock:",
+		"alarma":                       "ms-clock:",
+		"temporizador":                 "ms-clock:",
+		"clock":                        "ms-clock:",
+		"musica":                       "mswindowsmusic:",
+		"música":                       "mswindowsmusic:",
+		"reproductor":                  "mswindowsmusic:",
+		"media player":                 "mswindowsmusic:",
+		"recortes":                     "snippingtool.exe",
+		"snippingtool":                 "snippingtool.exe",
+		"captura":                      "snippingtool.exe",
+		"correo":                       "outlookmail:",
+		"mail":                         "outlookmail:",
+		"calendario":                   "outlookcal:",
+		"calendar":                     "outlookcal:",
+		"spotify":                      "spotify:",
+		"whatsapp":                     "whatsapp:",
+		"telegram":                     "tg:",
+		"servicios":                    "services.msc",
+		"services":                     "services.msc",
+		"services.msc":                 "services.msc",
+		"control":                      "control.exe",
+		"panel de control":             "control.exe",
+		"regedit":                      "regedit.exe",
+		"registro":                     "regedit.exe",
+		"resmon":                       "resmon.exe",
+		"monitor de recursos":          "resmon.exe",
+		"devmgmt":                      "devmgmt.msc",
+		"administrador de dispositivos": "devmgmt.msc",
+		"eventvwr":                     "eventvwr.msc",
+		"visor de eventos":             "eventvwr.msc",
+		"diskmgmt":                     "diskmgmt.msc",
+		"administrador de discos":      "diskmgmt.msc",
+		"cleanmgr":                     "cleanmgr.exe",
+		"liberador de espacio":         "cleanmgr.exe",
 	}
 	if exe, ok := standardMap[clean]; ok {
 		return &AppLaunchInfo{
@@ -153,6 +194,45 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 
 	case "taskmgr", "administrador de tareas", "task manager":
 		return &AppLaunchInfo{Command: "taskmgr.exe"}, nil
+
+	case "word", "winword", "microsoft word":
+		candidates := []string{
+			filepath.Join(programFiles, "Microsoft Office", "root", "Office16", "WINWORD.EXE"),
+			filepath.Join(programFilesX86, "Microsoft Office", "root", "Office16", "WINWORD.EXE"),
+			filepath.Join(programFiles, "Microsoft Office", "Office16", "WINWORD.EXE"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return &AppLaunchInfo{Command: c}, nil
+			}
+		}
+		return &AppLaunchInfo{Command: "winword.exe"}, nil
+
+	case "excel", "microsoft excel":
+		candidates := []string{
+			filepath.Join(programFiles, "Microsoft Office", "root", "Office16", "EXCEL.EXE"),
+			filepath.Join(programFilesX86, "Microsoft Office", "root", "Office16", "EXCEL.EXE"),
+			filepath.Join(programFiles, "Microsoft Office", "Office16", "EXCEL.EXE"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return &AppLaunchInfo{Command: c}, nil
+			}
+		}
+		return &AppLaunchInfo{Command: "excel.exe"}, nil
+
+	case "powerpoint", "ppt", "powerpnt", "microsoft powerpoint":
+		candidates := []string{
+			filepath.Join(programFiles, "Microsoft Office", "root", "Office16", "POWERPNT.EXE"),
+			filepath.Join(programFilesX86, "Microsoft Office", "root", "Office16", "POWERPNT.EXE"),
+			filepath.Join(programFiles, "Microsoft Office", "Office16", "POWERPNT.EXE"),
+		}
+		for _, c := range candidates {
+			if _, err := os.Stat(c); err == nil {
+				return &AppLaunchInfo{Command: c}, nil
+			}
+		}
+		return &AppLaunchInfo{Command: "powerpnt.exe"}, nil
 	}
 
 	// 3. Comprobar si ya es ejecutable o existe en PATH

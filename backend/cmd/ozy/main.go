@@ -128,6 +128,12 @@ func initCore() (providers.Provider, *models.Chat) {
 	memory.BuildSystemIndex()
 	_ = mcp.DefaultRegistry.InitFromConfigFile(context.Background(), "")
 
+	// Optimizaciones nativas de Windows para IA y hardware
+	_ = system.OptimizeProcessPriority(false)
+	_ = system.LockProcessWorkingSet(64, 512)
+	_ = system.PinProcessToPerformanceCores(0)
+	agent.DefaultRAMToolRouter()
+
 	// Inicializar registro de rutas universales en RAM y sincronización en segundo plano
 	system.InitDefaultPathRegistry(db.DB)
 	go func() {
