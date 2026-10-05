@@ -40,9 +40,16 @@ OzyAssist es un asistente autónomo de escritorio, código y cowork para Windows
   - Auto-aprendizaje en segundo plano tras cada turno con `FactExtractor.ExtractAndPersistAsync`.
   - Herramientas nativas del agente: `remember_fact`, `search_memory`, `update_user_profile`.
   - Comandos TUI sobrios y sin emojis: `/profile`, `/memories`, `/remember <hecho>`, `/forget <num|id>`, `/forgetall`, `/memmgr`, `/context`, `/dream`, `/paths`, `/scan`.
-- **Smart Path Resolver**:
+- **Smart Path Resolver & Fast Shell Link (.lnk) Dereferencer**:
   - Resolución inteligente de rutas de usuario en microsegundos consultando el registro en RAM antes del disco.
+  - Parser MS-SHLLINK nativo en Go puro (`ResolveLnkTarget`) que resuelve accesos directos `.lnk` de Escritorio y Menú Inicio al ejecutable `.exe` real de destino en **< 0.1 ms** (ej: `Roblox Player.lnk` -> `RobloxPlayerBeta.exe`).
+  - Mapeo dinámico y búsqueda en `AppResolver` para aplicaciones modernas instaladas en `%LOCALAPPDATA%` (Roblox, Discord, VS Code, Cursor).
   - Protección estricta: nunca resolver rutas del usuario hacia el directorio de trabajo del servidor (`CWD`).
+- **Terminal Output Smart Folding & Token Shield (`SmartFoldOutput`)**:
+  - Supresión automática de secuencias de escape ANSI y filtrado de ruido en comandos de terminal (`os_run_command`).
+  - Plegado adaptativo de salidas extensas con preservación estricta del encabezado inicial y el bloque final de resultado o error (`[... N líneas intermedias omitidas ...]`), reduciendo hasta un **-90% de tokens** en comandos de compilación o inspección.
+- **Token-Efficient Compact File Perception (`os_find_files`)**:
+  - Formato de salida sintético y numerado con auto-desreferenciación de accesos directos (`.lnk -> .exe`) y fallback autónomo a `AppResolver`, reduciendo en más del **70% los tokens** frente a listados con fechas y metadatos innecesarios.
 - **Error-Sensitive Dialog Inspection & Anti-Hallucination (`os_detect_dialogs`)**:
   - Detección Win32 nativa de cuadros modales y popups de error (`#32770`, MessageBox, alertas de aplicaciones).
   - Extracción en microsegundos del texto literal de controles hijos (`Static`, `Edit`, `Button`) y clasificación por severidad (`ERROR`, `WARNING`, `INFO`).

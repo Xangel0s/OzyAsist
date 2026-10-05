@@ -602,15 +602,9 @@ func runOSCommandInternal(ctx context.Context, command, rawCwd string) (string, 
 	stdout := strings.TrimSpace(res.Stdout)
 	stderr := strings.TrimSpace(res.Stderr)
 
-	// Truncar para no desbordar tokens si el comando produce salida kilométrica
-	if len([]rune(stdout)) > 4000 {
-		runes := []rune(stdout)
-		stdout = string(runes[:4000]) + "\n[...salida truncada a 4000 caracteres...]"
-	}
-	if len([]rune(stderr)) > 2000 {
-		runes := []rune(stderr)
-		stderr = string(runes[:2000]) + "\n[...errores truncados...]"
-	}
+	// Filtrado inteligente de tokens: eliminación de secuencias ANSI y plegado adaptativo (head + tail)
+	stdout = SmartFoldOutput(stdout, 30)
+	stderr = SmartFoldOutput(stderr, 20)
 
 	if stdout != "" {
 		sb.WriteString("--- SALIDA (STDOUT) ---\n")

@@ -431,6 +431,24 @@ func execOSFindFiles(ctx context.Context, tc providers.ToolCall) (string, bool) 
 		}
 	}
 
+	// Fallback 4: Si se busca un ejecutable o app y no se encontró en Documents/Desktop, consultar AppResolver
+	if len(matches) == 0 {
+		cleanAppQuery := strings.Trim(rawPattern, "*.")
+		if appInfo, err := system.ResolveAppExecutable(cleanAppQuery); err == nil && appInfo != nil && appInfo.Command != "" && !appInfo.IsAUMID {
+			if fi, errStat := os.Stat(appInfo.Command); errStat == nil && !fi.IsDir() {
+				matches = append(matches, system.PathNode{
+					Name:       filepath.Base(appInfo.Command),
+					Path:       appInfo.Command,
+					IsDir:      false,
+					Size:       fi.Size(),
+					ModifiedAt: fi.ModTime(),
+					Extension:  filepath.Ext(appInfo.Command),
+				})
+				root = filepath.Dir(appInfo.Command)
+			}
+		}
+	}
+
 	elapsed := time.Since(searchStart).Milliseconds()
 	if err != nil && len(matches) == 0 {
 		return fmt.Sprintf("Error buscando archivos (%d ms): %v", elapsed, err), false
@@ -446,16 +464,27 @@ func execOSFindFiles(ctx context.Context, tc providers.ToolCall) (string, bool) 
 	})
 
 	if len(matches) > 0 {
-		SetFocusedFile(matches[0].Path, rawPattern)
+		primaryFile := matches[0].Path
+		if strings.HasSuffix(strings.ToLower(primaryFile), ".lnk") {
+			if deref, errD := system.ResolveLnkTarget(primaryFile); errD == nil && deref != "" {
+				primaryFile = deref
+			}
+		}
+		SetFocusedFile(primaryFile, rawPattern)
 	}
 
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("📁 Archivos encontrados (%d):\n", len(matches)))
-	for _, m := range matches {
+	for i, m := range matches {
 		cleanP := system.CleanCanonicalPath(m.Path)
+		resolvedTarget := ""
+		if strings.HasSuffix(strings.ToLower(cleanP), ".lnk") {
+			if tgt, errT := system.ResolveLnkTarget(m.Path); errT == nil && tgt != "" {
+				resolvedTarget = fmt.Sprintf(" -> %s", tgt)
+			}
+		}
 		sizeStr := formatFileSize(m.Size)
-		modStr := m.ModifiedAt.Format("2006-01-02")
-		sb.WriteString(fmt.Sprintf("• %s (%s | %s)\n", cleanP, sizeStr, modStr))
+		sb.WriteString(fmt.Sprintf("%d. %s%s (%s)\n", i+1, cleanP, resolvedTarget, sizeStr))
 	}
 	return strings.TrimSpace(sb.String()), true
 }

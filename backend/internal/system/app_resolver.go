@@ -177,6 +177,25 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 	case "edge", "microsoft edge":
 		return &AppLaunchInfo{Command: "msedge.exe"}, nil
 
+	case "roblox", "roblox player", "robloxplayer":
+		robloxVersions := filepath.Join(localAppData, "Roblox", "Versions")
+		if entries, err := os.ReadDir(robloxVersions); err == nil {
+			for _, e := range entries {
+				if e.IsDir() {
+					candidate := filepath.Join(robloxVersions, e.Name(), "RobloxPlayerBeta.exe")
+					if _, err := os.Stat(candidate); err == nil {
+						return &AppLaunchInfo{Command: candidate}, nil
+					}
+				}
+			}
+		}
+
+	case "discord":
+		candUpdate := filepath.Join(localAppData, "Discord", "Update.exe")
+		if _, err := os.Stat(candUpdate); err == nil {
+			return &AppLaunchInfo{Command: candUpdate + " --processStart Discord.exe"}, nil
+		}
+
 	case "docker", "docker desktop":
 		candidate := filepath.Join(programFiles, "Docker", "Docker", "Docker Desktop.exe")
 		if _, err := os.Stat(candidate); err == nil {
@@ -263,14 +282,16 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 		}
 	}
 
-	// 5. Búsqueda en accesos directos del Menú Inicio (.lnk)
-	startMenuDirs := []string{
+	// 5. Búsqueda en accesos directos de Escritorio y Menú Inicio (.lnk desreferenciados a .exe)
+	shortcutDirs := []string{
+		filepath.Join(userProfile, "Desktop"),
+		filepath.Join(os.Getenv("PUBLIC"), "Desktop"),
 		filepath.Join(appData, "Microsoft", "Windows", "Start Menu", "Programs"),
 		filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs"),
 	}
-	for _, smDir := range startMenuDirs {
+	for _, scDir := range shortcutDirs {
 		var foundShortcut string
-		_ = filepath.WalkDir(smDir, func(path string, d os.DirEntry, err error) error {
+		_ = filepath.WalkDir(scDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
@@ -284,6 +305,10 @@ func ResolveAppExecutable(name string) (*AppLaunchInfo, error) {
 			return nil
 		})
 		if foundShortcut != "" {
+			// Intentar desreferenciar al ejecutable .exe real
+			if targetExe, err := ResolveLnkTarget(foundShortcut); err == nil && targetExe != "" {
+				return &AppLaunchInfo{Command: targetExe}, nil
+			}
 			return &AppLaunchInfo{Command: foundShortcut}, nil
 		}
 	}

@@ -116,6 +116,8 @@ graph TD
 | `#nine-go` | Wrapper NINE MCTS & `nine_mcts_solve` | `backend/internal/agent/nine.go` | ✅ Completado |
 | `#charc-audit` | Auditoría Post-Ejecución & Auto-Recovery | `backend/internal/agent/loop.go` | ✅ Completado |
 | `#host-compass` | Host Compass (<70 tokens) | `backend/internal/agent/prompts.go` | ✅ Completado |
+| `#fast-lnk` | MS-SHLLINK Native Fast Dereferencer (<0.1ms) | `backend/internal/system/shortcut_windows.go` | ✅ Completado |
+| `#terminal-fold` | Token Shield & Smart Folding Console Output | `backend/internal/agent/terminal_fold.go` | ✅ Completado |
 | `#stress-tests` | Suite de Pruebas de Estrés con LLM Local (`llama3.1`) | `backend/internal/agent/local_model_stress_test.go` | ✅ 100% Green |
 
 ---

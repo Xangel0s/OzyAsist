@@ -99,6 +99,14 @@ func WriteClipboardContent(text string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// 1. Usar clip.exe nativo de Windows (sub-1ms, sin sobrecarga de PowerShell)
+	clipCmd := exec.CommandContext(ctx, "clip")
+	clipCmd.Stdin = strings.NewReader(text)
+	if err := clipCmd.Run(); err == nil {
+		return nil
+	}
+
+	// 2. Fallback a PowerShell si clip.exe no está disponible
 	cmd := exec.CommandContext(ctx, "powershell", "-NoProfile", "-Command", "$Input | Set-Clipboard")
 	cmd.Stdin = strings.NewReader(text)
 	return cmd.Run()

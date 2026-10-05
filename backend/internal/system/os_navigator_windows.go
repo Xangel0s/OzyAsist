@@ -105,10 +105,15 @@ func (w *WindowsNavigator) GetDesktopItems(ctx context.Context) ([]DesktopItem, 
 		}
 
 		kind := classifyItem(entry, name)
+		var target string
+		if kind == ItemKindShortcut && strings.HasSuffix(strings.ToLower(name), ".lnk") {
+			target, _ = ResolveLnkTarget(fullPath)
+		}
 		items = append(items, DesktopItem{
 			Name:       name,
 			Path:       fullPath,
 			Kind:       kind,
+			Target:     target,
 			Size:       size,
 			ModifiedAt: modTime,
 			IsPublic:   false,
@@ -134,10 +139,15 @@ func (w *WindowsNavigator) GetDesktopItems(ctx context.Context) ([]DesktopItem, 
 		}
 
 		kind := classifyItem(entry, name)
+		var target string
+		if kind == ItemKindShortcut && strings.HasSuffix(strings.ToLower(name), ".lnk") {
+			target, _ = ResolveLnkTarget(fullPath)
+		}
 		items = append(items, DesktopItem{
 			Name:       name,
 			Path:       fullPath,
 			Kind:       kind,
+			Target:     target,
 			Size:       size,
 			ModifiedAt: modTime,
 			IsPublic:   true,

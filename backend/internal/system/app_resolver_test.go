@@ -23,6 +23,8 @@ func TestResolveAppExecutable(t *testing.T) {
 		{"calc", "calc", false},
 		{"calculadora", "calc", false},
 		{"explorer", "explorer.exe", false},
+		{"roblox", "RobloxPlayerBeta.exe", false},
+		{"roblox.exe", "RobloxPlayerBeta.exe", false},
 	}
 
 	for _, tt := range tests {
